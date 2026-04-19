@@ -1,0 +1,22 @@
+# Rust / Tauri
+target/
+src-tauri/target/
+*.pdb
+
+# Node / Bun
+node_modules/
+.output/
+.nuxt/
+dist/
+bun.lockb
+
+# Tauri build outputs
+src-tauri/gen/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Env
+.env
+.env.local
