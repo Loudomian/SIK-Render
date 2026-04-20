@@ -32,7 +32,6 @@ impl Default for AppSettings {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
-#[serde(deny_unknown_fields)]
 struct SettingsFile {
     #[serde(default)]
     tools: ToolsSettings,
@@ -47,7 +46,6 @@ struct SettingsFile {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
-#[serde(deny_unknown_fields)]
 struct ToolsSettings {
     #[serde(default)]
     default_blender: String,
@@ -56,14 +54,12 @@ struct ToolsSettings {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
-#[serde(deny_unknown_fields)]
 struct PathSettings {
     #[serde(default)]
     default_output_dir: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
 struct QueueSettings {
     #[serde(default = "default_max_concurrent_jobs")]
     max_concurrent_jobs: u32,
@@ -78,7 +74,6 @@ impl Default for QueueSettings {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
 struct UiSettings {
     #[serde(default = "default_theme")]
     theme: String,
@@ -93,7 +88,6 @@ impl Default for UiSettings {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
-#[serde(deny_unknown_fields)]
 struct BlenderSettings {
     #[serde(default)]
     extra_blender_paths: Vec<String>,
@@ -116,6 +110,13 @@ fn default_theme() -> String {
     String::from("dark")
 }
 
+fn normalize_theme(theme: String) -> String {
+    match theme.as_str() {
+        "light" => String::from("light"),
+        _ => default_theme(),
+    }
+}
+
 impl From<SettingsFile> for AppSettings {
     fn from(value: SettingsFile) -> Self {
         Self {
@@ -123,7 +124,7 @@ impl From<SettingsFile> for AppSettings {
             ffmpeg_executable: value.tools.ffmpeg_executable,
             default_output_dir: value.paths.default_output_dir,
             max_concurrent_jobs: value.queue.max_concurrent_jobs,
-            theme: value.ui.theme,
+            theme: normalize_theme(value.ui.theme),
             extra_blender_paths: value.blender.extra_blender_paths,
             excluded_blender_paths: value.blender.excluded_blender_paths,
         }
@@ -172,6 +173,7 @@ pub fn get_settings(app: AppHandle) -> Result<AppSettings, String> {
             let content = fs::read_to_string(&legacy_path).map_err(|error| error.to_string())?;
             let settings: AppSettings = serde_json::from_str(&content).map_err(|error| error.to_string())?;
             save_settings(app.clone(), settings.clone())?;
+            let _ = fs::remove_file(&legacy_path);
             return Ok(settings);
         }
 
@@ -180,14 +182,19 @@ pub fn get_settings(app: AppHandle) -> Result<AppSettings, String> {
         return Ok(settings);
     }
 
-    let content = fs::read_to_string(path).map_err(|error| error.to_string())?;
+    let content = fs::read_to_string(&path).map_err(|error| error.to_string())?;
     let settings = match toml::from_str::<SettingsFileCompat>(&content) {
         Ok(SettingsFileCompat::Grouped(settings)) => settings.into(),
         Ok(SettingsFileCompat::Flat(settings)) => {
             save_settings(app.clone(), settings.clone())?;
             settings
         }
-        Err(error) => return Err(error.to_string()),
+        Err(error) => {
+            log::error!("failed to parse settings file {}: {}", path.display(), error);
+            let fallback = AppSettings::default();
+            save_settings(app.clone(), fallback.clone())?;
+            fallback
+        }
     };
 
     Ok(settings)
@@ -196,7 +203,14 @@ pub fn get_settings(app: AppHandle) -> Result<AppSettings, String> {
 #[tauri::command]
 pub fn save_settings(app: AppHandle, settings: AppSettings) -> Result<(), String> {
     let path = settings_path(&app)?;
+    let mut settings = settings;
+    settings.theme = normalize_theme(settings.theme);
     let content = toml::to_string_pretty(&SettingsFile::from(settings))
         .map_err(|error| error.to_string())?;
-    fs::write(path, content).map_err(|error| error.to_string())
+    let tmp_path = path.with_extension("toml.tmp");
+    fs::write(&tmp_path, content).map_err(|error| error.to_string())?;
+    if path.exists() {
+        fs::remove_file(&path).map_err(|error| error.to_string())?;
+    }
+    fs::rename(&tmp_path, &path).map_err(|error| error.to_string())
 }

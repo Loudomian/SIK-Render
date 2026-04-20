@@ -38,14 +38,18 @@ payload = {
 print("__SIK_PROJECT_SETTINGS__" + json.dumps(payload))
 "#.trim();
 
-    let output = crate::blender::command::inspect_project_command(
-        blender_executable,
-        blend_file,
-        script,
-    )
+    let output = tokio::time::timeout(
+        std::time::Duration::from_secs(30),
+        crate::blender::command::inspect_project_command(
+            blender_executable,
+            blend_file,
+            script,
+        )
         .output()
-        .await
-        .with_context(|| {
+    )
+    .await
+    .map_err(|_| anyhow!("Blender inspect timed out after 30s"))?
+    .with_context(|| {
             format!(
                 "failed to launch Blender at {}",
                 blender_executable.display()

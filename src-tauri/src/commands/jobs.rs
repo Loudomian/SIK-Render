@@ -271,16 +271,20 @@ pub async fn update_job_preview_dimensions(
 
 #[tauri::command]
 pub async fn remove_job(id: String, state: State<'_, AppState>) -> Result<(), String> {
-    let status = sqlx::query_scalar::<_, JobStatus>("SELECT status FROM jobs WHERE id = ?")
+    let row = sqlx::query_as::<_, (i32, JobStatus)>("SELECT job_number, status FROM jobs WHERE id = ?")
         .bind(&id)
         .fetch_optional(&state.pool)
         .await
         .map_err(|error| error.to_string())?;
 
+    let Some((job_number, status)) = row else {
+        log::warn!("remove_job called for missing id: {id}");
+        return Ok(());
+    };
+
     match status {
-        None => return Ok(()),
-        Some(JobStatus::Running) => return Err("cannot remove a running job".into()),
-        Some(_) => {}
+        JobStatus::Running => return Err("cannot remove a running job".into()),
+        _ => {}
     }
 
     sqlx::query("DELETE FROM jobs WHERE id = ?")
@@ -288,6 +292,10 @@ pub async fn remove_job(id: String, state: State<'_, AppState>) -> Result<(), St
         .execute(&state.pool)
         .await
         .map_err(|error| error.to_string())?;
+
+    if let Ok(path) = crate::app_paths::logs_dir().map(|dir| dir.join(format!("job-{job_number:04}"))) {
+        let _ = std::fs::remove_dir_all(path);
+    }
 
     Ok(())
 }
@@ -326,14 +334,14 @@ pub async fn cancel_job(
                 append_manual_cancel_log(&app, &state, &id, cancel_line).await?;
             }
 
-            let child = {
+            let pid = {
                 let active_jobs = state.active_jobs.lock().await;
-                active_jobs.get(&id).cloned()
+                active_jobs.get(&id).copied()
             };
 
-            if let Some(child) = child {
+            if let Some(pid) = pid {
                 // Ignore kill errors — process may have already exited.
-                let _ = child.lock().await.kill().await;
+                let _ = AppState::kill_process_tree(pid);
             } else {
                 // No active child: process is between retries or already dead.
                 // Update the DB immediately so the UI reflects the cancellation
@@ -518,12 +526,17 @@ pub async fn reorder_job(
     priority: i32,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    sqlx::query("UPDATE jobs SET priority = ? WHERE id = ?")
+    let rows = sqlx::query("UPDATE jobs SET priority = ? WHERE id = ?")
         .bind(priority)
         .bind(&id)
         .execute(&state.pool)
         .await
-        .map_err(|error| error.to_string())?;
+        .map_err(|error| error.to_string())?
+        .rows_affected();
+
+    if rows == 0 {
+        return Err(format!("job {id} was not found"));
+    }
 
     state.scheduler_notify.notify_one();
 

@@ -2,6 +2,7 @@ use crate::blender::parser;
 use crate::queue::job::{JobStatus, RenderJob};
 use crate::state::AppState;
 use anyhow::Result;
+use std::collections::VecDeque;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -28,27 +29,20 @@ pub struct RenderLogEvent {
     pub line: String,
 }
 
-const IMAGE_EXTS: &[&str] = &[
-    "png", "jpg", "jpeg", "exr", "tiff", "tga", "bmp", "hdr", "webp",
-];
-
 /// Max automatic crash-recovery retries before giving up.
 const MAX_CRASH_RETRIES: u32 = 3;
 
-pub fn count_image_files_sync(dir: &std::path::Path) -> u32 {
-    std::fs::read_dir(dir)
-        .map(|entries| {
-            entries
-                .filter_map(|e| e.ok())
-                .filter(|e| {
-                    e.path()
-                        .extension()
-                        .map(|x| IMAGE_EXTS.contains(&x.to_string_lossy().to_lowercase().as_str()))
-                        .unwrap_or(false)
-                })
-                .count() as u32
-        })
-        .unwrap_or(0)
+fn trailing_frame_number(path: &std::path::Path) -> Option<i32> {
+    let stem = path.file_stem()?.to_str()?;
+    let digits_rev: String = stem
+        .chars()
+        .rev()
+        .take_while(|ch| ch.is_ascii_digit())
+        .collect();
+    if digits_rev.is_empty() {
+        return None;
+    }
+    digits_rev.chars().rev().collect::<String>().parse().ok()
 }
 
 pub fn format_to_ext(format: &str) -> &'static str {
@@ -77,6 +71,79 @@ pub fn frame_filename(output_path: &std::path::Path, frame: i32, format: &str) -
     let ext = format_to_ext(format);
     let frame_str = format!("{:0>width$}", frame, width = hash_count);
     Some(dir.join(format!("{}{}{}.{}", prefix, frame_str, suffix, ext)))
+}
+
+pub fn count_job_image_files_sync(
+    output_path: &std::path::Path,
+    frame_start: i32,
+    frame_end: i32,
+    format: &str,
+) -> u32 {
+    if output_path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .map(|name| name.contains('#'))
+        .unwrap_or(false)
+    {
+        return (frame_start..=frame_end)
+            .filter(|frame| {
+                frame_filename(output_path, *frame, format)
+                    .map(|path| path.exists())
+                    .unwrap_or(false)
+            })
+            .count() as u32;
+    }
+
+    let dir = output_path
+        .parent()
+        .filter(|path| !path.as_os_str().is_empty())
+        .unwrap_or(output_path);
+    let expected_ext = format_to_ext(format).to_ascii_lowercase();
+    let template = output_path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or_default();
+    let prefix_hint = template
+        .find('#')
+        .map(|idx| template[..idx].to_string())
+        .unwrap_or_default();
+    let suffix_hint = template
+        .find('#')
+        .map(|idx| {
+            let hash_count = template[idx..]
+                .chars()
+                .take_while(|&ch| ch == '#')
+                .count();
+            let suffix_raw = &template[idx + hash_count..];
+            if let Some(dot) = suffix_raw.rfind('.') {
+                suffix_raw[..dot].to_string()
+            } else {
+                suffix_raw.to_string()
+            }
+        })
+        .unwrap_or_default();
+
+    std::fs::read_dir(dir)
+        .map(|entries| {
+            entries
+                .filter_map(|entry| entry.ok())
+                .map(|entry| entry.path())
+                .filter(|path| path.is_file())
+                .filter(|path| {
+                    path.extension()
+                        .map(|ext| ext.to_string_lossy().to_ascii_lowercase() == expected_ext)
+                        .unwrap_or(false)
+                })
+                .filter(|path| {
+                    let stem = path.file_stem().and_then(|name| name.to_str()).unwrap_or_default();
+                    (prefix_hint.is_empty() || stem.starts_with(&prefix_hint))
+                        && (suffix_hint.is_empty() || stem.ends_with(&suffix_hint))
+                })
+                .filter_map(|path| trailing_frame_number(&path))
+                .filter(|frame| (frame_start..=frame_end).contains(frame))
+                .count() as u32
+        })
+        .unwrap_or(0)
 }
 
 /// Return the first frame in [frame_start, frame_end] whose output file does not exist.
@@ -192,10 +259,12 @@ pub async fn run_job(app: AppHandle, state: AppState, job: RenderJob) -> Result<
         }
 
         let already_done = (actual_start - job.frame_start).max(0) as u32;
-        let file_baseline = match &output_dir {
-            Some(dir) => count_image_files_sync(dir),
-            None => 0,
-        };
+        let file_baseline = count_job_image_files_sync(
+            &job.output_path,
+            job.frame_start,
+            job.frame_end,
+            &job.output_format,
+        );
 
         // Emit initial progress so the UI starts at the right position.
         if already_done > 0 {
@@ -222,28 +291,28 @@ pub async fn run_job(app: AppHandle, state: AppState, job: RenderJob) -> Result<
             );
         }
 
-        let child = match spawn_blender(&job, actual_start) {
-            Ok(c) => Arc::new(Mutex::new(c)),
+        let mut child = match spawn_blender(&job, actual_start) {
+            Ok(c) => c,
             Err(e) => break Err(e),
         };
         {
             let mut active = state.active_jobs.lock().await;
-            active.insert(job.id.clone(), child.clone());
+            if let Some(pid) = child.id() {
+                active.insert(job.id.clone(), pid);
+            }
         }
 
-        let (stdout, stderr) = {
-            let mut c = child.lock().await;
-            (
-                c.stdout.take().expect("stdout not captured"),
-                c.stderr.take().expect("stderr not captured"),
-            )
-        };
+        let stdout = child.stdout.take().expect("stdout not captured");
+        let stderr = child.stderr.take().expect("stderr not captured");
 
         let render_running = Arc::new(AtomicBool::new(true));
         // Per-run stderr buffer for error messages on failure.
-        let stderr_buf: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
+        let stderr_buf: Arc<Mutex<VecDeque<String>>> =
+            Arc::new(Mutex::new(VecDeque::with_capacity(200)));
         let job_frame_start = job.frame_start;
         let job_frame_end = job.frame_end;
+        let poll_output_path = job.output_path.clone();
+        let poll_output_format = job.output_format.clone();
 
         // ── File-poll progress (spawn_blocking → unaffected by async scheduler) ──
         let poll_running = render_running.clone();
@@ -251,13 +320,13 @@ pub async fn run_job(app: AppHandle, state: AppState, job: RenderJob) -> Result<
         let poll_job_id = job.id.clone();
         let poll_dir = output_dir.clone();
         let poll_task = tokio::task::spawn_blocking(move || {
-            let Some(dir) = poll_dir else { return };
+            let Some(_dir) = poll_dir else { return };
             let start = std::time::Instant::now();
             let mut last_count = 0u32;
             loop {
                 std::thread::sleep(std::time::Duration::from_millis(500));
                 if !poll_running.load(Ordering::Relaxed) { break; }
-                let raw = count_image_files_sync(&dir);
+                let raw = count_job_image_files_sync(&poll_output_path, job_frame_start, job_frame_end, &poll_output_format);
                 let new_in_run = raw.saturating_sub(file_baseline);
                 let count = already_done + new_in_run;
                 if count > last_count {
@@ -315,7 +384,7 @@ pub async fn run_job(app: AppHandle, state: AppState, job: RenderJob) -> Result<
                         None,
                         total_frames,
                         Some(abs_frame),
-                        Some(p.time_elapsed),
+                        None,
                         p.remaining_secs,
                     )
                     .await;
@@ -325,13 +394,17 @@ pub async fn run_job(app: AppHandle, state: AppState, job: RenderJob) -> Result<
                             job_id: job_id_stderr.clone(),
                             frame: rel,
                             total_frames,
-                            time_elapsed: p.time_elapsed,
+                            time_elapsed: 0.0,
                             memory_mb: 0.0,
                             remaining_secs: p.remaining_secs,
                         },
                     );
                 }
-                stderr_buf_clone.lock().await.push(line.clone());
+                let mut stderr_tail = stderr_buf_clone.lock().await;
+                if stderr_tail.len() >= 200 {
+                    stderr_tail.pop_front();
+                }
+                stderr_tail.push_back(line.clone());
                 let _guard = log_write_lock_stderr.lock().await;
                 let _ = crate::app_paths::append_log_line(&log_file_path_stderr, &line);
             }
@@ -383,7 +456,7 @@ pub async fn run_job(app: AppHandle, state: AppState, job: RenderJob) -> Result<
                     None,
                     total_frames,
                     Some(abs_frame),
-                    Some(p.time_elapsed),
+                    None,
                     p.remaining_secs,
                 )
                 .await;
@@ -393,7 +466,7 @@ pub async fn run_job(app: AppHandle, state: AppState, job: RenderJob) -> Result<
                         job_id: job.id.clone(),
                         frame: rel,
                         total_frames,
-                        time_elapsed: p.time_elapsed,
+                        time_elapsed: 0.0,
                         memory_mb: 0.0,
                         remaining_secs: p.remaining_secs,
                     },
@@ -402,7 +475,7 @@ pub async fn run_job(app: AppHandle, state: AppState, job: RenderJob) -> Result<
         }
 
         let _ = stderr_task.await;
-        let exit_status = { let mut c = child.lock().await; c.wait().await? };
+        let exit_status = child.wait().await?;
 
         render_running.store(false, Ordering::Relaxed);
         let _ = poll_task.await;
@@ -438,6 +511,24 @@ pub async fn run_job(app: AppHandle, state: AppState, job: RenderJob) -> Result<
         resume_job.last_rendered_frame = last_rendered_frame;
         let next_start = compute_resume_frame(&resume_job);
         let frames_done = (next_start - job.frame_start).max(0);
+        let stderr_tail = stderr_buf
+            .lock()
+            .await
+            .iter()
+            .cloned()
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        if next_start == actual_start && saved_in_run == 0 {
+            break Err(anyhow::anyhow!(
+                "Blender exited before rendering any new frame.{}",
+                if stderr_tail.is_empty() {
+                    String::new()
+                } else {
+                    format!("\nLast output:\n{}", stderr_tail)
+                }
+            ));
+        }
 
         let recovery_line = if next_start > job.frame_end {
             format!(
@@ -471,7 +562,6 @@ pub async fn run_job(app: AppHandle, state: AppState, job: RenderJob) -> Result<
         }
 
         if crash_count >= MAX_CRASH_RETRIES {
-            let stderr_tail = stderr_buf.lock().await.join("\n");
             break Err(anyhow::anyhow!(
                 "Blender crashed {} time(s).{}",
                 crash_count,
@@ -487,9 +577,17 @@ pub async fn run_job(app: AppHandle, state: AppState, job: RenderJob) -> Result<
 }
 
 fn spawn_blender(job: &RenderJob, frame_start_actual: i32) -> Result<Child> {
-    Ok(crate::blender::command::render_command(job, frame_start_actual)
-        .into_tokio_command()
+    let mut command = crate::blender::command::render_command(job, frame_start_actual)
+        .into_tokio_command();
+    command
+        .current_dir(
+            job.blend_file
+                .parent()
+                .unwrap_or_else(|| std::path::Path::new(".")),
+        )
         .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::piped())
-        .spawn()?)
+        .stderr(std::process::Stdio::piped());
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    command.process_group(0);
+    Ok(command.spawn()?)
 }

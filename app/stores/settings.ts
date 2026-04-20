@@ -13,7 +13,7 @@ export const useSettingsStore = defineStore('settings', () => {
     excludedBlenderPaths: [],
   })
   const blenderVersions = ref<BlenderInstall[]>([])
-  const { getSettings, saveSettings, addBlenderByPath } = useTauri()
+  const { getSettings, saveSettings, addBlenderByPath, getBlenderVersions } = useTauri()
 
   function mergeInstalls(extra: BlenderInstall[]): BlenderInstall[] {
     const seen = new Set<string>()
@@ -27,29 +27,23 @@ export const useSettingsStore = defineStore('settings', () => {
   async function load() {
     const loaded = await getSettings()
     settings.value = { extraBlenderPaths: [], excludedBlenderPaths: [], ...loaded }
-
-    const extraResults = await Promise.allSettled(
-      settings.value.extraBlenderPaths.map((p) => addBlenderByPath(p)),
-    )
-    const extra = extraResults.flatMap((r) => (r.status === 'fulfilled' ? [r.value] : []))
-    blenderVersions.value = mergeInstalls(extra)
+    blenderVersions.value = mergeInstalls(await getBlenderVersions())
   }
 
   async function refreshBlenderVersions() {
-    const extraResults = await Promise.allSettled(
-      settings.value.extraBlenderPaths.map((p) => addBlenderByPath(p)),
-    )
-    const extra = extraResults.flatMap((r) => (r.status === 'fulfilled' ? [r.value] : []))
-    blenderVersions.value = mergeInstalls(extra)
+    blenderVersions.value = mergeInstalls(await getBlenderVersions())
     if (!settings.value.defaultBlender && blenderVersions.value.length > 0) {
       settings.value.defaultBlender = blenderVersions.value[0].executable
     }
   }
 
   async function browseAndAddBlender() {
+    const filters = navigator.userAgent.includes('Windows')
+      ? [{ name: 'Blender Executable', extensions: ['exe'] }]
+      : []
     const selected = await open({
-      title: 'Select blender.exe',
-      filters: [{ name: 'Blender Executable', extensions: ['exe'] }],
+      title: 'Select Blender executable',
+      filters,
     })
     if (!selected) return null
 
@@ -73,9 +67,12 @@ export const useSettingsStore = defineStore('settings', () => {
   }
 
   async function browseAndSetFfmpeg() {
+    const filters = navigator.userAgent.includes('Windows')
+      ? [{ name: 'FFmpeg Executable', extensions: ['exe'] }]
+      : []
     const selected = await open({
       title: 'Select ffmpeg executable',
-      filters: [{ name: 'FFmpeg Executable', extensions: ['exe'] }],
+      filters,
     })
     if (!selected) return null
 

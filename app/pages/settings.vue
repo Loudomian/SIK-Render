@@ -96,6 +96,7 @@
           <section class="surface-panel settings-field-panel">
             <div class="settings-field-copy">
               <p class="settings-field-title">最大并发任务数</p>
+              <p class="hint-text">保留字段，当前版本仍按单任务顺序调度。</p>
             </div>
             <UFormField>
               <UInputNumber v-model="settingsStore.settings.maxConcurrentJobs" :min="1" :max="8" />

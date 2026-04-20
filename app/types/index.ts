@@ -1,4 +1,6 @@
-// Shared TypeScript types — must be kept in sync with Rust structs in src-tauri/src/queue/job.rs
+// Shared TypeScript types — must be kept in sync with Rust structs in src-tauri/src/queue/job.rs.
+// IPC request payloads keep Rust field names (snake_case) so Tauri command args map directly.
+// IPC responses are serde-serialized Rust structs with `rename_all = "camelCase"`.
 
 export type JobStatus = 'pending' | 'running' | 'done' | 'failed' | 'cancelled' | 'interrupted'
 
@@ -45,6 +47,7 @@ export interface RenderProgressEvent {
   jobId: string
   frame: number
   totalFrames: number
+  // Estimated single-frame render seconds used by the UI for "单帧".
   timeElapsed: number
   memoryMb: number
   remainingSecs: number | null

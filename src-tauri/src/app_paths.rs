@@ -1,5 +1,5 @@
 use anyhow::{Context, Result};
-use chrono::Local;
+use chrono::Utc;
 use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -59,7 +59,7 @@ pub fn count_job_log_files(job_number: i32, kind: &str) -> Result<usize> {
 }
 
 pub fn create_job_log_file(job_number: i32, kind: &str) -> Result<PathBuf> {
-    let timestamp = Local::now().format("%Y%m%d-%H%M%S");
+    let timestamp = Utc::now().format("%Y%m%d-%H%M%S");
     let path = job_logs_dir(job_number)?.join(format!("{kind}-{timestamp}.log"));
     if !path.exists() {
       fs::write(&path, "").with_context(|| format!("failed to create log file {}", path.display()))?;
@@ -93,9 +93,11 @@ pub fn append_job_log_event(job_number: i32, kind: &str, line: &str) -> Result<P
         .collect::<Vec<_>>();
 
     files.sort();
-    let path = files
-        .pop()
-        .unwrap_or_else(|| create_job_log_file(job_number, kind).expect("failed to create job log file"));
+    let path = if let Some(path) = files.pop() {
+        path
+    } else {
+        create_job_log_file(job_number, kind)?
+    };
     append_log_line(&path, line)?;
     Ok(path)
 }

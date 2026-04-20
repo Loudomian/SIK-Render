@@ -86,6 +86,7 @@ pub fn inspect_project_command(
 ) -> BlenderCliCommand {
     BlenderCliCommand::new(blender_executable)
         .arg_before("--background")
+        .arg_before("--disable-autoexec")
         .blend_file(blend_file)
         .arg("--python-expr")
         .arg(script)

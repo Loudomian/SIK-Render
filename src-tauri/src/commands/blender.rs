@@ -52,12 +52,12 @@ pub fn open_path(path: String) {
     let target = if p.exists() { p } else { PathBuf::from(path.replace("######", "").trim_end_matches(['\\', '/']).to_string()) };
     let target = if target.exists() { target.clone() } else { target.parent().map(|d| d.to_path_buf()).unwrap_or(target) };
 
-    #[cfg(target_os = "windows")]
+#[cfg(target_os = "windows")]
     {
         let arg = if target.is_file() {
-            format!("/select,{}", target.display())
+            format!("/select,\"{}\"", target.display())
         } else {
-            target.display().to_string()
+            format!("\"{}\"", target.display())
         };
         let _ = std::process::Command::new("explorer").arg(arg).spawn();
     }
@@ -68,8 +68,28 @@ pub fn open_path(path: String) {
 }
 
 #[tauri::command]
-pub fn get_blender_versions() -> Vec<BlenderInstall> {
-    normalize_versions(Vec::new())
+pub fn get_blender_versions(app: tauri::AppHandle) -> Vec<BlenderInstall> {
+    let settings = crate::commands::settings::get_settings(app).unwrap_or_default();
+    let excluded = settings
+        .excluded_blender_paths
+        .into_iter()
+        .map(PathBuf::from)
+        .collect::<BTreeSet<_>>();
+
+    let mut installs = crate::blender::discovery::discover();
+    installs.extend(
+        settings
+            .extra_blender_paths
+            .into_iter()
+            .filter_map(|path| {
+                let candidate = PathBuf::from(path);
+                crate::blender::discovery::blender_install_at(&candidate).ok()
+            }),
+    );
+    normalize_versions(installs)
+        .into_iter()
+        .filter(|install| !excluded.contains(&install.executable))
+        .collect()
 }
 
 #[tauri::command]
@@ -458,6 +478,15 @@ pub fn validate_blend_file(path: String) -> Result<bool, String> {
     if ext != "blend" {
         return Err(format!("Not a .blend file: {path}"));
     }
+    let mut header = [0u8; 7];
+    std::io::Read::read_exact(
+        &mut std::fs::File::open(&p).map_err(|error| error.to_string())?,
+        &mut header,
+    )
+    .map_err(|error| error.to_string())?;
+    if &header != b"BLENDER" {
+        return Err(format!("Not a valid .blend file: {path}"));
+    }
     Ok(true)
 }
 
@@ -477,6 +506,7 @@ pub async fn inspect_blend_file(
     if !blend_path.exists() {
         return Err(format!("Blend file not found: {path}"));
     }
+    validate_blend_file(path.clone())?;
 
     inspect_project(&blender_path, &blend_path).await.map_err(|error| error.to_string())
 }
@@ -551,13 +581,21 @@ fn write_ffmpeg_concat_index(
     let mut lines = String::new();
 
     for file in files {
-        let escaped = file.to_string_lossy().replace('\'', "\\'");
+        let escaped = file
+            .to_string_lossy()
+            .replace('\'', "\\'")
+            .replace('\n', "")
+            .replace('\r', "");
         lines.push_str(&format!("file '{}'\n", escaped));
         lines.push_str(&format!("duration {:.12}\n", frame_duration));
     }
 
     if let Some(last) = files.last() {
-        let escaped = last.to_string_lossy().replace('\'', "\\'");
+        let escaped = last
+            .to_string_lossy()
+            .replace('\'', "\\'")
+            .replace('\n', "")
+            .replace('\r', "");
         lines.push_str(&format!("file '{}'\n", escaped));
     }
 
@@ -796,6 +834,8 @@ pub async fn encode_sequence_to_mp4(
     .into_tokio_command();
     child.stdout(std::process::Stdio::piped());
     child.stderr(std::process::Stdio::piped());
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    child.process_group(0);
 
     let mut child = child
         .spawn()
@@ -810,12 +850,13 @@ pub async fn encode_sequence_to_mp4(
         .take()
         .ok_or_else(|| String::from("Failed to capture ffmpeg stderr"))?;
 
-    let child = std::sync::Arc::new(tokio::sync::Mutex::new(child));
-    state
-        .active_mp4_exports
-        .lock()
-        .await
-        .insert(job_id.clone(), child.clone());
+    if let Some(pid) = child.id() {
+        state
+            .active_mp4_exports
+            .lock()
+            .await
+            .insert(job_id.clone(), pid);
+    }
 
     let stdout_task = tokio::spawn(emit_mp4_stream(
         stdout,
@@ -832,8 +873,6 @@ pub async fn encode_sequence_to_mp4(
         mp4_log_write_lock.clone(),
     ));
     let status = child
-        .lock()
-        .await
         .wait()
         .await
         .map_err(|error| format!("Failed to wait for ffmpeg: {error}"))?;
@@ -925,12 +964,12 @@ pub async fn cancel_mp4_export(
     state: State<'_, AppState>,
     app: tauri::AppHandle,
 ) -> Result<(), String> {
-    let child = {
+    let pid = {
         let active = state.active_mp4_exports.lock().await;
-        active.get(&job_id).cloned()
+        active.get(&job_id).copied()
     };
 
-    if let Some(child) = child {
+    if let Some(pid) = pid {
         state.cancelled_mp4_exports.lock().await.insert(job_id.clone());
         let _ = app.emit(
             "mp4-log",
@@ -964,7 +1003,7 @@ pub async fn cancel_mp4_export(
                 }
             }
         }
-        let _ = child.lock().await.kill().await;
+        let _ = AppState::kill_process_tree(pid);
     }
 
     Ok(())
