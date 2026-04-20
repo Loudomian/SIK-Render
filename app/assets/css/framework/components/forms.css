@@ -1,0 +1,243 @@
+.job-form {
+  display: grid;
+  gap: 1.25rem;
+}
+
+.job-form-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1.25rem;
+  align-items: start;
+}
+
+.job-form-main {
+  display: grid;
+  gap: 1.1rem;
+}
+
+.job-form-block {
+  display: grid;
+  gap: 1rem;
+  padding: 1rem;
+}
+
+.job-form-sidebar {
+  display: grid;
+  gap: 1rem;
+  padding: 1rem;
+}
+
+.job-form-sidebar-section {
+  display: grid;
+  gap: 0.95rem;
+}
+
+.job-form-sidebar-section + .job-form-sidebar-section {
+  padding-top: 1rem;
+  border-top: 1px solid var(--ui-border-muted);
+}
+
+.job-form-stack {
+  display: grid;
+  gap: 1rem;
+}
+
+.job-form-field {
+  width: 100%;
+}
+
+.job-form-field > * {
+  width: 100%;
+  min-width: 0;
+}
+
+.form-section {
+  display: grid;
+  gap: 0.95rem;
+}
+
+.form-section-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.form-section-title,
+.settings-card-title,
+.section-title {
+  margin: 0;
+  color: var(--ui-text-dimmed);
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.section-title-tight {
+  margin-bottom: 0.35rem;
+}
+
+.form-section-note {
+  margin: 0.3rem 0 0;
+  color: var(--ui-text-muted);
+  font-size: 0.85rem;
+  line-height: 1.55;
+}
+
+.form-inline-actions {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+}
+
+.version-stack {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.job-form-control-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.job-form-control-grid-meta {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.job-form-control-grid-frames {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.version-chip-row {
+  align-content: flex-start;
+  min-width: 0;
+}
+
+.job-form-stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.8rem;
+}
+
+.job-form-stat {
+  display: grid;
+  gap: 0.18rem;
+  padding: 0.8rem 0.85rem;
+  border: 1px solid var(--ui-border-muted);
+  border-radius: 0.75rem;
+  background: color-mix(in srgb, var(--ui-bg-muted) 94%, transparent);
+}
+
+.job-form-stat-label {
+  color: var(--ui-text-dimmed);
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.job-form-stat strong {
+  color: var(--ui-text);
+  font-size: 0.95rem;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.job-form-empty {
+  display: grid;
+  justify-items: start;
+  gap: 0.65rem;
+  padding: 1rem;
+  border: 1px dashed var(--ui-border);
+  border-radius: 0.8rem;
+  color: var(--ui-text-muted);
+}
+
+.job-form-empty p {
+  margin: 0;
+  font-size: 0.88rem;
+  line-height: 1.6;
+}
+
+.job-form-empty-icon {
+  font-size: 1.1rem;
+}
+
+.notices-stack {
+  display: grid;
+  gap: 0.7rem;
+}
+
+.field-label {
+  display: inline-block;
+  margin-bottom: 0.15rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.form-row-2 {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 9rem;
+  gap: 1rem;
+}
+
+.form-row-compact {
+  display: grid;
+  grid-template-columns: minmax(0, 11rem) repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.chip-row,
+.info-scroll-row,
+.notices-area,
+.detail-warnings {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.info-scroll-row,
+.notices-area,
+.detail-warnings {
+  margin-top: 0.1rem;
+}
+
+.hint-text {
+  margin: 0;
+  color: var(--ui-text-muted);
+  font-size: 0.84rem;
+  line-height: 1.6;
+}
+
+.path-textarea textarea {
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.job-name-textarea textarea {
+  line-height: 1.45;
+}
+
+@media (max-width: 900px) {
+  .job-form-layout,
+  .job-form-control-grid,
+  .job-form-stats,
+  .form-row-2,
+  .form-row-compact {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 720px) {
+  .job-form-control-grid-meta,
+  .job-form-control-grid-frames {
+    grid-template-columns: 1fr;
+  }
+
+  .form-inline-actions {
+    align-items: stretch;
+  }
+}

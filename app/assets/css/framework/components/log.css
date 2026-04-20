@@ -1,0 +1,56 @@
+.log-section {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.log-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.log-header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+.log-header-chip {
+  flex-shrink: 0;
+}
+
+.log-header-stat {
+  pointer-events: none;
+  cursor: default;
+}
+
+.log-tabs {
+  width: fit-content;
+}
+
+.log-empty {
+  display: block;
+  padding: 1rem;
+  color: var(--ui-text-muted);
+  text-align: center;
+}
+
+.log-panel {
+  height: 24rem;
+  padding: 1rem;
+  overflow-y: auto;
+  background: color-mix(in srgb, var(--ui-bg-muted) 96%, black);
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 0.8rem;
+  line-height: 1.6;
+}
+
+.log-line {
+  color: var(--ui-text-toned);
+  white-space: pre-wrap;
+  word-break: break-word;
+}

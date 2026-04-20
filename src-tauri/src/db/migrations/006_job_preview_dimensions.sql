@@ -1,0 +1,2 @@
+ALTER TABLE jobs ADD COLUMN preview_width INTEGER;
+ALTER TABLE jobs ADD COLUMN preview_height INTEGER;

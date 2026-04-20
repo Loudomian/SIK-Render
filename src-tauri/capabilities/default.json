@@ -6,8 +6,8 @@
   "permissions": [
     "core:default",
     "shell:allow-open",
-    "fs:allow-read-all",
-    "fs:allow-write-all",
+    "fs:read-all",
+    "fs:write-all",
     "dialog:allow-open",
     "dialog:allow-save",
     "notification:default"

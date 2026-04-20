@@ -1,0 +1,57 @@
+.page-hero {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.page-hero-copy {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.page-eyebrow {
+  width: fit-content;
+}
+
+.page-hero h1,
+.nodes-page h1 {
+  margin: 0;
+  font-size: clamp(1.65rem, 2.2vw, 2.2rem);
+  line-height: 1.05;
+  letter-spacing: -0.03em;
+}
+
+.page-note,
+.note {
+  margin: 0;
+  max-width: 42rem;
+  color: var(--ui-text-muted);
+  line-height: 1.6;
+}
+
+.page-hero-actions {
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-end;
+}
+
+.queue-page,
+.detail-page,
+.settings-page,
+.nodes-page {
+  display: grid;
+  gap: 1.25rem;
+}
+
+@media (max-width: 720px) {
+  .page-hero {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .page-hero-actions {
+    justify-content: stretch;
+  }
+}

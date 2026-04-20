@@ -1,34 +1,43 @@
 use regex::Regex;
 use std::sync::OnceLock;
 
-/// Progress parsed from a single line of Blender stdout.
 #[derive(Debug, Clone, serde::Serialize)]
-pub struct FrameProgress {
-    pub frame: u32,
+pub struct TimeProgress {
     pub time_elapsed: f32,
-    pub memory_mb: f32,
+    pub remaining_secs: Option<f32>,
 }
 
 static FRAME_RE: OnceLock<Regex> = OnceLock::new();
+static RENDERING_FRAME_RE: OnceLock<Regex> = OnceLock::new();
+static TIME_RE: OnceLock<Regex> = OnceLock::new();
 
-/// Try to parse a Blender stdout line into frame progress.
-/// Example line: `Fra:42 Mem:128.50M (Peak 200.00M) | Time:00:04.12 | ...`
-pub fn parse_line(line: &str) -> Option<FrameProgress> {
+pub fn parse_frame(line: &str) -> Option<u32> {
     let re = FRAME_RE.get_or_init(|| {
-        Regex::new(r"Fra:(\d+).*?Mem:([\d.]+)M.*?Time:([\d:]+\.[\d]+)").unwrap()
+        Regex::new(r"Fra:\s*(\d+)").unwrap()
+    });
+    if let Some(caps) = re.captures(line) {
+        return caps[1].parse().ok();
+    }
+
+    let re = RENDERING_FRAME_RE.get_or_init(|| {
+        Regex::new(r"Rendering frame\s+(\d+)").unwrap()
+    });
+    let caps = re.captures(line)?;
+    caps[1].parse().ok()
+}
+
+pub fn parse_time_progress(line: &str) -> Option<TimeProgress> {
+    let re = TIME_RE.get_or_init(|| {
+        Regex::new(r"Time:\s*([\d:]+\.\d+)(?:.*?Remaining:\s*([\d:]+\.\d+))?").unwrap()
     });
 
     let caps = re.captures(line)?;
-    let frame: u32 = caps[1].parse().ok()?;
-    let memory_mb: f32 = caps[2].parse().ok()?;
-    let time_str = &caps[3];
+    let elapsed = parse_time(&caps[1]);
+    let remaining_secs = caps.get(2).map(|m| parse_time(m.as_str()));
 
-    let elapsed = parse_time(time_str);
-
-    Some(FrameProgress {
-        frame,
+    Some(TimeProgress {
         time_elapsed: elapsed,
-        memory_mb,
+        remaining_secs,
     })
 }
 

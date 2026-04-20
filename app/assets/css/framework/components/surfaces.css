@@ -1,0 +1,59 @@
+.surface-card {
+  border: 1px solid var(--ui-border-muted);
+  border-radius: 0.8rem;
+  box-shadow: none;
+  backdrop-filter: blur(18px);
+  transition: border-color 140ms ease, background-color 140ms ease;
+}
+
+.surface-card > * + * {
+  border-top: 1px solid var(--ui-border-muted);
+}
+
+.surface-card-subtle,
+.surface-card-outline {
+  background: color-mix(in srgb, var(--ui-bg-elevated) 96%, transparent);
+}
+
+.surface-card-soft {
+  background: color-mix(in srgb, var(--ui-bg-muted) 96%, transparent);
+}
+
+.surface-card-solid {
+  border-color: color-mix(in srgb, var(--ui-primary) 18%, var(--ui-border-accented));
+  background: color-mix(in srgb, var(--ui-primary) 9%, var(--ui-bg-elevated));
+}
+
+.surface-card:hover {
+  border-color: color-mix(in srgb, var(--ui-border-accented) 92%, transparent);
+}
+
+.surface-card-subtle:hover,
+.surface-card-outline:hover {
+  background: color-mix(in srgb, var(--ui-bg-elevated) 100%, white 4%);
+}
+
+.surface-card-soft:hover {
+  background: color-mix(in srgb, var(--ui-bg-muted) 100%, white 3%);
+}
+
+.surface-card-solid:hover {
+  border-color: color-mix(in srgb, var(--ui-primary) 28%, var(--ui-border-accented));
+  background: color-mix(in srgb, var(--ui-primary) 12%, var(--ui-bg-elevated));
+}
+
+.surface-panel {
+  border: 1px solid var(--ui-border-muted);
+  border-radius: 0.75rem;
+  background: color-mix(in srgb, var(--ui-bg-muted) 94%, transparent);
+}
+
+.job-card,
+.settings-card,
+.detail-section,
+.node-card,
+.empty-state,
+.choice-card,
+.app-sidebar-footer {
+  box-shadow: none;
+}

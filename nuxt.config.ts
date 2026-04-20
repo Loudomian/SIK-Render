@@ -2,14 +2,28 @@
 export default defineNuxtConfig({
   ssr: false, // Tauri requires SPA mode
   srcDir: 'app/',
+  devtools: {
+    enabled: false,
+  },
+  experimental: {
+    appManifest: false,
+  },
 
   devServer: {
     port: 3000,
   },
 
-  modules: ['@pinia/nuxt'],
+  modules: ['@pinia/nuxt', '@nuxt/ui'],
 
-  css: ['~/assets/css/main.css'],
+  ui: {
+    fonts: false,
+  },
+
+  css: [
+    '~/assets/css/ui.css',
+    '~/assets/css/colors.css',
+    '~/assets/css/framework.css',
+  ],
 
   vite: {
     // Prevent Vite from obscuring Rust errors
@@ -17,6 +31,14 @@ export default defineNuxtConfig({
     envPrefix: ['VITE_', 'TAURI_'],
     server: {
       strictPort: true,
+      watch: {
+        ignored: [
+          '**/logs/**',
+          '**/src-tauri/target/**',
+          '**/.output/**',
+          '**/.nuxt/**',
+        ],
+      },
     },
   },
 

@@ -1,10 +1,6 @@
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
-import type { RenderProgressEvent } from '~/types'
+import type { JobUpdatedEvent, RenderLogEvent, RenderProgressEvent } from '~/types'
 
-/**
- * Subscribe to render progress events emitted by the Rust backend.
- * Returns an unlisten function — call it on component unmount.
- */
 export const useRenderEvents = () => {
   const onProgress = async (
     handler: (event: RenderProgressEvent) => void,
@@ -14,5 +10,21 @@ export const useRenderEvents = () => {
     })
   }
 
-  return { onProgress }
+  const onJobUpdated = async (
+    handler: (event: JobUpdatedEvent) => void,
+  ): Promise<UnlistenFn> => {
+    return listen<JobUpdatedEvent>('job-updated', (e) => {
+      handler(e.payload)
+    })
+  }
+
+  const onLog = async (
+    handler: (event: RenderLogEvent) => void,
+  ): Promise<UnlistenFn> => {
+    return listen<RenderLogEvent>('render-log', (e) => {
+      handler(e.payload)
+    })
+  }
+
+  return { onProgress, onJobUpdated, onLog }
 }

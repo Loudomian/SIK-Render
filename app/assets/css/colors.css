@@ -1,0 +1,34 @@
+:root {
+  --app-sidebar-width: 16.75rem;
+  --ui-radius: 0.2rem;
+}
+
+.light, :root {
+  --ui-bg: #f7f7f5;
+  --ui-bg-muted: #fcfcf9;
+  --ui-bg-elevated: rgba(255, 255, 252, 0.92);
+  --ui-bg-accented: #ecece6;
+  --ui-border: #e7e5dd;
+  --ui-border-muted: #ece9e1;
+  --ui-border-accented: #d6d2c7;
+  --ui-text-dimmed: #9a988f;
+  --ui-text-muted: #727169;
+  --ui-text-toned: #4f4f49;
+  --ui-text: #2f2f2b;
+  --ui-text-highlighted: #161714;
+}
+
+.dark {
+  --ui-bg: #0f1110;
+  --ui-bg-muted: #141716;
+  --ui-bg-elevated: rgba(22, 25, 24, 0.92);
+  --ui-bg-accented: #202422;
+  --ui-border: #232825;
+  --ui-border-muted: #2b322e;
+  --ui-border-accented: #39413c;
+  --ui-text-dimmed: #6f746f;
+  --ui-text-muted: #989d97;
+  --ui-text-toned: #c5c9c5;
+  --ui-text: #e8ebe7;
+  --ui-text-highlighted: #fbfcfa;
+}

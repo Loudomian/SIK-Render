@@ -1,0 +1,38 @@
+.node-list {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.node-card-body {
+  padding: 1rem 1.1rem;
+}
+
+.node-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.node-info {
+  display: grid;
+  min-width: 0;
+  gap: 0.25rem;
+}
+
+.node-name {
+  font-weight: 700;
+}
+
+.node-address {
+  color: var(--ui-text-muted);
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 0.82rem;
+}
+
+@media (max-width: 720px) {
+  .node-item {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}

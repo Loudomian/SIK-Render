@@ -1,0 +1,66 @@
+.drop-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  padding: 2rem;
+  pointer-events: none;
+  background: color-mix(in srgb, var(--ui-primary) 10%, transparent);
+  backdrop-filter: blur(8px);
+}
+
+.drop-message {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1.35rem 1.5rem;
+  border: 1px solid color-mix(in srgb, var(--ui-primary) 40%, var(--ui-border-muted));
+  border-radius: 0.85rem;
+  background: color-mix(in srgb, var(--ui-bg-elevated) 96%, transparent);
+}
+
+.drop-icon {
+  font-size: 1.5rem;
+  color: var(--ui-primary);
+}
+
+.drop-copy {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.drop-copy strong {
+  font-size: 1.02rem;
+}
+
+.drop-copy span {
+  color: var(--ui-text-muted);
+  font-size: 0.85rem;
+}
+
+.surface-alert {
+  margin-bottom: 1rem;
+}
+
+.loading,
+.empty {
+  padding: 3rem 1rem;
+  color: var(--ui-text-muted);
+  text-align: center;
+}
+
+.form-error {
+  margin: 0;
+  color: var(--ui-error);
+}
+
+.drop-fade-enter-active,
+.drop-fade-leave-active {
+  transition: opacity 140ms ease;
+}
+
+.drop-fade-enter-from,
+.drop-fade-leave-to {
+  opacity: 0;
+}

@@ -1,0 +1,141 @@
+.settings-card-body {
+  padding: 1.1rem 1.2rem;
+}
+
+.settings-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.settings-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.settings-grid-2 {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.settings-form-stack {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.settings-field-panel {
+  display: grid;
+  gap: 0.8rem;
+  padding: 0.95rem 1rem;
+}
+
+.settings-field-copy {
+  display: grid;
+  gap: 0.22rem;
+}
+
+.settings-field-title {
+  margin: 0;
+  color: var(--ui-text);
+  font-size: 0.92rem;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.settings-field-note {
+  margin: 0;
+  color: var(--ui-text-muted);
+  font-size: 0.82rem;
+  line-height: 1.55;
+}
+
+.settings-version-value {
+  margin: 0;
+  color: var(--ui-text);
+  font-size: 1rem;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.settings-blender-list {
+  display: grid;
+  gap: 0.7rem;
+  margin: 1rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.blender-version-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.8rem;
+  padding: 0.85rem 0.95rem;
+}
+
+.blender-version-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-shrink: 0;
+  gap: 0.45rem;
+}
+
+.ffmpeg-config-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.8rem;
+  padding: 0.85rem 0.95rem;
+}
+
+.blender-version-info {
+  min-width: 0;
+}
+
+.blender-version-name {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  font-weight: 600;
+}
+
+.blender-version-path {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--ui-text-muted);
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 0.79rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 900px) {
+  .settings-grid-2 {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 720px) {
+  .settings-card-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .blender-version-item {
+    grid-template-columns: 1fr;
+  }
+
+  .ffmpeg-config-item {
+    grid-template-columns: 1fr;
+  }
+
+  .blender-version-actions {
+    justify-content: flex-start;
+  }
+}

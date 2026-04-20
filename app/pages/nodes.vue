@@ -1,7 +1,12 @@
 <template>
   <div class="nodes-page">
-    <h1>Render Nodes</h1>
-    <p class="note">Local node always active. LAN node discovery coming in a future update.</p>
+    <section class="page-hero">
+      <div class="page-hero-copy">
+        <UBadge label="Nodes" color="neutral" variant="subtle" class="page-eyebrow" />
+        <h1>渲染节点</h1>
+        <p class="page-note">当前仅启用本机节点。后续会在此页扩展局域网节点发现与调度状态。</p>
+      </div>
+    </section>
     <NodeList />
   </div>
 </template>

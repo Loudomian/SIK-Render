@@ -1,0 +1,1 @@
+ALTER TABLE jobs ADD COLUMN resume_from_existing INTEGER NOT NULL DEFAULT 1;
