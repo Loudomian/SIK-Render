@@ -1,6 +1,63 @@
 .job-list {
   display: grid;
   gap: 0.9rem;
+  position: relative;
+  isolation: isolate;
+}
+
+.job-list-item {
+  position: relative;
+}
+
+.job-list-item::before,
+.job-list-item::after {
+  content: '';
+  position: absolute;
+  left: 0.6rem;
+  right: 0.6rem;
+  height: 2px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ui-primary) 84%, transparent);
+  opacity: 0;
+  transform: scaleX(0.9);
+  transition: opacity 140ms ease, transform 160ms ease;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.job-list-item::before {
+  top: -0.45rem;
+}
+
+.job-list-item::after {
+  bottom: -0.45rem;
+}
+
+.job-list-item-draggable {
+  cursor: grab;
+}
+
+.job-list-item-draggable .job-card {
+  cursor: grab;
+}
+
+.job-list-item-draggable:active {
+  cursor: grabbing;
+}
+
+.job-list-item-draggable:active .job-card,
+.job-list-item-dragging .job-card {
+  cursor: grabbing;
+}
+
+.job-list-item-dragging {
+  opacity: 0.76;
+}
+
+.job-list-item-drop-before::before,
+.job-list-item-drop-after::after {
+  opacity: 1;
+  transform: scaleX(1);
 }
 
 .job-card {
@@ -10,17 +67,22 @@
 .job-list-move,
 .job-list-enter-active,
 .job-list-leave-active {
-  transition: transform 240ms ease, opacity 220ms ease;
+  transition: transform 260ms ease, opacity 220ms ease;
+  will-change: transform, opacity;
 }
 
 .job-list-enter-from,
 .job-list-leave-to {
   opacity: 0;
-  transform: translateY(10px);
+  transform: translateY(8px);
 }
 
 .job-list-leave-active {
-  position: relative;
+  position: absolute;
+  left: 0;
+  right: 0;
+  pointer-events: none;
+  z-index: -1;
 }
 
 .job-card-openable {
@@ -41,15 +103,15 @@
 }
 
 .job-card.status-failed {
-  border-color: color-mix(in srgb, var(--ui-error) 42%, var(--ui-border-muted));
+  border-color: color-mix(in srgb, var(--ui-error) 68%, var(--ui-border-muted));
 }
 
 .job-card.status-cancelled {
-  border-color: color-mix(in srgb, var(--ui-border-accented) 72%, var(--ui-border-muted));
+  border-color: color-mix(in srgb, var(--ui-warning) 62%, var(--ui-border-muted));
 }
 
 .job-card.status-interrupted {
-  border-color: color-mix(in srgb, var(--ui-warning) 46%, var(--ui-border-muted));
+  border-color: color-mix(in srgb, var(--ui-warning) 72%, var(--ui-border-muted));
 }
 
 

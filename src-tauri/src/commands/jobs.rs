@@ -4,6 +4,7 @@ use crate::state::AppState;
 use chrono::Utc;
 use serde::Deserialize;
 use serde::Serialize;
+use std::collections::HashSet;
 use std::path::PathBuf;
 use tauri::{AppHandle, Emitter, State};
 
@@ -19,6 +20,9 @@ pub struct AddJobPayload {
     pub preview_width: Option<i32>,
     pub preview_height: Option<i32>,
     pub resume_from_existing: bool,
+    pub initial_current_frame: Option<i32>,
+    pub initial_total_frames: Option<i32>,
+    pub initial_last_rendered_frame: Option<i32>,
     pub priority: i32,
 }
 
@@ -29,6 +33,12 @@ pub struct JobLogSummary {
     pub blender_count: usize,
     pub ffmpeg_count: usize,
     pub total_count: usize,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct QueueState {
+    pub paused: bool,
 }
 
 async fn append_manual_cancel_log(
@@ -62,8 +72,7 @@ async fn append_manual_cancel_log(
     Ok(())
 }
 
-#[tauri::command]
-pub async fn list_jobs(state: State<'_, AppState>) -> Result<Vec<RenderJob>, String> {
+async fn fetch_jobs(pool: &sqlx::SqlitePool) -> Result<Vec<RenderJob>, sqlx::Error> {
     sqlx::query_as::<_, DbRenderJob>(
         r#"
         SELECT
@@ -94,21 +103,66 @@ pub async fn list_jobs(state: State<'_, AppState>) -> Result<Vec<RenderJob>, Str
             CASE status
                 WHEN 'running' THEN 0
                 WHEN 'pending' THEN 1
-                ELSE 2
+                WHEN 'failed' THEN 2
+                WHEN 'cancelled' THEN 2
+                WHEN 'interrupted' THEN 2
+                WHEN 'done' THEN 3
+                ELSE 4
             END,
             CASE
                 WHEN status = 'running' THEN COALESCE(started_at, created_at)
-                WHEN status = 'pending' THEN created_at
-                ELSE COALESCE(finished_at, started_at, created_at)
             END DESC,
-            priority ASC,
+            CASE
+                WHEN status IN ('failed', 'cancelled', 'interrupted') THEN COALESCE(finished_at, created_at)
+            END DESC,
+            CASE
+                WHEN status = 'done' THEN COALESCE(finished_at, created_at)
+            END DESC,
+            CASE
+                WHEN status = 'pending' THEN priority
+            END ASC,
             created_at DESC
         "#,
     )
-    .fetch_all(&state.pool)
+    .fetch_all(pool)
     .await
     .map(|rows| rows.into_iter().map(RenderJob::from).collect())
-    .map_err(|error| error.to_string())
+}
+
+async fn next_queue_priority<'e, E>(executor: E) -> Result<i32, sqlx::Error>
+where
+    E: sqlx::Executor<'e, Database = sqlx::Sqlite>,
+{
+    let next = sqlx::query_scalar::<_, i32>("SELECT COALESCE(MAX(priority), 0) + 1 FROM jobs")
+    .fetch_one(executor)
+    .await?;
+
+    Ok(next.max(1))
+}
+
+#[tauri::command]
+pub async fn list_jobs(state: State<'_, AppState>) -> Result<Vec<RenderJob>, String> {
+    fetch_jobs(&state.pool).await.map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn get_queue_state(state: State<'_, AppState>) -> Result<QueueState, String> {
+    Ok(QueueState {
+        paused: state.is_queue_paused(),
+    })
+}
+
+#[tauri::command]
+pub fn start_queue(state: State<'_, AppState>) -> Result<QueueState, String> {
+    state.set_queue_paused(false);
+    state.scheduler_notify.notify_one();
+    Ok(QueueState { paused: false })
+}
+
+#[tauri::command]
+pub fn pause_queue(state: State<'_, AppState>) -> Result<QueueState, String> {
+    state.set_queue_paused(true);
+    Ok(QueueState { paused: true })
 }
 
 #[tauri::command]
@@ -134,21 +188,19 @@ pub async fn add_job(
     );
     job.preview_width = payload.preview_width;
     job.preview_height = payload.preview_height;
-
-    if job.preview_width.is_none() || job.preview_height.is_none() {
-        if job.blender_executable.exists() && job.blend_file.exists() {
-            if let Ok(settings) = crate::blender::project::inspect_project(
-                &job.blender_executable,
-                &job.blend_file,
-            )
-            .await
-            {
-                if settings.resolution_x > 0 && settings.resolution_y > 0 {
-                    job.preview_width = Some(settings.resolution_x);
-                    job.preview_height = Some(settings.resolution_y);
-                }
-            }
-        }
+    if payload.resume_from_existing {
+        let total_frames = job.total_frames();
+        let resume_floor = 0.max(job.frame_start - 1);
+        job.current_frame = payload
+            .initial_current_frame
+            .map(|value| value.clamp(0, total_frames));
+        job.total_frames = payload
+            .initial_total_frames
+            .map(|value| value.clamp(0, total_frames))
+            .or(Some(total_frames));
+        job.last_rendered_frame = payload.initial_last_rendered_frame.map(|value| {
+            value.clamp(resume_floor, job.frame_end)
+        });
     }
 
     let mut tx = state.pool.begin().await.map_err(|error| error.to_string())?;
@@ -157,6 +209,9 @@ pub async fn add_job(
         .await
         .map_err(|error| error.to_string())?;
     job.job_number = job_number as i32;
+    job.priority = next_queue_priority(&mut *tx)
+        .await
+        .map_err(|error| error.to_string())?;
 
     sqlx::query(
         r#"
@@ -443,8 +498,8 @@ pub async fn reset_job(
     state: State<'_, AppState>,
     app: tauri::AppHandle,
 ) -> Result<RenderJob, String> {
-    let Some((current_frame_start, current_frame_end, status)) = sqlx::query_as::<_, (i32, i32, JobStatus)>(
-        "SELECT frame_start, frame_end, status FROM jobs WHERE id = ?",
+    let Some((current_frame_start, current_frame_end, current_priority, status)) = sqlx::query_as::<_, (i32, i32, i32, JobStatus)>(
+        "SELECT frame_start, frame_end, priority, status FROM jobs WHERE id = ?",
     )
     .bind(&id)
     .fetch_optional(&state.pool)
@@ -469,27 +524,37 @@ pub async fn reset_job(
 
     let range_changed =
         target_frame_start != current_frame_start || target_frame_end != current_frame_end;
-    let preserve_progress = resume_from_existing && !range_changed;
+    let preserve_progress = resume_from_existing && !range_changed && status != JobStatus::Done;
+    let mut tx = state.pool.begin().await.map_err(|e| e.to_string())?;
+    let next_priority = if status == JobStatus::Done {
+        next_queue_priority(&mut *tx)
+            .await
+            .map_err(|e| e.to_string())?
+    } else {
+        current_priority
+    };
 
     sqlx::query(
         "UPDATE jobs SET status = 'pending', started_at = NULL, finished_at = NULL, \
-         frame_start = ?, frame_end = ?, resume_from_existing = ?, \
-         current_frame = CASE WHEN ? THEN current_frame ELSE NULL END, \
-         total_frames = CASE WHEN ? THEN total_frames ELSE NULL END, \
-         last_rendered_frame = CASE WHEN ? THEN last_rendered_frame ELSE NULL END, \
-         time_elapsed = NULL, remaining_secs = NULL \
-         WHERE id = ?",
+           frame_start = ?, frame_end = ?, resume_from_existing = ?, priority = ?, \
+           current_frame = CASE WHEN ? THEN current_frame ELSE NULL END, \
+           total_frames = CASE WHEN ? THEN total_frames ELSE NULL END, \
+           last_rendered_frame = CASE WHEN ? THEN last_rendered_frame ELSE NULL END, \
+           time_elapsed = NULL, remaining_secs = NULL \
+           WHERE id = ?",
     )
     .bind(target_frame_start)
     .bind(target_frame_end)
     .bind(resume_from_existing)
+    .bind(next_priority)
     .bind(preserve_progress)
     .bind(preserve_progress)
     .bind(preserve_progress)
     .bind(&id)
-    .execute(&state.pool)
+    .execute(&mut *tx)
     .await
     .map_err(|e| e.to_string())?;
+    tx.commit().await.map_err(|e| e.to_string())?;
 
     let job = scheduler::load_job(&state.pool, &id)
         .await
@@ -503,23 +568,63 @@ pub async fn reset_job(
 
 #[tauri::command]
 pub async fn reorder_job(
-    id: String,
-    priority: i32,
+    ordered_ids: Vec<String>,
     state: State<'_, AppState>,
-) -> Result<(), String> {
-    let rows = sqlx::query("UPDATE jobs SET priority = ? WHERE id = ?")
-        .bind(priority)
-        .bind(&id)
-        .execute(&state.pool)
-        .await
-        .map_err(|error| error.to_string())?
-        .rows_affected();
+) -> Result<Vec<RenderJob>, String> {
+    let all_rows = sqlx::query_as::<_, (String, JobStatus)>(
+        "SELECT id, status FROM jobs ORDER BY priority ASC, created_at ASC",
+    )
+    .fetch_all(&state.pool)
+    .await
+    .map_err(|error| error.to_string())?;
 
-    if rows == 0 {
-        return Err(format!("job {id} was not found"));
+    // The reorder algorithm intentionally preserves running jobs in-place and
+    // only remaps non-running jobs into the remaining slots. This currently
+    // relies on the scheduler invariant that at most one job can be running.
+    debug_assert!(
+        all_rows
+            .iter()
+            .filter(|(_, status)| *status == JobStatus::Running)
+            .count()
+            <= 1,
+        "reorder_job assumes at most one running job"
+    );
+
+    let existing_ids = all_rows
+        .iter()
+        .filter(|(_, status)| *status != JobStatus::Running)
+        .map(|(id, _)| id.clone())
+        .collect::<Vec<_>>();
+    let existing_set = existing_ids.iter().cloned().collect::<HashSet<_>>();
+    let provided_set = ordered_ids.iter().cloned().collect::<HashSet<_>>();
+
+    if existing_ids.len() != ordered_ids.len() || existing_set != provided_set {
+        return Err("job order is out of date, please refresh and try again".into());
     }
 
-    state.scheduler_notify.notify_one();
+    let mut ordered_iter = ordered_ids.into_iter();
+    let final_order = all_rows
+        .into_iter()
+        .map(|(id, status)| {
+            if status == JobStatus::Running {
+                Ok(id)
+            } else {
+                ordered_iter.next().ok_or_else(|| "job order is out of date, please refresh and try again".to_string())
+            }
+        })
+        .collect::<Result<Vec<_>, _>>()?;
 
-    Ok(())
+    let mut tx = state.pool.begin().await.map_err(|error| error.to_string())?;
+    for (index, id) in final_order.iter().enumerate() {
+        sqlx::query("UPDATE jobs SET priority = ? WHERE id = ?")
+            .bind((index as i32) + 1)
+            .bind(id)
+            .execute(&mut *tx)
+            .await
+            .map_err(|error| error.to_string())?;
+    }
+    tx.commit().await.map_err(|error| error.to_string())?;
+
+    state.scheduler_notify.notify_one();
+    fetch_jobs(&state.pool).await.map_err(|error| error.to_string())
 }

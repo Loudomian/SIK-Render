@@ -6,7 +6,19 @@ export const useJobsStore = defineStore('jobs', () => {
   const logs = ref<Record<string, string[]>>({})
   const renderStarted = ref<Record<string, boolean>>({})
   const loading = ref(false)
-  const { listJobs, addJob, removeJob, cancelJob, resetJob, getJobLatestLogs: fetchJobLogs } = useTauri()
+  const queuePaused = ref(true)
+  const {
+    listJobs,
+    getQueueState,
+    startQueue: invokeStartQueue,
+    pauseQueue: invokePauseQueue,
+    addJob,
+    removeJob,
+    cancelJob,
+    resetJob,
+    reorderJob,
+    getJobLatestLogs: fetchJobLogs,
+  } = useTauri()
 
   function jobOrderWeight(status: RenderJob['status']) {
     switch (status) {
@@ -14,22 +26,38 @@ export const useJobsStore = defineStore('jobs', () => {
         return 0
       case 'pending':
         return 1
-      default:
+      case 'failed':
+      case 'cancelled':
+      case 'interrupted':
         return 2
+      case 'done':
+        return 3
+      default:
+        return 4
     }
   }
 
-  function jobSortTimestamp(job: RenderJob) {
-    if (job.status === 'running') return job.startedAt ?? job.createdAt
-    if (job.status === 'pending') return job.createdAt
-    return job.finishedAt ?? job.startedAt ?? job.createdAt
-  }
-
   function sortJobs() {
+    // TODO: Sorting is currently mirrored in both SQL and the frontend store.
+    // Keep this until event-driven updates are refactored to consume backend
+    // ordering directly; otherwise transient local events can reorder cards.
     jobs.value = [...jobs.value].sort((a, b) =>
       jobOrderWeight(a.status) - jobOrderWeight(b.status)
-      || jobSortTimestamp(b) - jobSortTimestamp(a)
-      || a.priority - b.priority
+      || (a.status === 'running' && b.status === 'running'
+        ? (b.startedAt ?? b.createdAt) - (a.startedAt ?? a.createdAt)
+        : 0)
+      || (
+        ['failed', 'cancelled', 'interrupted'].includes(a.status)
+        && ['failed', 'cancelled', 'interrupted'].includes(b.status)
+          ? (b.finishedAt ?? b.createdAt) - (a.finishedAt ?? a.createdAt)
+          : 0
+      )
+      || (a.status === 'done' && b.status === 'done'
+        ? (b.finishedAt ?? b.createdAt) - (a.finishedAt ?? a.createdAt)
+        : 0)
+      || (a.status === 'pending' && b.status === 'pending'
+        ? a.priority - b.priority
+        : 0)
       || b.createdAt - a.createdAt,
     )
   }
@@ -50,6 +78,21 @@ export const useJobsStore = defineStore('jobs', () => {
     }
   }
 
+  async function fetchQueueState() {
+    const state = await getQueueState()
+    queuePaused.value = state.paused
+  }
+
+  async function startQueue() {
+    const state = await invokeStartQueue()
+    queuePaused.value = state.paused
+  }
+
+  async function pauseQueue() {
+    const state = await invokePauseQueue()
+    queuePaused.value = state.paused
+  }
+
   async function submitJob(payload: AddJobPayload) {
     const job = await addJob(payload)
     // job-updated may have arrived during the await and set status to 'running';
@@ -59,6 +102,11 @@ export const useJobsStore = defineStore('jobs', () => {
     }
     sortJobs()
     return job
+  }
+
+  async function reorderQueueJobs(orderedIds: string[]) {
+    jobs.value = await reorderJob(orderedIds)
+    sortJobs()
   }
 
   async function deleteJob(id: string) {
@@ -90,6 +138,9 @@ export const useJobsStore = defineStore('jobs', () => {
       frameRange?.end ?? null,
     )
     _applyReset(updated)
+    if (queuePaused.value) {
+      await startQueue()
+    }
   }
 
   async function retryJobFromStart(job: RenderJob, frameRange?: { start: number, end: number }) {
@@ -175,16 +226,25 @@ export const useJobsStore = defineStore('jobs', () => {
   const pendingJobs = computed(() => jobs.value.filter((j) => j.status === 'pending'))
   const runningJobs = computed(() => jobs.value.filter((j) => j.status === 'running'))
   const doneJobs = computed(() => jobs.value.filter((j) => j.status === 'done'))
+  const queueJobs = computed(() => jobs.value.filter((j) => j.status === 'pending' || j.status === 'running'))
+  const errorJobs = computed(() => jobs.value.filter((j) => j.status === 'failed' || j.status === 'cancelled' || j.status === 'interrupted'))
 
   return {
     jobs,
     logs,
     loading,
+    queuePaused,
     pendingJobs,
     runningJobs,
     doneJobs,
+    queueJobs,
+    errorJobs,
     fetchJobs,
+    fetchQueueState,
+    startQueue,
+    pauseQueue,
     submitJob,
+    reorderQueueJobs,
     retryJob,
     retryJobFromStart,
     deleteJob,

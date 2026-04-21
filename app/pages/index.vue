@@ -1,71 +1,142 @@
 <template>
   <div class="queue-page">
     <Transition name="drop-fade">
-      <div v-if="isDragging" class="drop-overlay">
+      <div v-if="isDragging && !draggedJobId" class="drop-overlay">
         <div class="drop-message">
           <UIcon name="i-lucide-download" class="drop-icon" />
           <div class="drop-copy">
-            <strong>松开以创建渲染任务</strong>
-            <span>自动读取 .blend，并补全基础渲染参数</span>
+            <strong>拖拽 .blend 工程到窗口</strong>
+            <span>松开以创建渲染任务</span>
           </div>
         </div>
       </div>
     </Transition>
 
-    <section class="page-hero">
-      <div class="page-hero-copy">
-        <UBadge label="Render Queue" color="primary" variant="subtle" class="page-eyebrow" />
-        <h1>渲染队列</h1>
-        <p class="page-note">任务按优先级顺序依次执行，状态变化、日志和帧进度会实时同步。</p>
-      </div>
-      <div class="page-hero-actions">
-        <UButton icon="i-lucide-plus" label="新建任务" color="success" variant="solid" @click="openAddJob" />
-      </div>
-    </section>
-
-    <section class="queue-summary-section">
-      <div class="queue-summary">
-        <div v-for="item in queueStats" :key="item.label" class="surface-panel queue-summary-item">
-          <span class="queue-summary-label">{{ item.label }}</span>
-          <strong class="queue-summary-value">{{ item.value }}</strong>
+    <section class="queue-header">
+      <section class="page-hero queue-hero">
+        <div class="page-hero-copy">
+          <div class="queue-title-row">
+            <UBadge label="Render Queue" color="primary" variant="subtle" class="page-eyebrow" />
+            <UBadge
+              :label="jobsStore.queuePaused ? '队列已暂停' : '队列运行中'"
+              :color="jobsStore.queuePaused ? 'warning' : 'success'"
+              variant="subtle"
+            />
+          </div>
+          <h1>渲染队列</h1>
+          <p class="page-note">管理本地 Blender 渲染任务。</p>
         </div>
-      </div>
-    </section>
+        <div class="queue-hero-actions-stack">
+          <div class="page-hero-actions queue-hero-actions">
+            <UTooltip text="创建新的渲染任务" arrow :content="{ side: 'bottom', sideOffset: 8 }">
+              <UButton icon="i-lucide-plus" label="新建任务" color="success" variant="solid" @click="openAddJob" />
+            </UTooltip>
+          </div>
+          <div class="page-hero-actions queue-hero-actions queue-hero-actions-secondary">
+            <UTooltip text="按当前顺序启动等待中的任务" arrow :content="{ side: 'bottom', sideOffset: 8 }">
+              <UButton
+                icon="i-lucide-play"
+                label="开始任务队列"
+                color="success"
+                variant="outline"
+                :disabled="!jobsStore.queuePaused || !jobsStore.pendingJobs.length"
+                @click="handleStartQueue"
+              />
+            </UTooltip>
+            <UTooltip text="暂停队列，不再启动新的任务" arrow :content="{ side: 'bottom', sideOffset: 8 }">
+              <UButton
+                icon="i-lucide-pause"
+                label="暂停任务队列"
+                color="warning"
+                variant="outline"
+                :disabled="jobsStore.queuePaused"
+                @click="handlePauseQueue"
+              />
+            </UTooltip>
+          </div>
+        </div>
+      </section>
 
-    <div v-if="jobsStore.loading" class="loading">加载中…</div>
-
-    <UAlert v-if="retryActionError" color="error" variant="subtle" :description="retryActionError" class="surface-alert" />
-
-    <UCard v-else-if="jobsStore.jobs.length === 0" variant="subtle" class="empty-state" :ui="{ body: 'empty-state-body' }">
-      <div class="empty-state-icon">
-        <UIcon name="i-lucide-film" />
-      </div>
-      <div class="empty-state-title">还没有渲染任务</div>
-      <div class="empty-state-note">拖拽 .blend 工程到窗口，或点击"新建任务"开始。</div>
-      <div class="empty-state-actions">
-        <UButton icon="i-lucide-plus" label="新建任务" color="success" variant="solid" @click="openAddJob" />
-        <UButton
-          v-if="showInitializeTools"
-          icon="i-lucide-scan-search"
-          label="初始化工具"
+      <div class="queue-tabs-row surface-panel">
+        <UTabs
+          v-model="activeQueueTab"
+          :items="queueTabItems"
+          :content="false"
           color="neutral"
-          variant="outline"
-          :loading="initializingTools"
-          @click="initializeTools"
+          variant="pill"
+          class="queue-tabs"
+          :ui="{
+            indicator: 'hidden',
+            list: 'queue-tabs-list',
+            trigger: 'queue-tab-trigger',
+            label: 'queue-tab-label',
+          }"
         />
       </div>
-    </UCard>
 
-    <TransitionGroup v-else name="job-list" tag="div" class="job-list">
-      <JobCard
-        v-for="job in jobsStore.jobs"
+      <UAlert v-if="retryActionError" color="error" variant="subtle" :description="retryActionError" class="surface-alert" />
+    </section>
+
+    <section class="queue-content">
+      <div v-if="jobsStore.loading" class="loading">加载中…</div>
+
+      <UCard v-else-if="jobsStore.jobs.length === 0" variant="subtle" class="empty-state" :ui="{ body: 'empty-state-body' }">
+        <div class="empty-state-icon">
+          <UIcon name="i-lucide-film" />
+        </div>
+        <div class="empty-state-title">还没有渲染任务</div>
+        <div class="empty-state-note">拖拽 .blend 工程到窗口，或点击“新建任务”加入队列，然后手动开始。</div>
+        <div class="empty-state-actions">
+          <UButton icon="i-lucide-plus" label="新建任务" color="success" variant="solid" @click="openAddJob" />
+          <UButton
+            v-if="showInitializeTools"
+            icon="i-lucide-scan-search"
+            label="初始化工具"
+            color="neutral"
+            variant="outline"
+            :loading="initializingTools"
+            @click="initializeTools"
+          />
+        </div>
+      </UCard>
+
+      <UCard
+        v-else-if="filteredJobs.length === 0"
+        variant="subtle"
+        class="empty-state queue-empty-state"
+        :class="emptyTabToneClass"
+        :ui="{ body: 'empty-state-body' }"
+      >
+        <div class="empty-state-icon">
+          <UIcon name="i-lucide-filter" />
+        </div>
+        <div class="empty-state-title">{{ emptyTabTitle }}</div>
+        <div class="empty-state-note">{{ emptyTabNote }}</div>
+      </UCard>
+
+      <TransitionGroup v-else name="job-list" tag="div" class="job-list">
+      <div
+        v-for="job in filteredJobs"
         :key="job.id"
-        :job="job"
-        @cancel="jobsStore.stopJob(job.id)"
-        @remove="deleteConfirmJob = job"
-        @retry="handleRetry(job)"
-      />
-    </TransitionGroup>
+        :data-job-id="job.id"
+        class="job-list-item"
+        :class="{
+          'job-list-item-draggable': canDragQueueJob(job),
+          'job-list-item-dragging': draggedJobId === job.id,
+          'job-list-item-drop-before': dropTargetJobId === job.id && dropPosition === 'before',
+          'job-list-item-drop-after': dropTargetJobId === job.id && dropPosition === 'after',
+        }"
+        @pointerdown="handleQueuePointerDown(job, $event)"
+      >
+        <JobCard
+          :job="job"
+          @cancel="jobsStore.stopJob(job.id)"
+          @remove="deleteConfirmJob = job"
+          @retry="handleRetry(job)"
+        />
+      </div>
+      </TransitionGroup>
+    </section>
 
     <UModal
       :open="!!retryConfirmJob"
@@ -117,7 +188,10 @@
                 <h3 class="choice-card-title">从最后一帧继续</h3>
               </div>
               <p class="choice-card-desc">
-                <template v-if="retryConfirmJob && retryFrameStatus && retryFrameStatus.nextFrame <= retryConfirmJob.frameEnd">
+                <template v-if="retryConfirmJob?.status === 'done'">
+                  当前任务已经完整完成，不能直接续跑；如需再次输出，请从头覆盖或改成指定区间重跑
+                </template>
+                <template v-else-if="retryConfirmJob && retryFrameStatus && retryFrameStatus.nextFrame <= retryConfirmJob.frameEnd">
                   从第 <span class="choice-card-accent">{{ retryFrameStatus.nextFrame }}</span> 帧继续渲染
                 </template>
                 <template v-else>
@@ -130,7 +204,7 @@
                 label="继续渲染"
                 class="choice-card-action"
                 :loading="retrySubmittingMode === 'continue'"
-                :disabled="retrySubmittingMode !== null"
+                :disabled="retrySubmittingMode !== null || retryConfirmJob?.status === 'done'"
                 @click="confirmRetryContinue"
               />
             </UCard>
@@ -246,7 +320,7 @@
                 <div class="form-section-header">
                   <div>
                     <h2 class="form-section-title">渲染控制</h2>
-                    <p class="form-section-note">先选择 Blender 版本，再确认优先级、输出格式和渲染帧段。</p>
+                    <p class="form-section-note">先选择 Blender 版本，再确认输出格式和渲染帧段。新任务会自动追加到队列末尾。</p>
                   </div>
                 </div>
 
@@ -265,11 +339,29 @@
                   </div>
 
                   <div class="job-form-control-grid job-form-control-grid-meta">
-                    <UFormField label="优先级">
-                      <UInputNumber v-model="form.priority" :min="0" :max="99" :ui="{ root: 'w-full' }" />
-                    </UFormField>
                     <UFormField label="格式">
-                      <USelect v-model="form.output_format" :items="outputFormatOptions" :ui="{ base: 'w-full' }" />
+                      <USelect
+                          v-model="form.output_format"
+                          :items="outputFormatOptions"
+                          trailing-icon="i-lucide-chevron-down"
+                          :ui="{
+                            base: 'w-full pe-9',
+                            trailing: 'pointer-events-none absolute inset-y-0 end-0 flex items-center pe-3',
+                            trailingIcon: 'size-4 text-primary',
+                            item: 'relative justify-center',
+                            itemLabel: 'w-full text-center',
+                            itemTrailing: 'absolute end-2'
+                          }"
+                        >
+                          <template #default="{ modelValue }">
+                            <span class="min-w-0 flex-1 truncate opacity-0 pointer-events-none select-none" aria-hidden="true">
+                              {{ modelValue || '选择格式' }}
+                            </span>
+                            <span class="absolute inset-0 flex items-center justify-center px-8 pointer-events-none">
+                              {{ modelValue || '选择格式' }}
+                            </span>
+                          </template>
+                        </USelect>
                     </UFormField>
                   </div>
                   <div class="job-form-control-grid job-form-control-grid-frames">
@@ -447,6 +539,7 @@ const router = useRouter()
 const jobsStore = useJobsStore()
 const settingsStore = useSettingsStore()
 const toast = useToast()
+const activeQueueTab = ref<'all' | 'queue' | 'done' | 'error'>('all')
 
 const initializingTools = ref(false)
 
@@ -547,6 +640,40 @@ async function initializeTools(options?: { silent?: boolean }) {
   }
 }
 
+async function handleStartQueue() {
+  try {
+    await jobsStore.startQueue()
+    toast.add({
+      title: '队列已开始',
+      description: '等待中的任务会按当前队列顺序依次启动。',
+      color: 'success',
+    })
+  } catch (error) {
+    toast.add({
+      title: '开始失败',
+      description: error instanceof Error ? error.message : String(error),
+      color: 'error',
+    })
+  }
+}
+
+async function handlePauseQueue() {
+  try {
+    await jobsStore.pauseQueue()
+    toast.add({
+      title: '队列已暂停',
+      description: '不会再启动新的渲染任务，当前正在运行的任务不会被中断。',
+      color: 'warning',
+    })
+  } catch (error) {
+    toast.add({
+      title: '暂停失败',
+      description: error instanceof Error ? error.message : String(error),
+      color: 'error',
+    })
+  }
+}
+
 const showInitializeTools = computed(() => {
   const hasBlender = Boolean(settingsStore.settings.defaultBlender || settingsStore.blenderVersions[0]?.executable)
   const hasFfmpeg = Boolean(settingsStore.settings.ffmpegExecutable)
@@ -567,6 +694,16 @@ const retryCustomResumeFromExisting = ref(true)
 const retryCustomFrameStatus = ref<RenderedFramesStatus | null>(null)
 const retryCustomInspectLoading = ref(false)
 let retryCustomInspectToken = 0
+const draggedJobId = ref<string | null>(null)
+const dropTargetJobId = ref<string | null>(null)
+const dropPosition = ref<'before' | 'after'>('before')
+const reorderingQueue = ref(false)
+const pointerDragging = ref(false)
+let dragPointerId: number | null = null
+let dragStartX = 0
+let dragStartY = 0
+let pendingDragJobId: string | null = null
+const DRAG_START_DISTANCE = 6
 
 function confirmDelete() {
   if (deleteConfirmJob.value) jobsStore.deleteJob(deleteConfirmJob.value.id)
@@ -582,7 +719,7 @@ async function handleRetry(job: RenderJob) {
   retryConfirmJob.value = job
   retryCustomStart.value = job.frameStart
   retryCustomEnd.value = job.frameEnd
-  retryCustomResumeFromExisting.value = true
+  retryCustomResumeFromExisting.value = job.status !== 'done'
   retryCustomFrameStatus.value = status
   void refreshRetryCustomInspection()
 }
@@ -726,6 +863,7 @@ onMounted(async () => {
     await initializeTools({ silent: true })
   }
   unlistenDrop = await getCurrentWindow().onDragDropEvent((event) => {
+    if (draggedJobId.value) return
     if (event.payload.type === 'enter' || event.payload.type === 'over') {
       isDragging.value = true
     } else if (event.payload.type === 'leave') {
@@ -764,12 +902,186 @@ function displayEngine(engine: string) {
 
 const SEQUENCE_FORMATS = ['PNG', 'JPEG', 'OPEN_EXR']
 const outputFormatOptions = ['PNG', 'JPEG', 'OPEN_EXR']
-const queueStats = computed(() => [
-  { label: '总任务', value: jobsStore.jobs.length },
-  { label: '运行中', value: jobsStore.runningJobs.length },
-  { label: '等待中', value: jobsStore.pendingJobs.length },
-  { label: '已完成', value: jobsStore.doneJobs.length },
+const queueTabItems = computed(() => [
+  { label: '总任务', value: 'all', badge: { label: String(jobsStore.jobs.length), color: 'neutral', variant: 'subtle' }, icon: 'i-lucide-layers', class: 'queue-tab-tone-all', ui: { trigger: 'queue-tab-tone-all' } },
+  { label: '排队任务', value: 'queue', badge: { label: String(jobsStore.queueJobs.length), color: 'info', variant: 'subtle' }, icon: 'i-lucide-loader-circle', class: 'queue-tab-tone-queue', ui: { trigger: 'queue-tab-tone-queue' } },
+  { label: '已完成任务', value: 'done', badge: { label: String(jobsStore.doneJobs.length), color: 'success', variant: 'subtle' }, icon: 'i-lucide-circle-check-big', class: 'queue-tab-tone-done', ui: { trigger: 'queue-tab-tone-done' } },
+  { label: '已中止任务', value: 'error', badge: { label: String(jobsStore.errorJobs.length), color: 'warning', variant: 'subtle' }, icon: 'i-lucide-triangle-alert', class: 'queue-tab-tone-error', ui: { trigger: 'queue-tab-tone-error' } },
 ])
+const filteredJobs = computed(() => {
+  switch (activeQueueTab.value) {
+    case 'queue':
+      return jobsStore.queueJobs
+    case 'done':
+      return jobsStore.doneJobs
+    case 'error':
+      return jobsStore.errorJobs
+    default:
+      return jobsStore.jobs
+  }
+})
+const emptyTabTitle = computed(() => {
+  switch (activeQueueTab.value) {
+    case 'queue':
+      return '当前没有排队任务'
+    case 'done':
+      return '当前没有已完成任务'
+    case 'error':
+      return '当前没有已中止任务'
+    default:
+      return '当前没有任务'
+  }
+})
+const emptyTabNote = computed(() => {
+  switch (activeQueueTab.value) {
+    case 'queue':
+      return '新建任务后会先进入队列，点击上方“开始任务”后再按顺序执行。'
+    case 'done':
+      return '完成的任务会显示在这里，方便单独查看已结束项目。'
+    case 'error':
+      return '失败、已取消和已中断的任务会集中显示在这里。'
+    default:
+      return '这里会显示当前筛选下的任务卡片。'
+  }
+})
+const emptyTabToneClass = computed(() => {
+  switch (activeQueueTab.value) {
+    case 'queue':
+      return 'queue-empty-tone-queue'
+    case 'done':
+      return 'queue-empty-tone-done'
+    case 'error':
+      return 'queue-empty-tone-error'
+    default:
+      return 'queue-empty-tone-all'
+  }
+})
+
+function canDragQueueJob(job: RenderJob) {
+  return job.status !== 'running' && !reorderingQueue.value
+}
+
+function clearQueueDragState() {
+  pointerDragging.value = false
+  draggedJobId.value = null
+  dropTargetJobId.value = null
+  dropPosition.value = 'before'
+  dragPointerId = null
+  pendingDragJobId = null
+  document.body.style.removeProperty('user-select')
+}
+
+function updateQueueDropPosition(jobId: string, target: HTMLElement, clientY: number) {
+  if (!draggedJobId.value || draggedJobId.value === jobId) return
+  const job = jobsStore.jobs.find(item => item.id === jobId)
+  if (!job || !canDragQueueJob(job)) return
+  if (!target) return
+  const rect = target.getBoundingClientRect()
+  dropTargetJobId.value = jobId
+  dropPosition.value = clientY >= rect.top + rect.height / 2 ? 'after' : 'before'
+}
+
+function beginQueuePointerDrag(jobId: string) {
+  pointerDragging.value = true
+  draggedJobId.value = jobId
+  dropTargetJobId.value = null
+  dropPosition.value = 'before'
+  document.body.style.userSelect = 'none'
+}
+
+function handleQueuePointerMove(event: PointerEvent) {
+  if (dragPointerId == null || event.pointerId !== dragPointerId || !pendingDragJobId) return
+
+  if (!pointerDragging.value) {
+    const movedX = Math.abs(event.clientX - dragStartX)
+    const movedY = Math.abs(event.clientY - dragStartY)
+    if (Math.max(movedX, movedY) < DRAG_START_DISTANCE) {
+      return
+    }
+    beginQueuePointerDrag(pendingDragJobId)
+  }
+
+  const target = document.elementFromPoint(event.clientX, event.clientY)?.closest('.job-list-item') as HTMLElement | null
+  const targetJobId = target?.dataset.jobId
+  if (!target || !targetJobId) return
+  updateQueueDropPosition(targetJobId, target, event.clientY)
+}
+
+async function commitQueuePointerDrop() {
+  if (!draggedJobId.value || !dropTargetJobId.value || draggedJobId.value === dropTargetJobId.value) {
+    clearQueueDragState()
+    return
+  }
+
+  const draggedId = draggedJobId.value
+  const queueIds = jobsStore.jobs
+    .filter(queueJob => queueJob.status !== 'running')
+    .map(queueJob => queueJob.id)
+  if (!queueIds.includes(draggedId) || !queueIds.includes(dropTargetJobId.value)) {
+    clearQueueDragState()
+    return
+  }
+
+  const remainingIds = queueIds.filter(id => id !== draggedId)
+  const targetIndex = remainingIds.indexOf(dropTargetJobId.value)
+  if (targetIndex === -1) {
+    clearQueueDragState()
+    return
+  }
+
+  const insertIndex = dropPosition.value === 'after' ? targetIndex + 1 : targetIndex
+  remainingIds.splice(insertIndex, 0, draggedId)
+
+  reorderingQueue.value = true
+  try {
+    await jobsStore.reorderQueueJobs(remainingIds)
+  } catch (error) {
+    toast.add({
+      title: '顺序更新失败',
+      description: error instanceof Error ? error.message : String(error),
+      color: 'error',
+    })
+  } finally {
+    reorderingQueue.value = false
+    clearQueueDragState()
+  }
+}
+
+function handleQueuePointerUp(event: PointerEvent) {
+  if (dragPointerId == null || event.pointerId !== dragPointerId) return
+  window.removeEventListener('pointermove', handleQueuePointerMove)
+  window.removeEventListener('pointerup', handleQueuePointerUp)
+  window.removeEventListener('pointercancel', handleQueuePointerCancel)
+  if (!pointerDragging.value) {
+    clearQueueDragState()
+    return
+  }
+  void commitQueuePointerDrop()
+}
+
+function handleQueuePointerCancel() {
+  window.removeEventListener('pointermove', handleQueuePointerMove)
+  window.removeEventListener('pointerup', handleQueuePointerUp)
+  window.removeEventListener('pointercancel', handleQueuePointerCancel)
+  clearQueueDragState()
+}
+
+function handleQueuePointerDown(job: RenderJob, event: PointerEvent) {
+  if (event.button !== 0) return
+  if (!canDragQueueJob(job) || reorderingQueue.value) return
+  const target = event.target as HTMLElement | null
+  if (target?.closest('button, a, input, textarea, select, [role="button"], .job-actions, .job-preview-clickable')) {
+    return
+  }
+
+  dragPointerId = event.pointerId
+  pendingDragJobId = job.id
+  dragStartX = event.clientX
+  dragStartY = event.clientY
+  window.addEventListener('pointermove', handleQueuePointerMove)
+  window.addEventListener('pointerup', handleQueuePointerUp)
+  window.addEventListener('pointercancel', handleQueuePointerCancel)
+}
 
 function autoFillOutputPath(blendPath: string) {
   const name = (inferJobName(blendPath) || 'render').replace(/[<>:"/\\|?*]/g, '_')
@@ -787,7 +1099,7 @@ const form = reactive<AddJobPayload>({
   frame_start: 1,
   frame_end: 250,
   resume_from_existing: true,
-  priority: 5,
+  priority: 0,
 })
 
 function resetForm() {
@@ -799,7 +1111,7 @@ function resetForm() {
   form.frame_start = 1
   form.frame_end = 250
   form.resume_from_existing = true
-  form.priority = 5
+  form.priority = 0
   formError.value = ''
   projectSettings.value = null
   projectSettingsMessage.value = ''
@@ -936,12 +1248,17 @@ watch(
 )
 
 function buildJobPayload(resumeFromExisting: boolean): AddJobPayload {
+  const seededFrameStatus = resumeFromExisting ? addJobFrameStatus.value : null
+  const totalFrames = form.frame_end - form.frame_start + 1
   return {
     ...form,
     name: form.name || inferJobName(form.blend_file) || 'Untitled Render Job',
     preview_width: projectSettings.value?.resolutionX ?? null,
     preview_height: projectSettings.value?.resolutionY ?? null,
     resume_from_existing: resumeFromExisting,
+    initial_current_frame: seededFrameStatus?.frameCount ?? null,
+    initial_total_frames: seededFrameStatus ? totalFrames : null,
+    initial_last_rendered_frame: seededFrameStatus?.lastFrame ?? null,
   }
 }
 
@@ -1001,6 +1318,10 @@ async function submitPreparedJob(resumeFromExisting: boolean) {
 
 onUnmounted(() => {
   unlistenDrop?.()
+  window.removeEventListener('pointermove', handleQueuePointerMove)
+  window.removeEventListener('pointerup', handleQueuePointerUp)
+  window.removeEventListener('pointercancel', handleQueuePointerCancel)
+  document.body.style.removeProperty('user-select')
   if (inspectTimer) clearTimeout(inspectTimer)
   if (outputDirTimer) clearTimeout(outputDirTimer)
 })

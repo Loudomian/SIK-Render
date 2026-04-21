@@ -6,8 +6,7 @@ export const useSettingsStore = defineStore('settings', () => {
   const settings = ref<AppSettings>({
     defaultBlender: '',
     ffmpegExecutable: '',
-    defaultOutputDir: '',
-    maxConcurrentJobs: 1,
+    blendInspectTimeoutSeconds: 30,
     theme: 'dark',
     extraBlenderPaths: [],
     excludedBlenderPaths: [],

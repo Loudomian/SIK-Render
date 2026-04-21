@@ -34,6 +34,9 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::jobs::list_jobs,
+            commands::jobs::get_queue_state,
+            commands::jobs::start_queue,
+            commands::jobs::pause_queue,
             commands::jobs::add_job,
             commands::jobs::remove_job,
             commands::jobs::cancel_job,

@@ -186,33 +186,6 @@ pub fn count_job_image_files_sync(
         .unwrap_or(0)
 }
 
-/// Return the first frame in [frame_start, frame_end] whose output file does not exist.
-/// Returns `frame_end + 1` when all frames are present.
-pub fn find_resume_frame(output_path: &std::path::Path, frame_start: i32, frame_end: i32, format: &str) -> i32 {
-    if output_path
-        .file_name()
-        .and_then(|name| name.to_str())
-        .map(|name| name.contains('#'))
-        .unwrap_or(false)
-    {
-        let existing_frames = scan_rendered_frame_numbers(output_path, frame_start, frame_end, format);
-        for frame in frame_start..=frame_end {
-            if !existing_frames.contains(&frame) {
-                return frame;
-            }
-        }
-        return frame_end + 1;
-    }
-
-    for frame in frame_start..=frame_end {
-        match frame_filename(output_path, frame, format) {
-            Some(path) if path.exists() => {}
-            _ => return frame,
-        }
-    }
-    frame_end + 1
-}
-
 fn mark_progress_timestamp(progress_started_at: &std::time::Instant, last_progress_ms: &AtomicU64) {
     last_progress_ms.store(
         progress_started_at.elapsed().as_millis().min(u128::from(u64::MAX)) as u64,
@@ -258,12 +231,7 @@ fn compute_resume_frame(job: &RenderJob) -> i32 {
         return (last_frame + 1).min(job.frame_end + 1);
     }
 
-    find_resume_frame(
-        &job.output_path,
-        job.frame_start,
-        job.frame_end,
-        &job.output_format,
-    )
+    job.frame_start
 }
 
 pub async fn run_job(app: AppHandle, state: AppState, job: RenderJob) -> Result<JobStatus> {

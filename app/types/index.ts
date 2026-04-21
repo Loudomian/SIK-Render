@@ -40,6 +40,9 @@ export interface AddJobPayload {
   preview_width?: number | null
   preview_height?: number | null
   resume_from_existing: boolean
+  initial_current_frame?: number | null
+  initial_total_frames?: number | null
+  initial_last_rendered_frame?: number | null
   priority: number
 }
 
@@ -72,6 +75,10 @@ export interface JobLogSummary {
   blenderCount: number
   ffmpegCount: number
   totalCount: number
+}
+
+export interface QueueState {
+  paused: boolean
 }
 
 export interface BlenderInstall {
@@ -126,8 +133,7 @@ export interface RenderedFramesStatus {
 export interface AppSettings {
   defaultBlender: string
   ffmpegExecutable: string
-  defaultOutputDir: string
-  maxConcurrentJobs: number
+  blendInspectTimeoutSeconds: number
   theme: 'dark' | 'light'
   extraBlenderPaths: string[]
   excludedBlenderPaths: string[]

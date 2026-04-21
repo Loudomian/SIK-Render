@@ -16,6 +16,7 @@ pub struct AppState {
     pub interrupted_jobs: Arc<Mutex<HashSet<String>>>,
     pub cancelled_mp4_exports: Arc<Mutex<HashSet<String>>>,
     pub settings: Arc<RwLock<Option<AppSettings>>>,
+    pub queue_paused: Arc<RwLock<bool>>,
 }
 
 impl AppState {
@@ -29,6 +30,7 @@ impl AppState {
             interrupted_jobs: Arc::new(Mutex::new(HashSet::new())),
             cancelled_mp4_exports: Arc::new(Mutex::new(HashSet::new())),
             settings: Arc::new(RwLock::new(settings)),
+            queue_paused: Arc::new(RwLock::new(true)),
         }
     }
 
@@ -39,6 +41,21 @@ impl AppState {
     pub fn set_cached_settings(&self, settings: AppSettings) {
         if let Ok(mut cached) = self.settings.write() {
             *cached = Some(settings);
+        }
+    }
+
+    pub fn is_queue_paused(&self) -> bool {
+        self.queue_paused.read().map(|paused| *paused).unwrap_or(true)
+    }
+
+    pub fn set_queue_paused(&self, paused: bool) {
+        match self.queue_paused.write() {
+            Ok(mut queue_paused) => {
+                *queue_paused = paused;
+            }
+            Err(error) => {
+                log::error!("Failed to update queue paused state: {error}");
+            }
         }
     }
 

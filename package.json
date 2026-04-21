@@ -1,6 +1,6 @@
 {
-  "name": "sik-render",
-  "version": "0.1.0",
+  "name": "SIK Render",
+  "version": "0.1.1",
   "private": true,
   "scripts": {
     "dev": "node --max-old-space-size=8192 ./node_modules/nuxt/bin/nuxt.mjs dev",

@@ -1,7 +1,8 @@
 # Rust / Tauri
 target/
 src-tauri/target/
-*.pdb
+src-tauri/bin/
+src-tauri/ta*.pdb
 
 # Node / Bun
 node_modules/

@@ -1,5 +1,5 @@
 use crate::blender::discovery::BlenderInstall;
-use crate::blender::project::{inspect_project, normalize_versions, BlendProjectSettings};
+use crate::blender::project::{inspect_project_with_timeout, normalize_versions, BlendProjectSettings};
 use crate::state::AppState;
 use chrono::Local;
 use std::collections::BTreeSet;
@@ -74,6 +74,13 @@ fn display_path(path: &std::path::Path) -> String {
     {
         rendered
     }
+}
+
+fn blend_inspect_timeout_seconds(state: &AppState) -> u64 {
+    state
+        .cached_settings()
+        .map(|settings| settings.blend_inspect_timeout_seconds.max(1))
+        .unwrap_or(30)
 }
 
 #[tauri::command]
@@ -556,6 +563,7 @@ pub fn validate_blend_file(path: String) -> Result<bool, String> {
 pub async fn inspect_blend_file(
     blender_executable: String,
     path: String,
+    state: State<'_, AppState>,
 ) -> Result<BlendProjectSettings, String> {
     let blender_path = PathBuf::from(&blender_executable);
     if !blender_path.exists() {
@@ -570,7 +578,13 @@ pub async fn inspect_blend_file(
     }
     validate_blend_file(path.clone())?;
 
-    inspect_project(&blender_path, &blend_path).await.map_err(|error| error.to_string())
+    inspect_project_with_timeout(
+        &blender_path,
+        &blend_path,
+        blend_inspect_timeout_seconds(&state),
+    )
+    .await
+    .map_err(|error| error.to_string())
 }
 
 fn collect_sequence_frames(
@@ -764,7 +778,11 @@ pub async fn encode_sequence_to_mp4(
     }
 
     let fps = if PathBuf::from(&blend_file).exists() {
-        inspect_project(&blender_path, &PathBuf::from(&blend_file))
+        inspect_project_with_timeout(
+            &blender_path,
+            &PathBuf::from(&blend_file),
+            blend_inspect_timeout_seconds(&state),
+        )
             .await
             .map(|settings| if settings.fps > 0.0 { settings.fps } else { 24.0 })
             .unwrap_or(24.0)

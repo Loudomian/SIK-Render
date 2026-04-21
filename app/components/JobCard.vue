@@ -18,7 +18,7 @@
                 :color="statusColor"
                 variant="subtle"
               />
-              <UBadge :label="`优先级 ${job.priority}`" color="neutral" variant="subtle" />
+              <UBadge v-if="orderBadgeLabel" :label="orderBadgeLabel" color="neutral" variant="subtle" />
             </div>
             <span class="job-name"><span class="job-number">#{{ job.jobNumber }}</span> {{ job.name }}</span>
           </div>
@@ -35,37 +35,60 @@
               <span class="job-meta-label">渲染时间</span>
               <strong>{{ renderTime }}</strong>
             </span>
+            <span class="job-meta-divider" aria-hidden="true" />
+            <span class="job-meta-item">
+              <span class="job-meta-label">{{ finishedAtLabel }}</span>
+              <strong>{{ completedAt }}</strong>
+            </span>
           </div>
 
           <div class="job-actions" @dblclick.stop>
-            <UButton v-if="job.status === 'running' || job.status === 'pending'" icon="i-lucide-x" label="取消" color="warning" variant="outline" size="sm" @click="$emit('cancel')" />
-            <UButton
-              v-if="job.status === 'failed' || job.status === 'cancelled' || job.status === 'interrupted'"
-              icon="i-lucide-rotate-ccw"
-              :label="job.status === 'cancelled' || job.status === 'interrupted' ? '继续' : '重试'"
-              :color="job.status === 'cancelled' || job.status === 'interrupted' ? 'warning' : 'neutral'"
-              variant="outline"
-              size="sm"
-              @click="$emit('retry')"
-            />
-            <UButton
+            <UTooltip v-if="job.status === 'running' || job.status === 'pending'" text="停止当前任务或将其标记为取消" arrow :content="{ side: 'bottom', sideOffset: 8 }">
+              <UButton icon="i-lucide-x" label="取消" color="warning" variant="outline" size="sm" @click="$emit('cancel')" />
+            </UTooltip>
+            <UTooltip
               v-if="job.status === 'done' || job.status === 'failed' || job.status === 'cancelled' || job.status === 'interrupted'"
-              icon="i-lucide-trash-2"
-              label="删除"
-              color="error"
-              variant="outline"
-              size="sm"
-              @click="$emit('remove')"
-            />
-            <UButton
-              icon="i-lucide-folder-open"
-              label="输出目录"
-              color="neutral"
-              variant="outline"
-              size="sm"
-              @click="openOutput"
-            />
-            <UButton :to="`/jobs/${job.id}`" icon="i-lucide-external-link" label="详情" color="neutral" variant="outline" size="sm" />
+              :text="job.status === 'cancelled' || job.status === 'interrupted' ? '继续当前任务' : '重新提交这个任务'"
+              arrow
+              :content="{ side: 'bottom', sideOffset: 8 }"
+            >
+              <UButton
+                icon="i-lucide-rotate-ccw"
+                :label="job.status === 'cancelled' || job.status === 'interrupted' ? '继续' : '重试'"
+                :color="job.status === 'cancelled' || job.status === 'interrupted' ? 'warning' : 'neutral'"
+                variant="outline"
+                size="sm"
+                @click="$emit('retry')"
+              />
+            </UTooltip>
+            <UTooltip
+              v-if="job.status === 'done' || job.status === 'failed' || job.status === 'cancelled' || job.status === 'interrupted'"
+              text="从队列中删除这个任务"
+              arrow
+              :content="{ side: 'bottom', sideOffset: 8 }"
+            >
+              <UButton
+                icon="i-lucide-trash-2"
+                label="删除"
+                color="error"
+                variant="outline"
+                size="sm"
+                @click="$emit('remove')"
+              />
+            </UTooltip>
+            <UTooltip text="打开序列帧输出目录" arrow :content="{ side: 'bottom', sideOffset: 8 }">
+              <UButton
+                icon="i-lucide-folder-open"
+                label="输出目录"
+                color="neutral"
+                variant="outline"
+                size="sm"
+                @click="openOutput"
+              />
+            </UTooltip>
+            <UTooltip text="查看任务详情" arrow :content="{ side: 'bottom', sideOffset: 8 }">
+              <UButton :to="`/jobs/${job.id}`" icon="i-lucide-external-link" label="详情" color="neutral" variant="outline" size="sm" />
+            </UTooltip>
           </div>
         </div>
       </div>
@@ -157,11 +180,40 @@ const STATUS_COLOR: Record<string, 'neutral' | 'info' | 'success' | 'error' | 'w
 }
 
 const statusColor = computed(() => STATUS_COLOR[props.job.status] ?? 'neutral')
+const queueOrder = computed(() => {
+  if (props.job.status === 'running' || props.job.status === 'done') return null
+  const queue = jobsStore.jobs.filter(job => job.status !== 'running' && job.status !== 'done')
+  const index = queue.findIndex(job => job.id === props.job.id)
+  return index === -1 ? null : index + 1
+})
+const orderBadgeLabel = computed(() => queueOrder.value != null ? `顺序 ${queueOrder.value}` : null)
 
 const renderTime = computed(() => {
   const job = props.job
   if (!job.startedAt) return '未开始'
   return formatDuration((job.finishedAt ?? Date.now()) - job.startedAt)
+})
+const finishedAtLabel = computed(() => {
+  switch (props.job.status) {
+    case 'done':
+      return '完成时间'
+    case 'cancelled':
+      return '取消时间'
+    case 'interrupted':
+      return '中断时间'
+    case 'failed':
+      return '失败时间'
+    case 'running':
+      return '当前状态'
+    default:
+      return '结束时间'
+  }
+})
+const completedAt = computed(() => {
+  if (!props.job.finishedAt) {
+    return props.job.status === 'running' ? '进行中' : '未完成'
+  }
+  return formatDateTime(props.job.finishedAt)
 })
 const previewText = computed(() => {
   if (props.job.outputFormat === 'OPEN_EXR') return 'EXR 不支持预览'
@@ -204,6 +256,16 @@ function formatDuration(ms: number) {
   const m = Math.floor(s / 60)
   if (m < 60) return `${m}m ${s % 60}s`
   return `${Math.floor(m / 60)}h ${m % 60}m`
+}
+
+function formatDateTime(timestamp: number) {
+  return new Intl.DateTimeFormat('zh-CN', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  }).format(new Date(timestamp))
 }
 
 function openDetails() {

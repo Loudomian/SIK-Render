@@ -2,7 +2,6 @@
   <div v-if="job" class="detail-page">
     <section class="page-hero detail-hero">
       <div class="page-hero-copy detail-title">
-        <UButton to="/" icon="i-lucide-arrow-left" label="返回" color="neutral" variant="outline" size="sm" class="detail-back-btn" />
         <div class="detail-title-row">
           <div class="detail-heading-stack">
             <div class="detail-heading-line">
@@ -11,9 +10,30 @@
                 :color="statusBadgeColor"
                 variant="subtle"
               />
-              <UBadge :label="`优先级 ${job.priority}`" color="neutral" variant="subtle" />
+              <UBadge v-if="orderBadgeLabel" :label="orderBadgeLabel" color="neutral" variant="subtle" />
             </div>
-            <h1><span class="job-number">#{{ job.jobNumber }}</span> {{ job.name }}</h1>
+            <UBreadcrumb
+              as="h1"
+              :items="detailBreadcrumbItems"
+              :ui="{
+                root: 'detail-breadcrumb',
+                list: 'detail-breadcrumb-list',
+                item: 'detail-breadcrumb-item',
+                link: 'detail-breadcrumb-link',
+                linkLabel: 'detail-breadcrumb-label',
+                separator: 'detail-breadcrumb-separator-wrap',
+                separatorIcon: 'detail-breadcrumb-separator',
+              }"
+            >
+              <template #separator>
+                <span class="detail-breadcrumb-separator" aria-hidden="true">&gt;</span>
+              </template>
+              <template #item-label="{ item, active }">
+                <span :class="active ? 'detail-breadcrumb-current' : 'detail-breadcrumb-ancestor'">
+                  {{ item.label }}
+                </span>
+              </template>
+            </UBreadcrumb>
           </div>
         </div>
       </div>
@@ -25,7 +45,6 @@
           :loading="cancelingMp4"
           color="warning"
           variant="outline"
-          size="sm"
           @click="handleCancelExportMp4"
         />
         <UButton
@@ -35,7 +54,6 @@
           :disabled="job.status === 'running'"
           color="neutral"
           variant="outline"
-          size="sm"
           @click="openMp4Dialog"
         />
         <UButton
@@ -44,7 +62,6 @@
           label="打开视频"
           color="neutral"
           variant="outline"
-          size="sm"
           @click="openPath(exportedMp4Path)"
         />
         <UButton
@@ -53,7 +70,6 @@
           :label="job.status === 'cancelled' || job.status === 'interrupted' ? '继续' : '重试'"
           :color="job.status === 'cancelled' || job.status === 'interrupted' ? 'warning' : 'neutral'"
           variant="outline"
-          size="sm"
           @click="handleRetry"
         />
         <UButton
@@ -62,7 +78,6 @@
           label="取消"
           color="warning"
           variant="outline"
-          size="sm"
           @click="jobsStore.stopJob(job.id)"
         />
         <UButton
@@ -71,7 +86,6 @@
           label="删除"
           color="error"
           variant="outline"
-          size="sm"
           @click="showDeleteConfirm = true"
         />
       </div>
@@ -562,7 +576,21 @@ const STATUS_COLOR: Record<string, 'neutral' | 'info' | 'success' | 'error' | 'w
 const jobId = computed(() => route.params.id as string)
 const job = computed(() => jobsStore.jobs.find((j) => j.id === jobId.value))
 const jobLogs = computed(() => jobsStore.getJobLogs(jobId.value))
+const detailBreadcrumbItems = computed(() => {
+  const currentJob = job.value
+  if (!currentJob) return []
+  return [
+    { label: '渲染队列', to: '/' },
+    { label: `#${currentJob.jobNumber} ${currentJob.name}` },
+  ]
+})
 const statusBadgeColor = computed(() => STATUS_COLOR[job.value?.status ?? 'pending'] ?? 'neutral')
+const orderBadgeLabel = computed(() => {
+  if (!job.value || job.value.status === 'running') return null
+  const queue = jobsStore.jobs.filter(item => item.status !== 'running')
+  const index = queue.findIndex(item => item.id === job.value?.id)
+  return index === -1 ? null : `顺序 ${index + 1}`
+})
 const blenderVersion = computed(() => {
   const exe = job.value?.blenderExecutable
   if (!exe) return '—'

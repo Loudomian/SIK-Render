@@ -4,7 +4,7 @@
       <div class="page-hero-copy">
         <UBadge label="Settings" color="neutral" variant="subtle" class="page-eyebrow" />
         <h1>设置</h1>
-        <p class="page-note">集中管理 Blender 可执行文件、默认输出目录和界面偏好。</p>
+        <p class="page-note">集中管理 Blender、FFmpeg 与界面偏好。</p>
       </div>
     </section>
 
@@ -79,27 +79,27 @@
       <UCard variant="subtle" class="settings-card" :ui="{ body: 'settings-card-body' }">
         <div class="settings-card-header">
           <div>
-            <h2 class="settings-card-title">渲染默认值</h2>
+            <h2 class="settings-card-title">工具行为</h2>
           </div>
         </div>
 
         <div class="settings-form-stack">
           <section class="surface-panel settings-field-panel">
             <div class="settings-field-copy">
-              <p class="settings-field-title">默认输出目录</p>
+              <p class="settings-field-title">读取工程超时</p>
+              <p class="hint-text">用于读取 `.blend` 工程参数和 FPS，默认 30 秒。</p>
             </div>
             <UFormField>
-              <UInput v-model="settingsStore.settings.defaultOutputDir" placeholder="F:\renders\default" />
-            </UFormField>
-          </section>
-
-          <section class="surface-panel settings-field-panel">
-            <div class="settings-field-copy">
-              <p class="settings-field-title">最大并发任务数</p>
-              <p class="hint-text">保留字段，当前版本仍按单任务顺序调度。</p>
-            </div>
-            <UFormField>
-              <UInputNumber v-model="settingsStore.settings.maxConcurrentJobs" :min="1" :max="8" />
+              <UInputNumber
+                v-model="settingsStore.settings.blendInspectTimeoutSeconds"
+                :min="5"
+                :max="600"
+                :step="5"
+                orientation="horizontal"
+                decrement-icon="i-lucide-minus"
+                increment-icon="i-lucide-plus"
+                :ui="{ root: 'w-32' }"
+              />
             </UFormField>
           </section>
         </div>
@@ -118,12 +118,7 @@
               <p class="settings-field-title">界面主题</p>
             </div>
             <UFormField>
-              <USelect
-                v-model="settingsStore.settings.theme"
-                :items="themeOptions"
-                value-key="value"
-                label-key="label"
-              />
+              <ColorModeSelect v-model="settingsStore.settings.theme" />
             </UFormField>
           </section>
 
@@ -144,10 +139,6 @@ const settingsStore = useSettingsStore()
 const browseError = ref('')
 const ffmpegError = ref('')
 const settingsReady = ref(false)
-const themeOptions = [
-  { label: '深色', value: 'dark' },
-  { label: '浅色', value: 'light' },
-]
 let autoSaveTimer: ReturnType<typeof setTimeout> | null = null
 
 async function browse() {
@@ -171,8 +162,7 @@ async function browseFfmpeg() {
 watch(
   () => [
     settingsStore.settings.defaultBlender,
-    settingsStore.settings.defaultOutputDir,
-    settingsStore.settings.maxConcurrentJobs,
+    settingsStore.settings.blendInspectTimeoutSeconds,
     settingsStore.settings.theme,
   ] as const,
   () => {

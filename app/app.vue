@@ -82,6 +82,7 @@ if (import.meta.client) {
 onMounted(async () => {
   await Promise.all([
     jobsStore.fetchJobs(),
+    jobsStore.fetchQueueState(),
     settingsStore.load(),
   ])
   unlisteners.push(await onProgress(jobsStore.applyProgress))

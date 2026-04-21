@@ -1,11 +1,20 @@
 import { invoke } from '@tauri-apps/api/core'
-import type { AddJobPayload, AppSettings, BlenderInstall, BlendProjectSettings, JobLogSummary, Mp4ExportInspection, Mp4ExportResult, RenderJob, RenderedFramesStatus, ToolchainStatus } from '~/types'
+import type { AddJobPayload, AppSettings, BlenderInstall, BlendProjectSettings, JobLogSummary, Mp4ExportInspection, Mp4ExportResult, QueueState, RenderJob, RenderedFramesStatus, ToolchainStatus } from '~/types'
 
 // Typed wrappers around Tauri IPC commands
 
 const tauriApi = {
   listJobs: () =>
     invoke<RenderJob[]>('list_jobs'),
+
+  getQueueState: () =>
+    invoke<QueueState>('get_queue_state'),
+
+  startQueue: () =>
+    invoke<QueueState>('start_queue'),
+
+  pauseQueue: () =>
+    invoke<QueueState>('pause_queue'),
 
   addJob: (payload: AddJobPayload) =>
     invoke<RenderJob>('add_job', { payload }),
@@ -22,8 +31,8 @@ const tauriApi = {
   cancelJob: (id: string) =>
     invoke<void>('cancel_job', { id }),
 
-  reorderJob: (id: string, priority: number) =>
-    invoke<void>('reorder_job', { id, priority }),
+  reorderJob: (orderedIds: string[]) =>
+    invoke<RenderJob[]>('reorder_job', { orderedIds }),
 
   getBlenderVersions: () =>
     invoke<BlenderInstall[]>('get_blender_versions'),

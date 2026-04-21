@@ -8,8 +8,7 @@ pub struct AppSettings {
     pub default_blender: String,
     #[serde(default)]
     pub ffmpeg_executable: String,
-    pub default_output_dir: String,
-    pub max_concurrent_jobs: u32,
+    pub blend_inspect_timeout_seconds: u64,
     pub theme: String,
     #[serde(default)]
     pub extra_blender_paths: Vec<String>,
@@ -22,8 +21,7 @@ impl Default for AppSettings {
         Self {
             default_blender: String::new(),
             ffmpeg_executable: String::new(),
-            default_output_dir: String::new(),
-            max_concurrent_jobs: 1,
+            blend_inspect_timeout_seconds: default_blend_inspect_timeout_seconds(),
             theme: "dark".into(),
             extra_blender_paths: Vec::new(),
             excluded_blender_paths: Vec::new(),
@@ -36,10 +34,6 @@ struct SettingsFile {
     #[serde(default)]
     tools: ToolsSettings,
     #[serde(default)]
-    paths: PathSettings,
-    #[serde(default)]
-    queue: QueueSettings,
-    #[serde(default)]
     ui: UiSettings,
     #[serde(default)]
     blender: BlenderSettings,
@@ -51,26 +45,8 @@ struct ToolsSettings {
     default_blender: String,
     #[serde(default)]
     ffmpeg_executable: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-struct PathSettings {
-    #[serde(default)]
-    default_output_dir: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct QueueSettings {
-    #[serde(default = "default_max_concurrent_jobs")]
-    max_concurrent_jobs: u32,
-}
-
-impl Default for QueueSettings {
-    fn default() -> Self {
-        Self {
-            max_concurrent_jobs: default_max_concurrent_jobs(),
-        }
-    }
+    #[serde(default = "default_blend_inspect_timeout_seconds")]
+    blend_inspect_timeout_seconds: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -102,8 +78,8 @@ enum SettingsFileCompat {
     Flat(AppSettings),
 }
 
-fn default_max_concurrent_jobs() -> u32 {
-    1
+fn default_blend_inspect_timeout_seconds() -> u64 {
+    30
 }
 
 fn default_theme() -> String {
@@ -117,13 +93,18 @@ fn normalize_theme(theme: String) -> String {
     }
 }
 
+fn normalize_blend_inspect_timeout_seconds(seconds: u64) -> u64 {
+    seconds.clamp(5, 600)
+}
+
 impl From<SettingsFile> for AppSettings {
     fn from(value: SettingsFile) -> Self {
         Self {
             default_blender: value.tools.default_blender,
             ffmpeg_executable: value.tools.ffmpeg_executable,
-            default_output_dir: value.paths.default_output_dir,
-            max_concurrent_jobs: value.queue.max_concurrent_jobs,
+            blend_inspect_timeout_seconds: normalize_blend_inspect_timeout_seconds(
+                value.tools.blend_inspect_timeout_seconds,
+            ),
             theme: normalize_theme(value.ui.theme),
             extra_blender_paths: value.blender.extra_blender_paths,
             excluded_blender_paths: value.blender.excluded_blender_paths,
@@ -137,12 +118,9 @@ impl From<AppSettings> for SettingsFile {
             tools: ToolsSettings {
                 default_blender: value.default_blender,
                 ffmpeg_executable: value.ffmpeg_executable,
-            },
-            paths: PathSettings {
-                default_output_dir: value.default_output_dir,
-            },
-            queue: QueueSettings {
-                max_concurrent_jobs: value.max_concurrent_jobs,
+                blend_inspect_timeout_seconds: normalize_blend_inspect_timeout_seconds(
+                    value.blend_inspect_timeout_seconds,
+                ),
             },
             ui: UiSettings { theme: value.theme },
             blender: BlenderSettings {
@@ -258,6 +236,8 @@ pub fn save_settings(app: AppHandle, settings: AppSettings) -> Result<(), String
     let path = settings_path(&app)?;
     let mut settings = settings;
     settings.theme = normalize_theme(settings.theme);
+    settings.blend_inspect_timeout_seconds =
+        normalize_blend_inspect_timeout_seconds(settings.blend_inspect_timeout_seconds);
     let content = toml::to_string_pretty(&SettingsFile::from(settings.clone()))
         .map_err(|error| error.to_string())?;
     let tmp_path = path.with_extension("toml.tmp");

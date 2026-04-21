@@ -18,9 +18,10 @@ pub struct BlendProjectSettings {
     pub fps: f32,
 }
 
-pub async fn inspect_project(
+pub async fn inspect_project_with_timeout(
     blender_executable: &Path,
     blend_file: &Path,
+    timeout_seconds: u64,
 ) -> Result<BlendProjectSettings> {
     let script = r#"
 import bpy, json
@@ -39,7 +40,7 @@ print("__SIK_PROJECT_SETTINGS__" + json.dumps(payload))
 "#.trim();
 
     let output = tokio::time::timeout(
-        std::time::Duration::from_secs(30),
+        std::time::Duration::from_secs(timeout_seconds.max(1)),
         crate::blender::command::inspect_project_command(
             blender_executable,
             blend_file,
@@ -48,7 +49,7 @@ print("__SIK_PROJECT_SETTINGS__" + json.dumps(payload))
         .output()
     )
     .await
-    .map_err(|_| anyhow!("Blender inspect timed out after 30s"))?
+    .map_err(|_| anyhow!("Blender inspect timed out after {}s", timeout_seconds.max(1)))?
     .with_context(|| {
             format!(
                 "failed to launch Blender at {}",

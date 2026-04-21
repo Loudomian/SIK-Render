@@ -47,12 +47,6 @@ async fn scheduler_loop(app: AppHandle, state: AppState) {
     }
 }
 
-async fn max_concurrent_jobs(app: &AppHandle) -> u32 {
-    crate::commands::settings::get_settings(app.clone())
-        .map(|settings| settings.max_concurrent_jobs.max(1))
-        .unwrap_or(1)
-}
-
 async fn running_job_count(state: &AppState) -> anyhow::Result<u32> {
     let count = sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM jobs WHERE status = 'running'")
         .fetch_one(&state.pool)
@@ -61,23 +55,22 @@ async fn running_job_count(state: &AppState) -> anyhow::Result<u32> {
 }
 
 async fn schedule_jobs(app: &AppHandle, state: &AppState) -> anyhow::Result<bool> {
-    let max_jobs = max_concurrent_jobs(app).await;
-    let running_jobs = running_job_count(state).await?;
-    if running_jobs >= max_jobs {
+    if state.is_queue_paused() {
         return Ok(false);
     }
 
-    let mut started_any = false;
-    let available_slots = max_jobs - running_jobs;
-    for _ in 0..available_slots {
-        let Some(job) = try_start_next_job(app, state).await? else {
-            break;
-        };
-        started_any = true;
-        spawn_job_runner(app.clone(), state.clone(), job);
+    let running_jobs = running_job_count(state).await?;
+    if running_jobs >= 1 {
+        return Ok(false);
     }
 
-    Ok(started_any)
+    let Some(job) = try_start_next_job(app, state).await? else {
+        return Ok(false);
+    };
+
+    spawn_job_runner(app.clone(), state.clone(), job);
+
+    Ok(true)
 }
 
 async fn try_start_next_job(app: &AppHandle, state: &AppState) -> anyhow::Result<Option<RenderJob>> {
