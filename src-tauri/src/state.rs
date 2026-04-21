@@ -1,6 +1,8 @@
+use crate::commands::settings::AppSettings;
 use chrono::Utc;
 use sqlx::SqlitePool;
 use std::collections::{HashMap, HashSet};
+use std::sync::RwLock;
 use std::sync::Arc;
 use tokio::sync::{Mutex, Notify};
 
@@ -13,10 +15,11 @@ pub struct AppState {
     pub cancelled_jobs: Arc<Mutex<HashSet<String>>>,
     pub interrupted_jobs: Arc<Mutex<HashSet<String>>>,
     pub cancelled_mp4_exports: Arc<Mutex<HashSet<String>>>,
+    pub settings: Arc<RwLock<Option<AppSettings>>>,
 }
 
 impl AppState {
-    pub fn new(pool: SqlitePool) -> Self {
+    pub fn new(pool: SqlitePool, settings: Option<AppSettings>) -> Self {
         Self {
             pool,
             scheduler_notify: Arc::new(Notify::new()),
@@ -25,15 +28,28 @@ impl AppState {
             cancelled_jobs: Arc::new(Mutex::new(HashSet::new())),
             interrupted_jobs: Arc::new(Mutex::new(HashSet::new())),
             cancelled_mp4_exports: Arc::new(Mutex::new(HashSet::new())),
+            settings: Arc::new(RwLock::new(settings)),
+        }
+    }
+
+    pub fn cached_settings(&self) -> Option<AppSettings> {
+        self.settings.read().ok().and_then(|settings| settings.clone())
+    }
+
+    pub fn set_cached_settings(&self, settings: AppSettings) {
+        if let Ok(mut cached) = self.settings.write() {
+            *cached = Some(settings);
         }
     }
 
     pub fn kill_process_tree(pid: u32) -> std::io::Result<()> {
         #[cfg(target_os = "windows")]
         {
-            std::process::Command::new("taskkill")
-                .args(["/PID", &pid.to_string(), "/T", "/F"])
-                .status()?;
+            let mut command = std::process::Command::new("taskkill");
+            command.args(["/PID", &pid.to_string(), "/T", "/F"]);
+            use std::os::windows::process::CommandExt;
+            command.creation_flags(0x08000000); // CREATE_NO_WINDOW
+            command.status()?;
             return Ok(());
         }
 
@@ -62,14 +78,15 @@ impl AppState {
         };
         for (job_id, pid) in active_jobs {
             self.interrupted_jobs.lock().await.insert(job_id.clone());
-            if let Ok(Some(job_number)) =
-                sqlx::query_scalar::<_, i32>("SELECT job_number FROM jobs WHERE id = ?")
+            if let Ok(Some((job_number, resolved_job_id))) =
+                sqlx::query_as::<_, (i32, String)>("SELECT job_number, id FROM jobs WHERE id = ?")
                     .bind(&job_id)
                     .fetch_optional(&self.pool)
                     .await
             {
                 let _ = crate::app_paths::append_job_log_event(
                     job_number,
+                    &resolved_job_id,
                     crate::app_paths::BLENDER_LOG_KIND,
                     interrupted_line,
                 );

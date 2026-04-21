@@ -2,10 +2,11 @@ use crate::blender::parser;
 use crate::queue::job::{JobStatus, RenderJob};
 use crate::state::AppState;
 use anyhow::Result;
+use std::collections::BTreeSet;
 use std::collections::VecDeque;
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use tauri::{AppHandle, Emitter};
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Child;
@@ -31,19 +32,6 @@ pub struct RenderLogEvent {
 
 /// Max automatic crash-recovery retries before giving up.
 const MAX_CRASH_RETRIES: u32 = 3;
-
-fn trailing_frame_number(path: &std::path::Path) -> Option<i32> {
-    let stem = path.file_stem()?.to_str()?;
-    let digits_rev: String = stem
-        .chars()
-        .rev()
-        .take_while(|ch| ch.is_ascii_digit())
-        .collect();
-    if digits_rev.is_empty() {
-        return None;
-    }
-    digits_rev.chars().rev().collect::<String>().parse().ok()
-}
 
 pub fn format_to_ext(format: &str) -> &'static str {
     match format {
@@ -73,6 +61,64 @@ pub fn frame_filename(output_path: &std::path::Path, frame: i32, format: &str) -
     Some(dir.join(format!("{}{}{}.{}", prefix, frame_str, suffix, ext)))
 }
 
+fn scan_rendered_frame_numbers(
+    output_path: &std::path::Path,
+    frame_start: i32,
+    frame_end: i32,
+    format: &str,
+) -> BTreeSet<i32> {
+    let dir = output_path
+        .parent()
+        .filter(|path| !path.as_os_str().is_empty())
+        .unwrap_or(output_path);
+    let expected_ext = format_to_ext(format).to_ascii_lowercase();
+    let template = output_path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or_default();
+    let prefix_hint = template
+        .find('#')
+        .map(|idx| template[..idx].to_string())
+        .unwrap_or_default();
+    let suffix_hint = template
+        .find('#')
+        .map(|idx| {
+            let hash_count = template[idx..]
+                .chars()
+                .take_while(|&ch| ch == '#')
+                .count();
+            let suffix_raw = &template[idx + hash_count..];
+            if let Some(dot) = suffix_raw.rfind('.') {
+                suffix_raw[..dot].to_string()
+            } else {
+                suffix_raw.to_string()
+            }
+        })
+        .unwrap_or_default();
+
+    std::fs::read_dir(dir)
+        .map(|entries| {
+            entries
+                .filter_map(|entry| entry.ok())
+                .map(|entry| entry.path())
+                .filter(|path| path.is_file())
+                .filter(|path| {
+                    path.extension()
+                        .map(|ext| ext.to_string_lossy().to_ascii_lowercase() == expected_ext)
+                        .unwrap_or(false)
+                })
+                .filter(|path| {
+                    let stem = path.file_stem().and_then(|name| name.to_str()).unwrap_or_default();
+                    (prefix_hint.is_empty() || stem.starts_with(&prefix_hint))
+                        && (suffix_hint.is_empty() || stem.ends_with(&suffix_hint))
+                })
+                .filter_map(|path| crate::blender::frame_path::trailing_frame_number(&path))
+                .filter(|frame| (frame_start..=frame_end).contains(frame))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
 pub fn count_job_image_files_sync(
     output_path: &std::path::Path,
     frame_start: i32,
@@ -85,13 +131,7 @@ pub fn count_job_image_files_sync(
         .map(|name| name.contains('#'))
         .unwrap_or(false)
     {
-        return (frame_start..=frame_end)
-            .filter(|frame| {
-                frame_filename(output_path, *frame, format)
-                    .map(|path| path.exists())
-                    .unwrap_or(false)
-            })
-            .count() as u32;
+        return scan_rendered_frame_numbers(output_path, frame_start, frame_end, format).len() as u32;
     }
 
     let dir = output_path
@@ -139,7 +179,7 @@ pub fn count_job_image_files_sync(
                     (prefix_hint.is_empty() || stem.starts_with(&prefix_hint))
                         && (suffix_hint.is_empty() || stem.ends_with(&suffix_hint))
                 })
-                .filter_map(|path| trailing_frame_number(&path))
+                .filter_map(|path| crate::blender::frame_path::trailing_frame_number(&path))
                 .filter(|frame| (frame_start..=frame_end).contains(frame))
                 .count() as u32
         })
@@ -149,6 +189,21 @@ pub fn count_job_image_files_sync(
 /// Return the first frame in [frame_start, frame_end] whose output file does not exist.
 /// Returns `frame_end + 1` when all frames are present.
 pub fn find_resume_frame(output_path: &std::path::Path, frame_start: i32, frame_end: i32, format: &str) -> i32 {
+    if output_path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .map(|name| name.contains('#'))
+        .unwrap_or(false)
+    {
+        let existing_frames = scan_rendered_frame_numbers(output_path, frame_start, frame_end, format);
+        for frame in frame_start..=frame_end {
+            if !existing_frames.contains(&frame) {
+                return frame;
+            }
+        }
+        return frame_end + 1;
+    }
+
     for frame in frame_start..=frame_end {
         match frame_filename(output_path, frame, format) {
             Some(path) if path.exists() => {}
@@ -156,6 +211,13 @@ pub fn find_resume_frame(output_path: &std::path::Path, frame_start: i32, frame_
         }
     }
     frame_end + 1
+}
+
+fn mark_progress_timestamp(progress_started_at: &std::time::Instant, last_progress_ms: &AtomicU64) {
+    last_progress_ms.store(
+        progress_started_at.elapsed().as_millis().min(u128::from(u64::MAX)) as u64,
+        Ordering::Relaxed,
+    );
 }
 
 async fn persist_job_progress(
@@ -221,6 +283,7 @@ pub async fn run_job(app: AppHandle, state: AppState, job: RenderJob) -> Result<
 
     let log_file_path = crate::app_paths::create_job_log_file(
         job.job_number,
+        &job.id,
         crate::app_paths::BLENDER_LOG_KIND,
     )?;
     let log_write_lock = Arc::new(Mutex::new(()));
@@ -302,10 +365,20 @@ pub async fn run_job(app: AppHandle, state: AppState, job: RenderJob) -> Result<
             }
         }
 
+        let cancelled_early = state.cancelled_jobs.lock().await.contains(&job.id);
+        let interrupted_early = state.interrupted_jobs.lock().await.contains(&job.id);
+        if cancelled_early || interrupted_early {
+            if let Some(pid) = child.id() {
+                let _ = AppState::kill_process_tree(pid);
+            }
+        }
+
         let stdout = child.stdout.take().expect("stdout not captured");
         let stderr = child.stderr.take().expect("stderr not captured");
 
         let render_running = Arc::new(AtomicBool::new(true));
+        let progress_started_at = Arc::new(std::time::Instant::now());
+        let last_primary_progress_ms = Arc::new(AtomicU64::new(0));
         // Per-run stderr buffer for error messages on failure.
         let stderr_buf: Arc<Mutex<VecDeque<String>>> =
             Arc::new(Mutex::new(VecDeque::with_capacity(200)));
@@ -319,19 +392,24 @@ pub async fn run_job(app: AppHandle, state: AppState, job: RenderJob) -> Result<
         let poll_app = app.clone();
         let poll_job_id = job.id.clone();
         let poll_dir = output_dir.clone();
+        let poll_last_primary_progress_ms = last_primary_progress_ms.clone();
+        let poll_progress_started_at = progress_started_at.clone();
         let poll_task = tokio::task::spawn_blocking(move || {
             let Some(_dir) = poll_dir else { return };
-            let start = std::time::Instant::now();
-            let mut last_count = 0u32;
+            let mut last_count = already_done;
             loop {
                 std::thread::sleep(std::time::Duration::from_millis(500));
                 if !poll_running.load(Ordering::Relaxed) { break; }
                 let raw = count_job_image_files_sync(&poll_output_path, job_frame_start, job_frame_end, &poll_output_format);
                 let new_in_run = raw.saturating_sub(file_baseline);
                 let count = already_done + new_in_run;
-                if count > last_count {
+                let silent_ms = poll_progress_started_at
+                    .elapsed()
+                    .as_millis()
+                    .saturating_sub(u128::from(poll_last_primary_progress_ms.load(Ordering::Relaxed)));
+                if count > last_count && silent_ms >= 1500 {
                     last_count = count;
-                    let elapsed = start.elapsed().as_secs_f32();
+                    let elapsed = poll_progress_started_at.elapsed().as_secs_f32();
                     let secs_per_frame = if new_in_run > 0 { elapsed / new_in_run as f32 } else { 0.0 };
                     let remaining = if count < total_frames && secs_per_frame > 0.0 {
                         Some(secs_per_frame * (total_frames - count) as f32)
@@ -349,7 +427,6 @@ pub async fn run_job(app: AppHandle, state: AppState, job: RenderJob) -> Result<
                             remaining_secs: remaining,
                         },
                     );
-                    log::info!("[poll] progress {}/{}", count, total_frames);
                 }
             }
         });
@@ -384,21 +461,10 @@ pub async fn run_job(app: AppHandle, state: AppState, job: RenderJob) -> Result<
                         None,
                         total_frames,
                         Some(abs_frame),
-                        None,
+                        Some(p.time_elapsed),
                         p.remaining_secs,
                     )
                     .await;
-                    let _ = app_stderr.emit(
-                        "render-progress",
-                        RenderProgressEvent {
-                            job_id: job_id_stderr.clone(),
-                            frame: rel,
-                            total_frames,
-                            time_elapsed: 0.0,
-                            memory_mb: 0.0,
-                            remaining_secs: p.remaining_secs,
-                        },
-                    );
                 }
                 let mut stderr_tail = stderr_buf_clone.lock().await;
                 if stderr_tail.len() >= 200 {
@@ -415,6 +481,7 @@ pub async fn run_job(app: AppHandle, state: AppState, job: RenderJob) -> Result<
         let log_file_path_stdout = log_file_path.clone();
         let mut saved_in_run = 0u32;
         let mut stdout_last_frame = actual_start.max(job_frame_start) as u32;
+        let mut latest_frame_time_secs: Option<f32> = None;
         let mut lines = BufReader::new(stdout).lines();
         while let Some(line) = lines.next_line().await? {
             let _ = app.emit(
@@ -433,18 +500,34 @@ pub async fn run_job(app: AppHandle, state: AppState, job: RenderJob) -> Result<
                 let completed = (already_done + saved_in_run).min(total_frames);
                 let abs_frame = (job_frame_start + completed as i32 - 1).clamp(job_frame_start, job_frame_end);
                 last_rendered_frame = Some(abs_frame);
+                let remaining = latest_frame_time_secs
+                    .filter(|_| completed < total_frames)
+                    .map(|secs| secs * (total_frames - completed) as f32);
                 persist_job_progress(
                     &state,
                     &job.id,
                     Some(completed),
                     total_frames,
                     Some(abs_frame),
-                    None,
-                    None,
+                    latest_frame_time_secs,
+                    remaining,
                 )
                 .await;
+                mark_progress_timestamp(progress_started_at.as_ref(), &last_primary_progress_ms);
+                let _ = app.emit(
+                    "render-progress",
+                    RenderProgressEvent {
+                        job_id: job.id.clone(),
+                        frame: completed,
+                        total_frames,
+                        time_elapsed: latest_frame_time_secs.unwrap_or(0.0),
+                        memory_mb: 0.0,
+                        remaining_secs: remaining,
+                    },
+                );
             }
             if let Some(p) = parser::parse_time_progress(&line) {
+                latest_frame_time_secs = Some(p.time_elapsed);
                 let new_this_run = stdout_last_frame
                     .saturating_sub(actual_start.max(1) as u32)
                     .saturating_add(1);
@@ -456,17 +539,18 @@ pub async fn run_job(app: AppHandle, state: AppState, job: RenderJob) -> Result<
                     None,
                     total_frames,
                     Some(abs_frame),
-                    None,
+                    Some(p.time_elapsed),
                     p.remaining_secs,
                 )
                 .await;
+                mark_progress_timestamp(progress_started_at.as_ref(), &last_primary_progress_ms);
                 let _ = app.emit(
                     "render-progress",
                     RenderProgressEvent {
                         job_id: job.id.clone(),
                         frame: rel,
                         total_frames,
-                        time_elapsed: 0.0,
+                        time_elapsed: p.time_elapsed,
                         memory_mb: 0.0,
                         remaining_secs: p.remaining_secs,
                     },

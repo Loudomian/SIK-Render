@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::fs;
-use tauri::AppHandle;
+use tauri::{AppHandle, Manager};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -164,14 +164,14 @@ fn legacy_settings_path(app: &AppHandle) -> Result<std::path::PathBuf, String> {
         .map_err(|error| error.to_string())
 }
 
-#[tauri::command]
-pub fn get_settings(app: AppHandle) -> Result<AppSettings, String> {
-    let path = settings_path(&app)?;
+fn read_settings_from_disk(app: &AppHandle) -> Result<AppSettings, String> {
+    let path = settings_path(app)?;
     if !path.exists() {
-        let legacy_path = legacy_settings_path(&app)?;
+        let legacy_path = legacy_settings_path(app)?;
         if legacy_path.exists() {
             let content = fs::read_to_string(&legacy_path).map_err(|error| error.to_string())?;
-            let settings: AppSettings = serde_json::from_str(&content).map_err(|error| error.to_string())?;
+            let settings: AppSettings =
+                serde_json::from_str(&content).map_err(|error| error.to_string())?;
             save_settings(app.clone(), settings.clone())?;
             let _ = fs::remove_file(&legacy_path);
             return Ok(settings);
@@ -183,20 +183,73 @@ pub fn get_settings(app: AppHandle) -> Result<AppSettings, String> {
     }
 
     let content = fs::read_to_string(&path).map_err(|error| error.to_string())?;
-    let settings = match toml::from_str::<SettingsFileCompat>(&content) {
-        Ok(SettingsFileCompat::Grouped(settings)) => settings.into(),
+    match toml::from_str::<SettingsFileCompat>(&content) {
+        Ok(SettingsFileCompat::Grouped(settings)) => Ok(settings.into()),
         Ok(SettingsFileCompat::Flat(settings)) => {
             save_settings(app.clone(), settings.clone())?;
-            settings
+            Ok(settings)
         }
         Err(error) => {
             log::error!("failed to parse settings file {}: {}", path.display(), error);
             let fallback = AppSettings::default();
             save_settings(app.clone(), fallback.clone())?;
-            fallback
+            Ok(fallback)
         }
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn replace_file_atomically(
+    source: &std::path::Path,
+    destination: &std::path::Path,
+) -> Result<(), String> {
+    use std::os::windows::ffi::OsStrExt;
+    use windows::core::PCWSTR;
+    use windows::Win32::Storage::FileSystem::{
+        MoveFileExW, MOVEFILE_REPLACE_EXISTING, MOVEFILE_WRITE_THROUGH,
     };
 
+    let source_wide = source
+        .as_os_str()
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect::<Vec<_>>();
+    let destination_wide = destination
+        .as_os_str()
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect::<Vec<_>>();
+
+    unsafe {
+        MoveFileExW(
+            PCWSTR(source_wide.as_ptr()),
+            PCWSTR(destination_wide.as_ptr()),
+            MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH,
+        )
+        .map_err(|error| error.to_string())
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn replace_file_atomically(
+    source: &std::path::Path,
+    destination: &std::path::Path,
+) -> Result<(), String> {
+    fs::rename(source, destination).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn get_settings(app: AppHandle) -> Result<AppSettings, String> {
+    if let Some(state) = app.try_state::<crate::state::AppState>() {
+        if let Some(settings) = state.cached_settings() {
+            return Ok(settings);
+        }
+    }
+
+    let settings = read_settings_from_disk(&app)?;
+    if let Some(state) = app.try_state::<crate::state::AppState>() {
+        state.set_cached_settings(settings.clone());
+    }
     Ok(settings)
 }
 
@@ -205,12 +258,13 @@ pub fn save_settings(app: AppHandle, settings: AppSettings) -> Result<(), String
     let path = settings_path(&app)?;
     let mut settings = settings;
     settings.theme = normalize_theme(settings.theme);
-    let content = toml::to_string_pretty(&SettingsFile::from(settings))
+    let content = toml::to_string_pretty(&SettingsFile::from(settings.clone()))
         .map_err(|error| error.to_string())?;
     let tmp_path = path.with_extension("toml.tmp");
     fs::write(&tmp_path, content).map_err(|error| error.to_string())?;
-    if path.exists() {
-        fs::remove_file(&path).map_err(|error| error.to_string())?;
+    replace_file_atomically(&tmp_path, &path)?;
+    if let Some(state) = app.try_state::<crate::state::AppState>() {
+        state.set_cached_settings(settings);
     }
-    fs::rename(&tmp_path, &path).map_err(|error| error.to_string())
+    Ok(())
 }

@@ -2,6 +2,7 @@
 export default defineNuxtConfig({
   ssr: false, // Tauri requires SPA mode
   srcDir: 'app/',
+  buildDir: '.nuxt-build',
   devtools: {
     enabled: false,
   },
@@ -13,7 +14,14 @@ export default defineNuxtConfig({
     port: 3000,
   },
 
-  modules: ['@pinia/nuxt', '@nuxt/ui'],
+  modules: ['@pinia/nuxt', '@nuxt/icon', '@nuxt/ui'],
+
+  icon: {
+    provider: 'none',
+    clientBundle: {
+      scan: true,
+    },
+  },
 
   ui: {
     fonts: false,
@@ -37,6 +45,7 @@ export default defineNuxtConfig({
           '**/src-tauri/target/**',
           '**/.output/**',
           '**/.nuxt/**',
+          '**/.nuxt-build/**',
         ],
       },
     },

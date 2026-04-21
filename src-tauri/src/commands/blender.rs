@@ -3,9 +3,8 @@ use crate::blender::project::{inspect_project, normalize_versions, BlendProjectS
 use crate::state::AppState;
 use chrono::Local;
 use std::collections::BTreeSet;
-use std::path::PathBuf;
-use tauri::Emitter;
-use tauri::State;
+use std::path::{Path, PathBuf};
+use tauri::{AppHandle, Emitter, State};
 use tokio::io::{AsyncBufReadExt, BufReader};
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -45,21 +44,71 @@ pub struct RenderedFramesStatus {
     pub next_frame: i32,
 }
 
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ToolchainStatus {
+    pub blender_installs: Vec<BlenderInstall>,
+    pub ffmpeg_found: bool,
+    pub ffmpeg_executable: Option<String>,
+    pub ffmpeg_source: Option<String>,
+}
+
+struct TempDirGuard(PathBuf);
+
+impl Drop for TempDirGuard {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
+}
+
+fn display_path(path: &std::path::Path) -> String {
+    let rendered = path.display().to_string();
+    #[cfg(target_os = "windows")]
+    {
+        rendered
+            .strip_prefix(r"\\?\")
+            .unwrap_or(&rendered)
+            .to_string()
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        rendered
+    }
+}
+
 #[tauri::command]
 pub fn open_path(path: String) {
     let p = PathBuf::from(&path);
     // If path doesn't exist (e.g. contains ###### pattern), open parent directory
-    let target = if p.exists() { p } else { PathBuf::from(path.replace("######", "").trim_end_matches(['\\', '/']).to_string()) };
-    let target = if target.exists() { target.clone() } else { target.parent().map(|d| d.to_path_buf()).unwrap_or(target) };
+    let target = if p.exists() {
+        p
+    } else {
+        let cleaned = crate::blender::frame_path::strip_frame_placeholders(&path);
+        PathBuf::from(cleaned.trim_end_matches(['\\', '/']).to_string())
+    };
+    let target = if target.exists() {
+        target.clone()
+    } else {
+        target
+            .parent()
+            .map(|d| d.to_path_buf())
+            .unwrap_or(target)
+    };
 
 #[cfg(target_os = "windows")]
     {
-        let arg = if target.is_file() {
-            format!("/select,\"{}\"", target.display())
+        let explorer = "explorer.exe";
+        let normalized = target
+            .canonicalize()
+            .unwrap_or_else(|_| target.clone());
+
+        let mut command = std::process::Command::new(explorer);
+        if normalized.is_file() {
+            command.arg(format!("/select,{}", normalized.display()));
         } else {
-            format!("\"{}\"", target.display())
-        };
-        let _ = std::process::Command::new("explorer").arg(arg).spawn();
+            command.arg(&normalized);
+        }
+        let _ = command.spawn();
     }
     #[cfg(target_os = "macos")]
     { let _ = std::process::Command::new("open").arg(&target).spawn(); }
@@ -67,29 +116,67 @@ pub fn open_path(path: String) {
     { let _ = std::process::Command::new("xdg-open").arg(&target).spawn(); }
 }
 
-#[tauri::command]
-pub fn get_blender_versions(app: tauri::AppHandle) -> Vec<BlenderInstall> {
-    let settings = crate::commands::settings::get_settings(app).unwrap_or_default();
+async fn resolved_blender_versions(app: &AppHandle) -> Vec<BlenderInstall> {
+    let settings = crate::commands::settings::get_settings(app.clone()).unwrap_or_default();
     let excluded = settings
         .excluded_blender_paths
         .into_iter()
         .map(PathBuf::from)
         .collect::<BTreeSet<_>>();
+    let extra_paths = settings.extra_blender_paths;
 
-    let mut installs = crate::blender::discovery::discover();
-    installs.extend(
-        settings
-            .extra_blender_paths
+    tokio::task::spawn_blocking(move || {
+        let mut installs = crate::blender::discovery::discover();
+        installs.extend(extra_paths.into_iter().filter_map(|path| {
+            let candidate = PathBuf::from(path);
+            crate::blender::discovery::blender_install_at(&candidate).ok()
+        }));
+        normalize_versions(installs)
             .into_iter()
-            .filter_map(|path| {
-                let candidate = PathBuf::from(path);
-                crate::blender::discovery::blender_install_at(&candidate).ok()
-            }),
+            .filter(|install| !excluded.contains(&install.executable))
+            .collect()
+    })
+    .await
+    .unwrap_or_default()
+}
+
+#[tauri::command]
+pub async fn get_blender_versions(app: AppHandle) -> Vec<BlenderInstall> {
+    resolved_blender_versions(&app).await
+}
+
+#[tauri::command]
+pub async fn inspect_toolchain(app: AppHandle) -> ToolchainStatus {
+    let blender_installs = resolved_blender_versions(&app).await;
+    let settings = crate::commands::settings::get_settings(app.clone()).unwrap_or_default();
+    let configured_ffmpeg = if settings.ffmpeg_executable.trim().is_empty() {
+        None
+    } else {
+        Some(PathBuf::from(settings.ffmpeg_executable.trim()))
+    };
+
+    let blender_probe = if !settings.default_blender.trim().is_empty() {
+        PathBuf::from(settings.default_blender.trim())
+    } else if let Some(first_install) = blender_installs.first() {
+        first_install.executable.clone()
+    } else {
+        std::env::current_exe().unwrap_or_else(|_| PathBuf::from("ffmpeg"))
+    };
+
+    let ffmpeg_lookup = crate::blender::ffmpeg::find_ffmpeg_executable(
+        Some(&app),
+        configured_ffmpeg.as_deref(),
+        &blender_probe,
     );
-    normalize_versions(installs)
-        .into_iter()
-        .filter(|install| !excluded.contains(&install.executable))
-        .collect()
+
+    ToolchainStatus {
+        blender_installs,
+        ffmpeg_found: ffmpeg_lookup.executable.is_some(),
+        ffmpeg_executable: ffmpeg_lookup
+            .executable
+            .map(|path| display_path(&path)),
+        ffmpeg_source: ffmpeg_lookup.source.map(str::to_string),
+    }
 }
 
 #[tauri::command]
@@ -104,20 +191,6 @@ pub fn add_blender_by_path(path: String) -> Result<BlenderInstall, String> {
 const IMAGE_EXTS: &[&str] = &[
     "png", "jpg", "jpeg", "exr", "tiff", "tga", "bmp", "hdr", "webp",
 ];
-
-fn trailing_frame_number(path: &std::path::Path) -> Option<i32> {
-    let stem = path.file_stem()?.to_str()?;
-    let digits_rev: String = stem
-        .chars()
-        .rev()
-        .take_while(|ch| ch.is_ascii_digit())
-        .collect();
-    if digits_rev.is_empty() {
-        return None;
-    }
-    digits_rev.chars().rev().collect::<String>().parse().ok()
-}
-
 fn collect_rendered_frames(
     output_path: &std::path::Path,
     format: &str,
@@ -198,7 +271,7 @@ fn collect_rendered_frames(
                     && (suffix_hint.is_empty() || stem.ends_with(&suffix_hint))
             })
             .filter_map(|path| {
-                let frame = trailing_frame_number(&path)?;
+                let frame = crate::blender::frame_path::trailing_frame_number(&path)?;
                 if let Some(start) = frame_start {
                     if frame < start {
                         return None;
@@ -206,11 +279,6 @@ fn collect_rendered_frames(
                 }
                 if let Some(end) = frame_end {
                     if frame > end {
-                        return None;
-                    }
-                }
-                if let (Some(start), Some(end)) = (frame_start, frame_end) {
-                    if !(start..=end).contains(&frame) {
                         return None;
                     }
                 }
@@ -324,7 +392,7 @@ pub fn has_output_files(path: String) -> u32 {
         p
     } else {
         // Strip filename / ###### pattern to get the parent directory
-        let cleaned = path.replace("######", "");
+        let cleaned = crate::blender::frame_path::strip_frame_placeholders(&path);
         let cleaned_path = std::path::PathBuf::from(cleaned.trim_end_matches(['/', '\\']));
         if cleaned_path.is_dir() {
             cleaned_path
@@ -478,15 +546,9 @@ pub fn validate_blend_file(path: String) -> Result<bool, String> {
     if ext != "blend" {
         return Err(format!("Not a .blend file: {path}"));
     }
-    let mut header = [0u8; 7];
-    std::io::Read::read_exact(
-        &mut std::fs::File::open(&p).map_err(|error| error.to_string())?,
-        &mut header,
-    )
-    .map_err(|error| error.to_string())?;
-    if &header != b"BLENDER" {
-        return Err(format!("Not a valid .blend file: {path}"));
-    }
+
+    // Some valid Blender projects may be stored with additional compression layers.
+    // Let Blender itself perform the final validation instead of rejecting on a raw header check.
     Ok(true)
 }
 
@@ -633,6 +695,25 @@ where
     collected
 }
 
+async fn emit_mp4_log_line(
+    app: &AppHandle,
+    job_id: &str,
+    log_file_path: &Path,
+    log_write_lock: &std::sync::Arc<tokio::sync::Mutex<()>>,
+    line: impl Into<String>,
+) {
+    let line = line.into();
+    let _ = app.emit(
+        "mp4-log",
+        Mp4LogEvent {
+            job_id: job_id.to_string(),
+            line: line.clone(),
+        },
+    );
+    let _guard = log_write_lock.lock().await;
+    let _ = crate::app_paths::append_log_line(log_file_path, &line);
+}
+
 #[tauri::command]
 pub async fn encode_sequence_to_mp4(
     job_id: String,
@@ -735,13 +816,14 @@ pub async fn encode_sequence_to_mp4(
         frame_start,
         frame_end,
     );
-    let job_number = sqlx::query_scalar::<_, i32>("SELECT job_number FROM jobs WHERE id = ?")
+    let (job_number, resolved_job_id) = sqlx::query_as::<_, (i32, String)>("SELECT job_number, id FROM jobs WHERE id = ?")
         .bind(&job_id)
         .fetch_one(&state.pool)
         .await
         .map_err(|error| error.to_string())?;
     let mp4_log_file_path = crate::app_paths::create_job_log_file(
         job_number,
+        &resolved_job_id,
         crate::app_paths::FFMPEG_LOG_KIND,
     )
     .map_err(|error| error.to_string())?;
@@ -753,77 +835,57 @@ pub async fn encode_sequence_to_mp4(
 
     let temp_root = std::env::temp_dir().join(format!("sik-render-mp4-{}", uuid::Uuid::new_v4()));
     std::fs::create_dir_all(&temp_root).map_err(|error| error.to_string())?;
+    let _temp_root_guard = TempDirGuard(temp_root.clone());
     let concat_index_path = temp_root.join("ffmpeg-input.txt");
     write_ffmpeg_concat_index(&concat_index_path, &frames, fps)?;
 
-    let _ = app.emit(
-        "mp4-log",
-        Mp4LogEvent {
-            job_id: job_id.clone(),
-            line: format!("[ffmpeg] executable: {}", ffmpeg_executable.display()),
-        },
-    );
-    {
-        let _guard = mp4_log_write_lock.lock().await;
-        let _ = crate::app_paths::append_log_line(&mp4_log_file_path, &format!("[ffmpeg] executable: {}", ffmpeg_executable.display()));
-    }
+    emit_mp4_log_line(
+        &app,
+        &job_id,
+        &mp4_log_file_path,
+        &mp4_log_write_lock,
+        format!("[ffmpeg] executable: {}", ffmpeg_executable.display()),
+    )
+    .await;
     if let Some(source) = ffmpeg_source {
-        let _ = app.emit(
-            "mp4-log",
-            Mp4LogEvent {
-                job_id: job_id.clone(),
-                line: format!("[ffmpeg] source: {source}"),
-            },
-        );
-        {
-            let _guard = mp4_log_write_lock.lock().await;
-            let _ = crate::app_paths::append_log_line(&mp4_log_file_path, &format!("[ffmpeg] source: {source}"));
-        }
+        emit_mp4_log_line(
+            &app,
+            &job_id,
+            &mp4_log_file_path,
+            &mp4_log_write_lock,
+            format!("[ffmpeg] source: {source}"),
+        )
+        .await;
     }
     if let Some(configured) = configured_ffmpeg.as_ref() {
-        let _ = app.emit(
-            "mp4-log",
-            Mp4LogEvent {
-                job_id: job_id.clone(),
-                line: format!("[ffmpeg] configured path: {}", configured.display()),
-            },
-        );
-        {
-            let _guard = mp4_log_write_lock.lock().await;
-            let _ = crate::app_paths::append_log_line(&mp4_log_file_path, &format!("[ffmpeg] configured path: {}", configured.display()));
-        }
-    }
-    let _ = app.emit(
-        "mp4-log",
-        Mp4LogEvent {
-            job_id: job_id.clone(),
-            line: format!("[ffmpeg] output: {}", output_video.display()),
-        },
-    );
-    {
-        let _guard = mp4_log_write_lock.lock().await;
-        let _ = crate::app_paths::append_log_line(&mp4_log_file_path, &format!("[ffmpeg] output: {}", output_video.display()));
-    }
-    let _ = app.emit(
-        "mp4-log",
-        Mp4LogEvent {
-            job_id: job_id.clone(),
-            line: format!(
-                "[ffmpeg] target fps: {:.3} (FFmpeg input log may still show a default 25 fps stream)",
-                fps
-            ),
-        },
-    );
-    {
-        let _guard = mp4_log_write_lock.lock().await;
-        let _ = crate::app_paths::append_log_line(
+        emit_mp4_log_line(
+            &app,
+            &job_id,
             &mp4_log_file_path,
-            &format!(
-                "[ffmpeg] target fps: {:.3} (FFmpeg input log may still show a default 25 fps stream)",
-                fps
-            ),
-        );
+            &mp4_log_write_lock,
+            format!("[ffmpeg] configured path: {}", configured.display()),
+        )
+        .await;
     }
+    emit_mp4_log_line(
+        &app,
+        &job_id,
+        &mp4_log_file_path,
+        &mp4_log_write_lock,
+        format!("[ffmpeg] output: {}", output_video.display()),
+    )
+    .await;
+    emit_mp4_log_line(
+        &app,
+        &job_id,
+        &mp4_log_file_path,
+        &mp4_log_write_lock,
+        format!(
+            "[ffmpeg] target fps: {:.3} (FFmpeg input log may still show a default 25 fps stream)",
+            fps
+        ),
+    )
+    .await;
 
     let mut child = crate::blender::ffmpeg::concat_to_mp4_command(
         &ffmpeg_executable,
@@ -882,21 +944,16 @@ pub async fn encode_sequence_to_mp4(
     let mut output_lines = stdout_task.await.unwrap_or_default();
     output_lines.extend(stderr_task.await.unwrap_or_default());
 
-    let _ = std::fs::remove_dir_all(&temp_root);
-
     if was_cancelled {
         let message = "MP4 export cancelled";
-        let _ = app.emit(
-            "mp4-log",
-            Mp4LogEvent {
-                job_id: job_id.clone(),
-                line: format!("[ffmpeg] {message}"),
-            },
-        );
-        {
-            let _guard = mp4_log_write_lock.lock().await;
-            let _ = crate::app_paths::append_log_line(&mp4_log_file_path, &format!("[ffmpeg] {message}"));
-        }
+        emit_mp4_log_line(
+            &app,
+            &job_id,
+            &mp4_log_file_path,
+            &mp4_log_write_lock,
+            format!("[ffmpeg] {message}"),
+        )
+        .await;
         return Err(message.into());
     }
 
@@ -912,44 +969,30 @@ pub async fn encode_sequence_to_mp4(
             .collect::<Vec<_>>()
             .join("\n");
         let message = format!("MP4 export failed: {details}");
-        let _ = app.emit(
-            "mp4-log",
-            Mp4LogEvent {
-                job_id: job_id.clone(),
-                line: format!("[ffmpeg] {message}"),
-            },
-        );
-        {
-            let _guard = mp4_log_write_lock.lock().await;
-            let _ = crate::app_paths::append_log_line(&mp4_log_file_path, &format!("[ffmpeg] {message}"));
-        }
+        emit_mp4_log_line(
+            &app,
+            &job_id,
+            &mp4_log_file_path,
+            &mp4_log_write_lock,
+            format!("[ffmpeg] {message}"),
+        )
+        .await;
         return Err(message);
     }
 
-    let _ = app.emit(
-        "mp4-log",
-        Mp4LogEvent {
-            job_id: job_id.clone(),
-            line: format!(
-                "[ffmpeg] export completed: {} frames -> {} ({:.3} fps)",
-                frames.len(),
-                output_video.display(),
-                fps
-            ),
-        },
-    );
-    {
-        let _guard = mp4_log_write_lock.lock().await;
-        let _ = crate::app_paths::append_log_line(
-            &mp4_log_file_path,
-            &format!(
-                "[ffmpeg] export completed: {} frames -> {} ({:.3} fps)",
-                frames.len(),
-                output_video.display(),
-                fps
-            ),
-        );
-    }
+    emit_mp4_log_line(
+        &app,
+        &job_id,
+        &mp4_log_file_path,
+        &mp4_log_write_lock,
+        format!(
+            "[ffmpeg] export completed: {} frames -> {} ({:.3} fps)",
+            frames.len(),
+            output_video.display(),
+            fps
+        ),
+    )
+    .await;
 
     Ok(Mp4ExportResult {
         output_path: output_video.to_string_lossy().to_string(),
@@ -978,12 +1021,12 @@ pub async fn cancel_mp4_export(
                 line: "[ffmpeg] cancellation requested".into(),
             },
         );
-        if let Ok(job_number) = sqlx::query_scalar::<_, i32>("SELECT job_number FROM jobs WHERE id = ?")
+        if let Ok((job_number, resolved_job_id)) = sqlx::query_as::<_, (i32, String)>("SELECT job_number, id FROM jobs WHERE id = ?")
             .bind(&job_id)
             .fetch_one(&state.pool)
             .await
         {
-            if let Ok(path) = crate::app_paths::job_logs_dir(job_number) {
+            if let Ok(path) = crate::app_paths::job_logs_dir(job_number, &resolved_job_id) {
                 let mut files = std::fs::read_dir(&path)
                     .ok()
                     .into_iter()

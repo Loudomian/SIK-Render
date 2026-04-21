@@ -41,10 +41,18 @@
         <UIcon name="i-lucide-film" />
       </div>
       <div class="empty-state-title">还没有渲染任务</div>
-      <div class="empty-state-note">点击右上角“新建任务”开始创建渲染任务。</div>
+      <div class="empty-state-note">拖拽 .blend 工程到窗口，或点击"新建任务"开始。</div>
       <div class="empty-state-actions">
         <UButton icon="i-lucide-plus" label="新建任务" color="success" variant="solid" @click="openAddJob" />
-        <UButton to="/settings" label="检查 Blender 设置" color="neutral" variant="ghost" />
+        <UButton
+          v-if="showInitializeTools"
+          icon="i-lucide-scan-search"
+          label="初始化工具"
+          color="neutral"
+          variant="outline"
+          :loading="initializingTools"
+          @click="initializeTools"
+        />
       </div>
     </UCard>
 
@@ -324,7 +332,7 @@
                 </div>
                 <div v-else class="job-form-empty">
                   <UIcon name="i-lucide-scan-search" class="job-form-empty-icon" />
-                  <p>点击“读取工程参数”后，这里会显示 Blender 工程内的渲染信息。</p>
+                  <p>点击"读取工程参数"后，这里会显示 Blender 工程内的渲染信息。</p>
                 </div>
               </section>
 
@@ -438,8 +446,114 @@ import type { AddJobPayload, BlendProjectSettings, RenderJob, RenderedFramesStat
 const router = useRouter()
 const jobsStore = useJobsStore()
 const settingsStore = useSettingsStore()
+const toast = useToast()
 
-const { validateBlendFile, inspectBlendFile, inspectRenderedFrames } = useTauri()
+const initializingTools = ref(false)
+
+function formatToolSource(source: string | null | undefined) {
+  switch (source) {
+    case 'bundled resource':
+      return '打包资源'
+    case 'workspace bin':
+      return '内置工具'
+    case 'settings':
+      return '设置指定'
+    case 'blender directory':
+      return 'Blender 目录'
+    case 'blender parent directory':
+      return 'Blender 上级目录'
+    case 'system PATH':
+      return '系统 PATH'
+    default:
+      return source ?? ''
+  }
+}
+
+function shortenPath(path: string | null | undefined) {
+  if (!path) return ''
+  const normalized = path.replace(/^\\\\\?\\/, '')
+  const parts = normalized.split(/[\\/]/).filter(Boolean)
+  if (parts.length <= 3 || normalized.length <= 48) {
+    return normalized
+  }
+  return `${parts.slice(0, 2).join('\\')}\\...\\${parts.slice(-2).join('\\')}`
+}
+
+async function initializeTools(options?: { silent?: boolean }) {
+  const silent = options?.silent ?? false
+  if (initializingTools.value) return
+  initializingTools.value = true
+  try {
+    const toolchain = await inspectToolchain()
+    await settingsStore.refreshBlenderVersions()
+
+    let ffmpegAutoFilled = false
+    if (
+      !settingsStore.settings.ffmpegExecutable
+      && toolchain.ffmpegFound
+      && toolchain.ffmpegExecutable
+    ) {
+      settingsStore.settings.ffmpegExecutable = toolchain.ffmpegExecutable
+      await settingsStore.save()
+      ffmpegAutoFilled = true
+    }
+
+    const blenderCount = toolchain.blenderInstalls.length
+    const blenderVersions = toolchain.blenderInstalls.map((b) => b.version).join('、')
+    const ffmpegSource = formatToolSource(toolchain.ffmpegSource)
+    const ffmpegPath = shortenPath(toolchain.ffmpegExecutable)
+    const ffmpegLabel = toolchain.ffmpegFound
+      ? [
+          ffmpegPath ? `FFmpeg：${ffmpegPath}` : 'FFmpeg 已找到',
+          ffmpegSource ? `来源：${ffmpegSource}` : '',
+        ].filter(Boolean).join('，')
+      : 'FFmpeg 未找到，请前往设置页指定路径或检查打包资源 / PATH。'
+
+    if (silent) {
+      return
+    }
+
+    if (blenderCount > 0 && toolchain.ffmpegFound) {
+      toast.add({
+        title: `工具已就绪：Blender ${blenderCount} 个，FFmpeg 已找到`,
+        description: `${blenderVersions}；${ffmpegLabel}${ffmpegAutoFilled ? '；已自动写入 FFmpeg 路径' : ''}`,
+        color: 'success',
+      })
+    } else if (blenderCount > 0) {
+      toast.add({
+        title: `找到 ${blenderCount} 个 Blender，未找到 FFmpeg`,
+        description: `${blenderVersions}；${ffmpegLabel}`,
+        color: 'warning',
+      })
+    } else if (toolchain.ffmpegFound) {
+      toast.add({
+        title: '已找到 FFmpeg，未找到 Blender',
+        description: `${ffmpegLabel}${ffmpegAutoFilled ? '；已自动写入 FFmpeg 路径' : ''}；Blender 未检测到安装，请前往设置页手动添加路径。`,
+        color: 'warning',
+      })
+    } else {
+      toast.add({
+        title: '未找到 Blender 和 FFmpeg',
+        description: 'Blender 未检测到安装，FFmpeg 也不可用，请前往设置页补充路径。',
+        color: 'warning',
+      })
+    }
+  } catch {
+    if (!silent) {
+      toast.add({ title: '扫描失败', description: '初始化工具时出错，请检查设置。', color: 'error' })
+    }
+  } finally {
+    initializingTools.value = false
+  }
+}
+
+const showInitializeTools = computed(() => {
+  const hasBlender = Boolean(settingsStore.settings.defaultBlender || settingsStore.blenderVersions[0]?.executable)
+  const hasFfmpeg = Boolean(settingsStore.settings.ffmpegExecutable)
+  return !(hasBlender && hasFfmpeg)
+})
+
+const { validateBlendFile, inspectBlendFile, inspectRenderedFrames, inspectToolchain } = useTauri()
 
 const retryConfirmJob = ref<RenderJob | null>(null)
 const retryExistingCount = ref(0)
@@ -607,6 +721,10 @@ const isDragging = ref(false)
 let unlistenDrop: (() => void) | null = null
 
 onMounted(async () => {
+  await settingsStore.load()
+  if (showInitializeTools.value) {
+    await initializeTools({ silent: true })
+  }
   unlistenDrop = await getCurrentWindow().onDragDropEvent((event) => {
     if (event.payload.type === 'enter' || event.payload.type === 'over') {
       isDragging.value = true

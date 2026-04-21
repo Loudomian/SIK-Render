@@ -79,6 +79,13 @@ export interface BlenderInstall {
   executable: string
 }
 
+export interface ToolchainStatus {
+  blenderInstalls: BlenderInstall[]
+  ffmpegFound: boolean
+  ffmpegExecutable: string | null
+  ffmpegSource: string | null
+}
+
 export interface BlendProjectSettings {
   frameStart: number
   frameEnd: number

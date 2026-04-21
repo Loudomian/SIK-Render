@@ -3,6 +3,7 @@ use anyhow::{Context, Result};
 use chrono::Utc;
 use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions, SqliteSynchronous};
 use std::fs;
+use std::path::PathBuf;
 use tauri::{AppHandle, Manager};
 
 pub fn app_data_dir(app: &AppHandle) -> Result<std::path::PathBuf> {
@@ -14,9 +15,12 @@ pub fn app_data_dir(app: &AppHandle) -> Result<std::path::PathBuf> {
     Ok(dir)
 }
 
-pub async fn init(app: &AppHandle) -> Result<AppState> {
-    let data_dir = app_data_dir(app)?;
-    let db_path = data_dir.join("sik-render.sqlite3");
+fn tool_root_db_path() -> Result<PathBuf> {
+    Ok(crate::app_paths::tool_root_dir()?.join("sik-render.sqlite3"))
+}
+
+pub async fn init(_app: &AppHandle) -> Result<AppState> {
+    let db_path = tool_root_db_path()?;
 
     let connect_options = SqliteConnectOptions::new()
         .filename(&db_path)
@@ -37,9 +41,10 @@ pub async fn init(app: &AppHandle) -> Result<AppState> {
             .await?;
     if !interrupted_jobs.is_empty() {
         let line = "[interrupted] Reason: startup recovery. This job was still marked running when the app started, which means the previous app session ended while rendering was in progress. It was marked interrupted and will not auto-resume; continue it manually from the last recorded frame.";
-        for (_, job_number) in &interrupted_jobs {
+        for (job_id, job_number) in &interrupted_jobs {
             let _ = crate::app_paths::append_job_log_event(
                 *job_number,
+                job_id,
                 crate::app_paths::BLENDER_LOG_KIND,
                 line,
             );
@@ -60,5 +65,5 @@ pub async fn init(app: &AppHandle) -> Result<AppState> {
 
     log::info!("DB initialized at {}", db_path.display());
 
-    Ok(AppState::new(pool))
+    Ok(AppState::new(pool, None))
 }

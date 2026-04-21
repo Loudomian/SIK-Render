@@ -37,7 +37,7 @@ async fn append_manual_cancel_log(
     job_id: &str,
     line: &str,
 ) -> Result<(), String> {
-    let job_number = sqlx::query_scalar::<_, i32>("SELECT job_number FROM jobs WHERE id = ?")
+    let (job_number, job_id) = sqlx::query_as::<_, (i32, String)>("SELECT job_number, id FROM jobs WHERE id = ?")
         .bind(job_id)
         .fetch_one(&state.pool)
         .await
@@ -45,6 +45,7 @@ async fn append_manual_cancel_log(
 
     crate::app_paths::append_job_log_event(
         job_number,
+        &job_id,
         crate::app_paths::BLENDER_LOG_KIND,
         line,
     )
@@ -150,91 +151,68 @@ pub async fn add_job(
         }
     }
 
-    let mut conn = state
-        .pool
-        .acquire()
+    let mut tx = state.pool.begin().await.map_err(|error| error.to_string())?;
+    let job_number: i64 = sqlx::query_scalar("SELECT COALESCE(MAX(job_number), 0) + 1 FROM jobs")
+        .fetch_one(&mut *tx)
         .await
         .map_err(|error| error.to_string())?;
-    sqlx::query("BEGIN IMMEDIATE")
-        .execute(&mut *conn)
-        .await
-        .map_err(|error| error.to_string())?;
+    job.job_number = job_number as i32;
 
-    let result = async {
-        let job_number: i64 =
-            sqlx::query_scalar("SELECT COALESCE(MAX(job_number), 0) + 1 FROM jobs")
-                .fetch_one(&mut *conn)
-                .await
-                .map_err(|error| error.to_string())?;
-        job.job_number = job_number as i32;
+    sqlx::query(
+        r#"
+        INSERT INTO jobs (
+            id,
+            job_number,
+            name,
+            blend_file,
+            blender_exec,
+            output_path,
+            output_format,
+            frame_start,
+            frame_end,
+            preview_width,
+            preview_height,
+            resume_from_existing,
+            status,
+            priority,
+            created_at,
+            started_at,
+            finished_at,
+            current_frame,
+            total_frames,
+            last_rendered_frame,
+            time_elapsed,
+            remaining_secs
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        "#,
+    )
+    .bind(&job.id)
+    .bind(job.job_number)
+    .bind(&job.name)
+    .bind(job.blend_file.to_string_lossy().to_string())
+    .bind(job.blender_executable.to_string_lossy().to_string())
+    .bind(job.output_path.to_string_lossy().to_string())
+    .bind(&job.output_format)
+    .bind(job.frame_start)
+    .bind(job.frame_end)
+    .bind(job.preview_width)
+    .bind(job.preview_height)
+    .bind(job.resume_from_existing)
+    .bind(JobStatus::Pending)
+    .bind(job.priority)
+    .bind(job.created_at)
+    .bind(job.started_at)
+    .bind(job.finished_at)
+    .bind(job.current_frame)
+    .bind(job.total_frames)
+    .bind(job.last_rendered_frame)
+    .bind(job.time_elapsed)
+    .bind(job.remaining_secs)
+    .execute(&mut *tx)
+    .await
+    .map_err(|error| error.to_string())?;
 
-        sqlx::query(
-            r#"
-            INSERT INTO jobs (
-                id,
-                job_number,
-                name,
-                blend_file,
-                blender_exec,
-                output_path,
-                output_format,
-                frame_start,
-                frame_end,
-                preview_width,
-                preview_height,
-                resume_from_existing,
-                status,
-                priority,
-                created_at,
-                started_at,
-                finished_at,
-                current_frame,
-                total_frames,
-                last_rendered_frame,
-                time_elapsed,
-                remaining_secs
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            "#,
-        )
-        .bind(&job.id)
-        .bind(job.job_number)
-        .bind(&job.name)
-        .bind(job.blend_file.to_string_lossy().to_string())
-        .bind(job.blender_executable.to_string_lossy().to_string())
-        .bind(job.output_path.to_string_lossy().to_string())
-        .bind(&job.output_format)
-        .bind(job.frame_start)
-        .bind(job.frame_end)
-        .bind(job.preview_width)
-        .bind(job.preview_height)
-        .bind(job.resume_from_existing)
-        .bind(JobStatus::Pending)
-        .bind(job.priority)
-        .bind(job.created_at)
-        .bind(job.started_at)
-        .bind(job.finished_at)
-        .bind(job.current_frame)
-        .bind(job.total_frames)
-        .bind(job.last_rendered_frame)
-        .bind(job.time_elapsed)
-        .bind(job.remaining_secs)
-        .execute(&mut *conn)
-        .await
-        .map_err(|error| error.to_string())?;
-
-        sqlx::query("COMMIT")
-            .execute(&mut *conn)
-            .await
-            .map_err(|error| error.to_string())?;
-
-        Ok::<(), String>(())
-    }
-    .await;
-
-    if let Err(error) = result {
-        let _ = sqlx::query("ROLLBACK").execute(&mut *conn).await;
-        return Err(error);
-    }
+    tx.commit().await.map_err(|error| error.to_string())?;
 
     scheduler::emit_job_update(&app, &job);
     state.scheduler_notify.notify_one();
@@ -271,13 +249,13 @@ pub async fn update_job_preview_dimensions(
 
 #[tauri::command]
 pub async fn remove_job(id: String, state: State<'_, AppState>) -> Result<(), String> {
-    let row = sqlx::query_as::<_, (i32, JobStatus)>("SELECT job_number, status FROM jobs WHERE id = ?")
+    let row = sqlx::query_as::<_, (i32, String, JobStatus)>("SELECT job_number, id, status FROM jobs WHERE id = ?")
         .bind(&id)
         .fetch_optional(&state.pool)
         .await
         .map_err(|error| error.to_string())?;
 
-    let Some((job_number, status)) = row else {
+    let Some((job_number, job_id, status)) = row else {
         log::warn!("remove_job called for missing id: {id}");
         return Ok(());
     };
@@ -293,7 +271,10 @@ pub async fn remove_job(id: String, state: State<'_, AppState>) -> Result<(), St
         .await
         .map_err(|error| error.to_string())?;
 
-    if let Ok(path) = crate::app_paths::logs_dir().map(|dir| dir.join(format!("job-{job_number:04}"))) {
+    if let Ok(path) = crate::app_paths::job_logs_dir(job_number, &job_id) {
+        let _ = std::fs::remove_dir_all(path);
+    }
+    if let Ok(path) = crate::app_paths::legacy_job_logs_dir(job_number) {
         let _ = std::fs::remove_dir_all(path);
     }
 
@@ -371,13 +352,13 @@ pub async fn get_job_logs(
     job_id: String,
     state: State<'_, AppState>,
 ) -> Result<Vec<String>, String> {
-    let job_number = sqlx::query_scalar::<_, i32>("SELECT job_number FROM jobs WHERE id = ?")
+    let (job_number, job_id) = sqlx::query_as::<_, (i32, String)>("SELECT job_number, id FROM jobs WHERE id = ?")
     .bind(&job_id)
     .fetch_one(&state.pool)
     .await
     .map_err(|e| e.to_string())?;
 
-    crate::app_paths::read_job_log_lines(job_number, crate::app_paths::BLENDER_LOG_KIND)
+    crate::app_paths::read_job_log_lines(job_number, &job_id, crate::app_paths::BLENDER_LOG_KIND)
         .map_err(|e| e.to_string())
 }
 
@@ -386,13 +367,13 @@ pub async fn get_job_latest_logs(
     job_id: String,
     state: State<'_, AppState>,
 ) -> Result<Vec<String>, String> {
-    let job_number = sqlx::query_scalar::<_, i32>("SELECT job_number FROM jobs WHERE id = ?")
+    let (job_number, job_id) = sqlx::query_as::<_, (i32, String)>("SELECT job_number, id FROM jobs WHERE id = ?")
         .bind(&job_id)
         .fetch_one(&state.pool)
         .await
         .map_err(|e| e.to_string())?;
 
-    crate::app_paths::read_latest_job_log_lines(job_number, crate::app_paths::BLENDER_LOG_KIND)
+    crate::app_paths::read_latest_job_log_lines(job_number, &job_id, crate::app_paths::BLENDER_LOG_KIND)
         .map_err(|e| e.to_string())
 }
 
@@ -401,13 +382,13 @@ pub async fn get_job_mp4_logs(
     job_id: String,
     state: State<'_, AppState>,
 ) -> Result<Vec<String>, String> {
-    let job_number = sqlx::query_scalar::<_, i32>("SELECT job_number FROM jobs WHERE id = ?")
+    let (job_number, job_id) = sqlx::query_as::<_, (i32, String)>("SELECT job_number, id FROM jobs WHERE id = ?")
         .bind(&job_id)
         .fetch_one(&state.pool)
         .await
         .map_err(|e| e.to_string())?;
 
-    crate::app_paths::read_job_log_lines(job_number, crate::app_paths::FFMPEG_LOG_KIND)
+    crate::app_paths::read_job_log_lines(job_number, &job_id, crate::app_paths::FFMPEG_LOG_KIND)
         .map_err(|e| e.to_string())
 }
 
@@ -416,13 +397,13 @@ pub async fn get_job_latest_mp4_logs(
     job_id: String,
     state: State<'_, AppState>,
 ) -> Result<Vec<String>, String> {
-    let job_number = sqlx::query_scalar::<_, i32>("SELECT job_number FROM jobs WHERE id = ?")
+    let (job_number, job_id) = sqlx::query_as::<_, (i32, String)>("SELECT job_number, id FROM jobs WHERE id = ?")
         .bind(&job_id)
         .fetch_one(&state.pool)
         .await
         .map_err(|e| e.to_string())?;
 
-    crate::app_paths::read_latest_job_log_lines(job_number, crate::app_paths::FFMPEG_LOG_KIND)
+    crate::app_paths::read_latest_job_log_lines(job_number, &job_id, crate::app_paths::FFMPEG_LOG_KIND)
         .map_err(|e| e.to_string())
 }
 
@@ -431,17 +412,17 @@ pub async fn get_job_log_summary(
     job_id: String,
     state: State<'_, AppState>,
 ) -> Result<JobLogSummary, String> {
-    let job_number = sqlx::query_scalar::<_, i32>("SELECT job_number FROM jobs WHERE id = ?")
+    let (job_number, job_id) = sqlx::query_as::<_, (i32, String)>("SELECT job_number, id FROM jobs WHERE id = ?")
         .bind(&job_id)
         .fetch_one(&state.pool)
         .await
         .map_err(|e| e.to_string())?;
 
-    let directory = crate::app_paths::job_logs_dir(job_number)
+    let directory = crate::app_paths::job_logs_dir(job_number, &job_id)
         .map_err(|e| e.to_string())?;
-    let blender_count = crate::app_paths::count_job_log_files(job_number, crate::app_paths::BLENDER_LOG_KIND)
+    let blender_count = crate::app_paths::count_job_log_files(job_number, &job_id, crate::app_paths::BLENDER_LOG_KIND)
         .map_err(|e| e.to_string())?;
-    let ffmpeg_count = crate::app_paths::count_job_log_files(job_number, crate::app_paths::FFMPEG_LOG_KIND)
+    let ffmpeg_count = crate::app_paths::count_job_log_files(job_number, &job_id, crate::app_paths::FFMPEG_LOG_KIND)
         .map_err(|e| e.to_string())?;
 
     Ok(JobLogSummary {

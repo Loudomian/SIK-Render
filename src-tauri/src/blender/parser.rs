@@ -58,3 +58,31 @@ fn parse_time(s: &str) -> f32 {
         _ => 0.0,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{parse_frame, parse_time_progress};
+
+    #[test]
+    fn parses_frame_from_fra_line() {
+        assert_eq!(parse_frame("Fra:42 Mem:123.00M"), Some(42));
+    }
+
+    #[test]
+    fn parses_frame_from_rendering_frame_line() {
+        assert_eq!(parse_frame("Rendering frame 100, view layer"), Some(100));
+    }
+
+    #[test]
+    fn ignores_lines_without_frame_number() {
+        assert_eq!(parse_frame("no frame here"), None);
+    }
+
+    #[test]
+    fn parses_elapsed_and_remaining_time() {
+        let progress =
+            parse_time_progress("Time: 00:01.50 | Remaining: 00:03.00").expect("time progress");
+        assert!((progress.time_elapsed - 1.5).abs() < f32::EPSILON);
+        assert_eq!(progress.remaining_secs, Some(3.0));
+    }
+}

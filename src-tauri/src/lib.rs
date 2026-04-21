@@ -2,7 +2,6 @@ mod app_paths;
 mod blender;
 mod commands;
 mod db;
-mod node;
 mod queue;
 mod state;
 
@@ -18,15 +17,19 @@ pub fn run() {
         .plugin(tauri_plugin_store::Builder::default().build())
         .plugin(tauri_plugin_notification::init())
         .setup(|app| {
+            crate::app_paths::ensure_runtime_layout()
+                .expect("failed to initialize runtime layout");
             let app_handle = app.handle().clone();
             let state = tauri::async_runtime::block_on(db::init(&app_handle))
                 .expect("failed to initialize database");
-            crate::app_paths::ensure_runtime_layout()
-                .expect("failed to initialize runtime layout");
+            app.manage(state);
             crate::commands::settings::get_settings(app_handle.clone())
                 .expect("failed to initialize settings file");
-            queue::scheduler::start(app_handle, state.clone());
-            app.manage(state);
+            let state = app_handle
+                .state::<state::AppState>()
+                .inner()
+                .clone();
+            queue::scheduler::start(app_handle, state);
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -43,6 +46,7 @@ pub fn run() {
             commands::jobs::reset_job,
             commands::jobs::update_job_preview_dimensions,
             commands::blender::get_blender_versions,
+            commands::blender::inspect_toolchain,
             commands::blender::add_blender_by_path,
             commands::blender::has_output_files,
             commands::blender::count_rendered_frames,

@@ -54,6 +54,10 @@ impl BlenderCliCommand {
             command.arg(blend_file);
         }
         command.args(&self.args);
+        #[cfg(target_os = "windows")]
+        {
+            command.creation_flags(0x08000000); // CREATE_NO_WINDOW
+        }
         command
     }
 

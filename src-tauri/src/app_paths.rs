@@ -35,14 +35,52 @@ pub fn ensure_runtime_layout() -> Result<()> {
     logs_dir().map(|_| ())
 }
 
-pub fn job_logs_dir(job_number: i32) -> Result<PathBuf> {
-    let dir = logs_dir()?.join(format!("job-{job_number:04}"));
+fn job_log_suffix(job_id: &str) -> String {
+    let suffix = job_id
+        .chars()
+        .filter(|ch| ch.is_ascii_hexdigit())
+        .take(4)
+        .collect::<String>()
+        .to_ascii_lowercase();
+
+    if suffix.len() == 4 {
+        suffix
+    } else {
+        String::from("xxxx")
+    }
+}
+
+pub fn job_logs_dir_name(job_number: i32, job_id: &str) -> String {
+    format!("job-{job_number:04}-{}", job_log_suffix(job_id))
+}
+
+pub fn legacy_job_logs_dir(job_number: i32) -> Result<PathBuf> {
+    Ok(logs_dir()?.join(format!("job-{job_number:04}")))
+}
+
+pub fn job_logs_dir(job_number: i32, job_id: &str) -> Result<PathBuf> {
+    let dir = logs_dir()?.join(job_logs_dir_name(job_number, job_id));
     fs::create_dir_all(&dir).context("failed to create job log directory")?;
     Ok(dir)
 }
 
-pub fn count_job_log_files(job_number: i32, kind: &str) -> Result<usize> {
-    let dir = job_logs_dir(job_number)?;
+fn active_job_logs_dir(job_number: i32, job_id: &str) -> Result<PathBuf> {
+    let new_dir = logs_dir()?.join(job_logs_dir_name(job_number, job_id));
+    if new_dir.exists() {
+        return Ok(new_dir);
+    }
+
+    let legacy_dir = legacy_job_logs_dir(job_number)?;
+    if legacy_dir.exists() {
+        return Ok(legacy_dir);
+    }
+
+    fs::create_dir_all(&new_dir).context("failed to create job log directory")?;
+    Ok(new_dir)
+}
+
+pub fn count_job_log_files(job_number: i32, job_id: &str, kind: &str) -> Result<usize> {
+    let dir = active_job_logs_dir(job_number, job_id)?;
     let count = fs::read_dir(&dir)
         .with_context(|| format!("failed to read job log directory {}", dir.display()))?
         .filter_map(|entry| entry.ok())
@@ -58,9 +96,9 @@ pub fn count_job_log_files(job_number: i32, kind: &str) -> Result<usize> {
     Ok(count)
 }
 
-pub fn create_job_log_file(job_number: i32, kind: &str) -> Result<PathBuf> {
+pub fn create_job_log_file(job_number: i32, job_id: &str, kind: &str) -> Result<PathBuf> {
     let timestamp = Utc::now().format("%Y%m%d-%H%M%S");
-    let path = job_logs_dir(job_number)?.join(format!("{kind}-{timestamp}.log"));
+    let path = active_job_logs_dir(job_number, job_id)?.join(format!("{kind}-{timestamp}.log"));
     if !path.exists() {
       fs::write(&path, "").with_context(|| format!("failed to create log file {}", path.display()))?;
     }
@@ -77,8 +115,8 @@ pub fn append_log_line(path: &Path, line: &str) -> Result<()> {
     Ok(())
 }
 
-pub fn append_job_log_event(job_number: i32, kind: &str, line: &str) -> Result<PathBuf> {
-    let dir = job_logs_dir(job_number)?;
+pub fn append_job_log_event(job_number: i32, job_id: &str, kind: &str, line: &str) -> Result<PathBuf> {
+    let dir = active_job_logs_dir(job_number, job_id)?;
     let mut files = fs::read_dir(&dir)
         .with_context(|| format!("failed to read job log directory {}", dir.display()))?
         .filter_map(|entry| entry.ok())
@@ -96,14 +134,14 @@ pub fn append_job_log_event(job_number: i32, kind: &str, line: &str) -> Result<P
     let path = if let Some(path) = files.pop() {
         path
     } else {
-        create_job_log_file(job_number, kind)?
+        create_job_log_file(job_number, job_id, kind)?
     };
     append_log_line(&path, line)?;
     Ok(path)
 }
 
-pub fn read_job_log_lines(job_number: i32, kind: &str) -> Result<Vec<String>> {
-    let dir = logs_dir()?.join(format!("job-{job_number:04}"));
+pub fn read_job_log_lines(job_number: i32, job_id: &str, kind: &str) -> Result<Vec<String>> {
+    let dir = active_job_logs_dir(job_number, job_id)?;
     if !dir.exists() {
         return Ok(Vec::new());
     }
@@ -133,8 +171,8 @@ pub fn read_job_log_lines(job_number: i32, kind: &str) -> Result<Vec<String>> {
     Ok(lines)
 }
 
-pub fn read_latest_job_log_lines(job_number: i32, kind: &str) -> Result<Vec<String>> {
-    let dir = logs_dir()?.join(format!("job-{job_number:04}"));
+pub fn read_latest_job_log_lines(job_number: i32, job_id: &str, kind: &str) -> Result<Vec<String>> {
+    let dir = active_job_logs_dir(job_number, job_id)?;
     if !dir.exists() {
         return Ok(Vec::new());
     }

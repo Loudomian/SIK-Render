@@ -1,9 +1,9 @@
 import { invoke } from '@tauri-apps/api/core'
-import type { AddJobPayload, AppSettings, BlenderInstall, BlendProjectSettings, JobLogSummary, Mp4ExportInspection, Mp4ExportResult, RenderJob, RenderedFramesStatus } from '~/types'
+import type { AddJobPayload, AppSettings, BlenderInstall, BlendProjectSettings, JobLogSummary, Mp4ExportInspection, Mp4ExportResult, RenderJob, RenderedFramesStatus, ToolchainStatus } from '~/types'
 
 // Typed wrappers around Tauri IPC commands
 
-export const useTauri = () => ({
+const tauriApi = {
   listJobs: () =>
     invoke<RenderJob[]>('list_jobs'),
 
@@ -27,6 +27,9 @@ export const useTauri = () => ({
 
   getBlenderVersions: () =>
     invoke<BlenderInstall[]>('get_blender_versions'),
+
+  inspectToolchain: () =>
+    invoke<ToolchainStatus>('inspect_toolchain'),
 
   addBlenderByPath: (path: string) =>
     invoke<BlenderInstall>('add_blender_by_path', { path }),
@@ -118,4 +121,6 @@ export const useTauri = () => ({
 
   saveSettings: (settings: AppSettings) =>
     invoke<void>('save_settings', { settings }),
-})
+}
+
+export const useTauri = () => tauriApi

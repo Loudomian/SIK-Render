@@ -46,6 +46,10 @@ impl FfmpegCliCommand {
         command.args(&self.input_args);
         command.args(&self.args);
         command.arg(&self.output_file);
+        #[cfg(target_os = "windows")]
+        {
+            command.creation_flags(0x08000000); // CREATE_NO_WINDOW
+        }
         command
     }
 }
@@ -94,9 +98,22 @@ fn ffmpeg_candidates(
         }
     }
 
-    let manifest_bin_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("bin");
-    for path in binary_candidates_in(&manifest_bin_dir) {
-        candidates.push((path, "workspace bin"));
+    if let Ok(current_exe) = std::env::current_exe() {
+        if let Some(exe_dir) = current_exe.parent() {
+            for path in binary_candidates_in(&exe_dir.join("bin")) {
+                candidates.push((path, "portable bin"));
+            }
+            for path in binary_candidates_in(exe_dir) {
+                candidates.push((path, "executable directory"));
+            }
+        }
+    }
+
+    if cfg!(debug_assertions) {
+        let manifest_bin_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("bin");
+        for path in binary_candidates_in(&manifest_bin_dir) {
+            candidates.push((path, "workspace bin"));
+        }
     }
 
     if let Some(dir) = blender_executable.parent() {
@@ -111,7 +128,7 @@ fn ffmpeg_candidates(
         }
     }
 
-    for path in command_search_paths(ffmpeg_command_name()) {
+    for path in find_in_path(ffmpeg_binary_names()) {
         candidates.push((path, "system PATH"));
     }
 
@@ -166,17 +183,6 @@ fn ffmpeg_binary_names() -> &'static [&'static str] {
     }
 }
 
-fn ffmpeg_command_name() -> &'static str {
-    #[cfg(target_os = "windows")]
-    {
-        "where.exe"
-    }
-    #[cfg(not(target_os = "windows"))]
-    {
-        "which"
-    }
-}
-
 fn dedupe_candidates(candidates: Vec<(PathBuf, &'static str)>) -> Vec<(PathBuf, &'static str)> {
     let mut seen = std::collections::HashSet::new();
     candidates
@@ -185,23 +191,18 @@ fn dedupe_candidates(candidates: Vec<(PathBuf, &'static str)>) -> Vec<(PathBuf, 
         .collect()
 }
 
-fn command_search_paths(program: &str) -> Vec<PathBuf> {
-    let lookup_name = ffmpeg_binary_names().first().copied().unwrap_or("ffmpeg");
-    let Ok(output) = std::process::Command::new(program)
-        .arg(lookup_name)
-        .output()
-    else {
+fn find_in_path(names: &[&str]) -> Vec<PathBuf> {
+    let Ok(path_var) = std::env::var("PATH") else {
         return Vec::new();
     };
-
-    if !output.status.success() {
-        return Vec::new();
+    let mut results = Vec::new();
+    for dir in std::env::split_paths(&path_var) {
+        for name in names {
+            let candidate = dir.join(name);
+            if candidate.exists() {
+                results.push(candidate);
+            }
+        }
     }
-
-    String::from_utf8_lossy(&output.stdout)
-        .lines()
-        .map(str::trim)
-        .filter(|line| !line.is_empty())
-        .map(PathBuf::from)
-        .collect()
+    results
 }
