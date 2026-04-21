@@ -7,6 +7,7 @@ src-tauri/target/
 node_modules/
 .output/
 .nuxt/
+.nuxt-build/
 dist/
 bun.lockb
 
@@ -27,3 +28,6 @@ logs/
 *.sqlite3-journal
 sik-render.toml
 .claude/settings.local.json
+
+# Docs (kept locally, not tracked)
+docs/
