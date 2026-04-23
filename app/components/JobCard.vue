@@ -19,8 +19,15 @@
                 variant="subtle"
               />
               <UBadge v-if="orderBadgeLabel" :label="orderBadgeLabel" color="neutral" variant="subtle" />
+              <UBadge
+                v-if="job.crashCount > 0"
+                :label="`崩溃 ${job.crashCount} 次`"
+                color="warning"
+                variant="subtle"
+              />
             </div>
             <span class="job-name"><span class="job-number">#{{ job.jobNumber }}</span> {{ job.name }}</span>
+            <p v-if="job.note" class="job-note">{{ job.note }}</p>
           </div>
         </div>
 
@@ -42,20 +49,20 @@
             </span>
           </div>
 
-          <div class="job-actions" @dblclick.stop>
+          <div class="job-actions" data-no-drag @dblclick.stop>
             <UTooltip v-if="job.status === 'running' || job.status === 'pending'" text="停止当前任务或将其标记为取消" arrow :content="{ side: 'bottom', sideOffset: 8 }">
               <UButton icon="i-lucide-x" label="取消" color="warning" variant="outline" size="sm" @click="$emit('cancel')" />
             </UTooltip>
             <UTooltip
               v-if="job.status === 'done' || job.status === 'failed' || job.status === 'cancelled' || job.status === 'interrupted'"
-              :text="job.status === 'cancelled' || job.status === 'interrupted' ? '继续当前任务' : '重新提交这个任务'"
+              :text="retryButtonTooltip"
               arrow
               :content="{ side: 'bottom', sideOffset: 8 }"
             >
               <UButton
                 icon="i-lucide-rotate-ccw"
-                :label="job.status === 'cancelled' || job.status === 'interrupted' ? '继续' : '重试'"
-                :color="job.status === 'cancelled' || job.status === 'interrupted' ? 'warning' : 'neutral'"
+                :label="retryButtonLabel"
+                :color="retryButtonColor"
                 variant="outline"
                 size="sm"
                 @click="$emit('retry')"
@@ -100,6 +107,7 @@
           'job-preview-clickable': !!displayPreviewUrl,
           'job-preview-loading': previewLoading && !displayPreviewUrl,
         }"
+        :data-no-drag="displayPreviewUrl ? '' : null"
         :style="previewStyle"
         @click="displayPreviewUrl && (lightboxOpen = true)"
       >
@@ -133,7 +141,7 @@
       :frame="job.currentFrame ?? 0"
       :total-frames="job.totalFrames ?? (job.frameEnd - job.frameStart + 1)"
       :warming-up="jobsStore.isJobWarmingUp(job.id)"
-      :time-elapsed="job.timeElapsed"
+      :time-elapsed="job.timeElapsed ?? undefined"
       :remaining-secs="job.remainingSecs"
     />
 
@@ -154,6 +162,7 @@ import { convertFileSrc } from '@tauri-apps/api/core'
 import { computed } from 'vue'
 import { useRouter } from 'vue-router'
 import type { RenderJob } from '~/types'
+import { JOB_STATUS_COLOR, JOB_STATUS_LABEL } from '~/composables/useJobStatus'
 
 const props = defineProps<{ job: RenderJob }>()
 defineEmits(['cancel', 'remove', 'retry'])
@@ -161,25 +170,24 @@ const router = useRouter()
 const jobsStore = useJobsStore()
 const { openPath, getLastRenderedFrame, updateJobPreviewDimensions } = useTauri()
 
-const STATUS_LABEL: Record<string, string> = {
-  pending: '等待中',
-  running: '渲染中',
-  done: '已完成',
-  failed: '失败',
-  cancelled: '已取消',
-  interrupted: '已中断',
-}
+const STATUS_LABEL = JOB_STATUS_LABEL
+const statusColor = computed(() => JOB_STATUS_COLOR[props.job.status] ?? 'neutral')
 
-const STATUS_COLOR: Record<string, 'neutral' | 'info' | 'success' | 'error' | 'warning'> = {
-  pending: 'neutral',
-  running: 'info',
-  done: 'success',
-  failed: 'error',
-  cancelled: 'warning',
-  interrupted: 'warning',
-}
+const retryButtonLabel = computed(() => {
+  if (props.job.status === 'interrupted') return '继续'
+  if (props.job.status === 'failed') return '重试'
+  return '重新渲染'
+})
 
-const statusColor = computed(() => STATUS_COLOR[props.job.status] ?? 'neutral')
+const retryButtonColor = computed(() =>
+  props.job.status === 'interrupted' ? 'warning' as const : 'neutral' as const,
+)
+
+const retryButtonTooltip = computed(() => {
+  if (props.job.status === 'interrupted') return '继续当前任务'
+  if (props.job.status === 'failed') return '重试这个任务'
+  return '重新渲染这个任务'
+})
 const queueOrder = computed(() => {
   if (props.job.status === 'running' || props.job.status === 'done') return null
   const queue = jobsStore.jobs.filter(job => job.status !== 'running' && job.status !== 'done')
@@ -249,6 +257,12 @@ const previewFrameEnd = computed(() => {
   const capped = job.frameStart + progressed - 1
   return Math.min(job.frameEnd, Math.max(job.frameStart, capped))
 })
+
+function syncCardInfoHeight() {
+  const el = cardInfoEl.value
+  if (!el) return
+  cardInfoHeight.value = Math.round(el.getBoundingClientRect().height)
+}
 
 function formatDuration(ms: number) {
   const s = Math.round(ms / 1000)
@@ -373,7 +387,8 @@ async function refreshPreview() {
 
     const url = `${convertFileSrc(path)}?t=${Date.now()}`
     const match = path.match(/(\d+)\.[^.]+$/)
-    const frame = match ? parseInt(match[1]) : null
+    const frameToken = match?.[1]
+    const frame = frameToken ? parseInt(frameToken) : null
     const { width, height } = await preloadPreview(url)
 
     if (token !== previewLoadToken) return
@@ -400,8 +415,26 @@ watch(
   { immediate: true },
 )
 
+watch(
+  () => [
+    props.job.name,
+    props.job.note,
+    props.job.status,
+    props.job.startedAt,
+    props.job.finishedAt,
+    props.job.currentFrame,
+    props.job.totalFrames,
+  ] as const,
+  async () => {
+    await nextTick()
+    syncCardInfoHeight()
+  },
+  { flush: 'post' },
+)
+
 onMounted(() => {
   if (!cardInfoEl.value) return
+  syncCardInfoHeight()
   cardInfoResizeObserver = new ResizeObserver((entries) => {
     const entry = entries[0]
     if (!entry) return

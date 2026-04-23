@@ -10,13 +10,15 @@ use tokio::sync::{Mutex, Notify};
 pub struct AppState {
     pub pool: SqlitePool,
     pub scheduler_notify: Arc<Notify>,
+    pub ffmpeg_notify: Arc<Notify>,
     pub active_jobs: Arc<Mutex<HashMap<String, u32>>>,
-    pub active_mp4_exports: Arc<Mutex<HashMap<String, u32>>>,
+    pub active_ffmpeg_jobs: Arc<Mutex<HashMap<String, u32>>>,
     pub cancelled_jobs: Arc<Mutex<HashSet<String>>>,
     pub interrupted_jobs: Arc<Mutex<HashSet<String>>>,
-    pub cancelled_mp4_exports: Arc<Mutex<HashSet<String>>>,
+    pub cancelled_ffmpeg_jobs: Arc<Mutex<HashSet<String>>>,
     pub settings: Arc<RwLock<Option<AppSettings>>>,
     pub queue_paused: Arc<RwLock<bool>>,
+    pub paused_job_id: Arc<Mutex<Option<String>>>,
 }
 
 impl AppState {
@@ -24,13 +26,15 @@ impl AppState {
         Self {
             pool,
             scheduler_notify: Arc::new(Notify::new()),
+            ffmpeg_notify: Arc::new(Notify::new()),
             active_jobs: Arc::new(Mutex::new(HashMap::new())),
-            active_mp4_exports: Arc::new(Mutex::new(HashMap::new())),
+            active_ffmpeg_jobs: Arc::new(Mutex::new(HashMap::new())),
             cancelled_jobs: Arc::new(Mutex::new(HashSet::new())),
             interrupted_jobs: Arc::new(Mutex::new(HashSet::new())),
-            cancelled_mp4_exports: Arc::new(Mutex::new(HashSet::new())),
+            cancelled_ffmpeg_jobs: Arc::new(Mutex::new(HashSet::new())),
             settings: Arc::new(RwLock::new(settings)),
             queue_paused: Arc::new(RwLock::new(true)),
+            paused_job_id: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -123,13 +127,7 @@ impl AppState {
         }
         self.active_jobs.lock().await.clear();
 
-        let active_mp4_exports = {
-            let active = self.active_mp4_exports.lock().await;
-            active.values().copied().collect::<Vec<_>>()
-        };
-        for pid in active_mp4_exports {
-            let _ = Self::kill_process_tree(pid);
-        }
-        self.active_mp4_exports.lock().await.clear();
+        crate::commands::transcode::finalize_ffmpeg_shutdown_jobs(self).await;
+        self.active_ffmpeg_jobs.lock().await.clear();
     }
 }

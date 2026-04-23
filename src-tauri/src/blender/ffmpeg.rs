@@ -140,6 +140,8 @@ pub fn concat_to_mp4_command(
     concat_index: &Path,
     fps: f32,
     output_file: &Path,
+    crf: u32,
+    preset: &str,
 ) -> FfmpegCliCommand {
     FfmpegCliCommand::new(ffmpeg_executable, output_file)
         .arg_before("-hide_banner")
@@ -156,9 +158,9 @@ pub fn concat_to_mp4_command(
         .arg("-c:v")
         .arg("libx264")
         .arg("-preset")
-        .arg("medium")
+        .arg(preset)
         .arg("-crf")
-        .arg("18")
+        .arg(crf.to_string())
         .arg("-pix_fmt")
         .arg("yuv420p")
         .arg("-movflags")

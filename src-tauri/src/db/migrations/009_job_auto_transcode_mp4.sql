@@ -1,0 +1,1 @@
+ALTER TABLE jobs ADD COLUMN auto_transcode_mp4 INTEGER NOT NULL DEFAULT 1;

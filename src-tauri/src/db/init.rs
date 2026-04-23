@@ -33,6 +33,10 @@ pub async fn init(_app: &AppHandle) -> Result<AppState> {
         .connect_with(connect_options)
         .await?;
 
+    sqlx::query("PRAGMA foreign_keys = ON")
+        .execute(&pool)
+        .await?;
+
     sqlx::migrate!("./src/db/migrations").run(&pool).await?;
 
     let interrupted_jobs =
@@ -62,6 +66,8 @@ pub async fn init(_app: &AppHandle) -> Result<AppState> {
         .execute(&pool)
         .await?;
     }
+
+    crate::commands::transcode::recover_running_ffmpeg_jobs(&pool).await?;
 
     log::info!("DB initialized at {}", db_path.display());
 

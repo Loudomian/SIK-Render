@@ -3,7 +3,9 @@
   --ui-radius: 0.2rem;
 }
 
-.light, :root {
+.light,
+:root:not(.dark) {
+  --ui-primary: #c1352e;
   --ui-bg: #f7f7f5;
   --ui-bg-muted: #fcfcf9;
   --ui-bg-elevated: rgba(255, 255, 252, 0.92);

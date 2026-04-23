@@ -1,40 +1,9 @@
 use crate::blender::discovery::BlenderInstall;
 use crate::blender::project::{inspect_project_with_timeout, normalize_versions, BlendProjectSettings};
 use crate::state::AppState;
-use chrono::Local;
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
-use tauri::{AppHandle, Emitter, State};
-use tokio::io::{AsyncBufReadExt, BufReader};
-
-#[derive(Debug, Clone, serde::Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct Mp4ExportResult {
-    pub output_path: String,
-    pub fps: f32,
-    pub frame_count: u32,
-}
-
-#[derive(Debug, Clone, serde::Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct Mp4ExportInspection {
-    pub available_start: Option<i32>,
-    pub available_end: Option<i32>,
-    pub selected_start: Option<i32>,
-    pub selected_end: Option<i32>,
-    pub frame_count: u32,
-    pub missing_count: u32,
-    pub has_gaps: bool,
-    pub missing_segments: Vec<String>,
-    pub missing_segments_truncated: bool,
-}
-
-#[derive(Debug, Clone, serde::Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct Mp4LogEvent {
-    pub job_id: String,
-    pub line: String,
-}
+use tauri::{AppHandle, State};
 
 #[derive(Debug, Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -46,6 +15,18 @@ pub struct RenderedFramesStatus {
 
 #[derive(Debug, Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct FolderFramesInspection {
+    pub detected_format: Option<String>,
+    pub frame_start: Option<i32>,
+    pub frame_end: Option<i32>,
+    pub frame_count: i32,
+    pub missing_count: i32,
+    pub has_gaps: bool,
+    pub folder_name: String,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ToolchainStatus {
     pub blender_installs: Vec<BlenderInstall>,
     pub ffmpeg_found: bool,
@@ -53,12 +34,10 @@ pub struct ToolchainStatus {
     pub ffmpeg_source: Option<String>,
 }
 
-struct TempDirGuard(PathBuf);
-
-impl Drop for TempDirGuard {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.0);
-    }
+#[derive(Debug, Clone)]
+struct FolderFrameFile {
+    frame: i32,
+    path: PathBuf,
 }
 
 fn display_path(path: &std::path::Path) -> String {
@@ -81,6 +60,91 @@ fn blend_inspect_timeout_seconds(state: &AppState) -> u64 {
         .cached_settings()
         .map(|settings| settings.blend_inspect_timeout_seconds.max(1))
         .unwrap_or(30)
+}
+
+fn format_exts_for(format: &str) -> &'static [&'static str] {
+    match format.to_ascii_uppercase().as_str() {
+        "PNG" => &["png"],
+        "JPEG" | "JPG" => &["jpg", "jpeg"],
+        "OPEN_EXR" | "EXR" => &["exr"],
+        "TARGA" | "TGA" => &["tga"],
+        "TIFF" => &["tif", "tiff"],
+        "BMP" => &["bmp"],
+        "HDR" => &["hdr"],
+        "WEBP" => &["webp"],
+        _ => &[],
+    }
+}
+
+fn ext_to_format(ext: &str) -> String {
+    match ext {
+        "png" => "PNG".to_string(),
+        "jpg" | "jpeg" => "JPEG".to_string(),
+        "exr" => "OPEN_EXR".to_string(),
+        "tga" => "TARGA".to_string(),
+        "tif" | "tiff" => "TIFF".to_string(),
+        "bmp" => "BMP".to_string(),
+        "hdr" => "HDR".to_string(),
+        "webp" => "WEBP".to_string(),
+        _ => ext.to_ascii_uppercase(),
+    }
+}
+
+fn inspect_folder_frame_files(
+    dir: &Path,
+    format_hint: Option<&str>,
+) -> Result<(Vec<FolderFrameFile>, Option<String>), String> {
+    if !dir.is_dir() {
+        return Err(format!("{} is not a directory", dir.display()));
+    }
+
+    let allowed_exts = format_hint.map(format_exts_for);
+    let mut frames = Vec::new();
+    let mut detected_format = None;
+
+    let entries = std::fs::read_dir(dir).map_err(|error| error.to_string())?;
+    for entry in entries {
+        let path = match entry {
+            Ok(entry) => entry.path(),
+            Err(_) => continue,
+        };
+        if !path.is_file() {
+            continue;
+        }
+
+        let Some(ext) = path
+            .extension()
+            .and_then(|value| value.to_str())
+            .map(|value| value.to_ascii_lowercase())
+        else {
+            continue;
+        };
+
+        if !IMAGE_EXTS.contains(&ext.as_str()) {
+            continue;
+        }
+
+        if let Some(allowed) = allowed_exts {
+            if !allowed.iter().any(|candidate| *candidate == ext) {
+                continue;
+            }
+        }
+
+        let Some(frame) = crate::blender::frame_path::trailing_frame_number(&path) else {
+            continue;
+        };
+
+        if detected_format.is_none() {
+            detected_format = Some(ext_to_format(&ext));
+        }
+
+        frames.push(FolderFrameFile { frame, path });
+    }
+
+    frames.sort_by(|a, b| a.frame.cmp(&b.frame).then_with(|| a.path.cmp(&b.path)));
+    frames.dedup_by(|a, b| a.frame == b.frame);
+
+    Ok((frames, detected_format))
 }
 
 #[tauri::command]
@@ -196,7 +260,7 @@ pub fn add_blender_by_path(path: String) -> Result<BlenderInstall, String> {
 }
 
 const IMAGE_EXTS: &[&str] = &[
-    "png", "jpg", "jpeg", "exr", "tiff", "tga", "bmp", "hdr", "webp",
+    "png", "jpg", "jpeg", "exr", "tif", "tiff", "tga", "bmp", "hdr", "webp",
 ];
 fn collect_rendered_frames(
     output_path: &std::path::Path,
@@ -299,95 +363,6 @@ fn collect_rendered_frames(
     };
     scanned.sort_by(|a, b| a.0.cmp(&b.0).then_with(|| a.1.cmp(&b.1)));
     scanned
-}
-
-fn format_frame_segment(start: i32, end: i32) -> String {
-    if start == end {
-        start.to_string()
-    } else {
-        format!("{start}-{end}")
-    }
-}
-
-fn summarize_missing_segments(
-    start: i32,
-    end: i32,
-    present: &BTreeSet<i32>,
-    max_segments: usize,
-) -> (Vec<String>, u32, bool) {
-    let mut segments = Vec::new();
-    let mut missing_count = 0u32;
-    let mut missing_start: Option<i32> = None;
-    let mut missing_end = start;
-
-    for frame in start..=end {
-        if present.contains(&frame) {
-            if let Some(segment_start) = missing_start.take() {
-                missing_count += (missing_end - segment_start + 1) as u32;
-                if segments.len() < max_segments {
-                    segments.push(format_frame_segment(segment_start, missing_end));
-                }
-            }
-            continue;
-        }
-
-        if missing_start.is_none() {
-            missing_start = Some(frame);
-        }
-        missing_end = frame;
-    }
-
-    if let Some(segment_start) = missing_start {
-        missing_count += (missing_end - segment_start + 1) as u32;
-        if segments.len() < max_segments {
-            segments.push(format_frame_segment(segment_start, missing_end));
-        }
-    }
-
-    let missing_segments_truncated = missing_count > 0 && segments.len() == max_segments;
-    (segments, missing_count, missing_segments_truncated)
-}
-
-fn build_mp4_export_inspection(
-    output_path: &std::path::Path,
-    format: &str,
-    selected_start: Option<i32>,
-    selected_end: Option<i32>,
-) -> Mp4ExportInspection {
-    let all_frames = collect_rendered_frames(output_path, format, None, None);
-    let available_start = all_frames.first().map(|(frame, _)| *frame);
-    let available_end = all_frames.last().map(|(frame, _)| *frame);
-
-    let selected_frames = match (selected_start, selected_end) {
-        (Some(start), Some(end)) if start <= end => {
-            collect_rendered_frames(output_path, format, Some(start), Some(end))
-        }
-        _ => Vec::new(),
-    };
-    let present = selected_frames
-        .iter()
-        .map(|(frame, _)| *frame)
-        .collect::<BTreeSet<_>>();
-
-    let (missing_segments, missing_count, missing_segments_truncated) =
-        match (selected_start, selected_end) {
-            (Some(start), Some(end)) if start <= end => {
-                summarize_missing_segments(start, end, &present, 18)
-            }
-            _ => (Vec::new(), 0, false),
-        };
-
-    Mp4ExportInspection {
-        available_start,
-        available_end,
-        selected_start,
-        selected_end,
-        frame_count: selected_frames.len() as u32,
-        missing_count,
-        has_gaps: missing_count > 0,
-        missing_segments,
-        missing_segments_truncated,
-    }
 }
 
 /// Returns the number of rendered image files in the output directory.
@@ -505,45 +480,6 @@ pub fn get_last_rendered_frame(
 }
 
 #[tauri::command]
-pub fn inspect_mp4_export(
-    output_path: String,
-    format: String,
-    job_frame_start: i32,
-    job_frame_end: i32,
-    range_mode: String,
-    custom_start: Option<i32>,
-    custom_end: Option<i32>,
-) -> Result<Mp4ExportInspection, String> {
-    let path = PathBuf::from(output_path);
-    let selected_range = match range_mode.as_str() {
-        "job" => (Some(job_frame_start), Some(job_frame_end)),
-        "all" => {
-            let all_frames = collect_rendered_frames(&path, &format, None, None);
-            (
-                all_frames.first().map(|(frame, _)| *frame),
-                all_frames.last().map(|(frame, _)| *frame),
-            )
-        }
-        "custom" => {
-            let start = custom_start.ok_or_else(|| String::from("缺少自定义起始帧"))?;
-            let end = custom_end.ok_or_else(|| String::from("缺少自定义结束帧"))?;
-            if start > end {
-                return Err(String::from("自定义起始帧必须小于或等于结束帧"));
-            }
-            (Some(start), Some(end))
-        }
-        _ => return Err(String::from("无效的导出范围")),
-    };
-
-    Ok(build_mp4_export_inspection(
-        &path,
-        &format,
-        selected_range.0,
-        selected_range.1,
-    ))
-}
-
-#[tauri::command]
 pub fn validate_blend_file(path: String) -> Result<bool, String> {
     let p = PathBuf::from(&path);
     if !p.exists() {
@@ -581,491 +517,50 @@ pub async fn inspect_blend_file(
     inspect_project_with_timeout(
         &blender_path,
         &blend_path,
-        blend_inspect_timeout_seconds(&state),
+        blend_inspect_timeout_seconds(state.inner()),
     )
     .await
     .map_err(|error| error.to_string())
 }
 
-fn collect_sequence_frames(
-    output_path: &std::path::Path,
-    format: &str,
-    frame_start: i32,
-    frame_end: i32,
-) -> Vec<PathBuf> {
-    collect_rendered_frames(output_path, format, Some(frame_start), Some(frame_end))
-        .into_iter()
-        .map(|(_, path)| path)
-        .collect()
-}
-
-fn sanitize_file_name(value: &str) -> String {
-    let sanitized = value
-        .chars()
-        .map(|ch| match ch {
-            '<' | '>' | ':' | '"' | '/' | '\\' | '|' | '?' | '*' => '_',
-            c if c.is_control() => '_',
-            c if c.is_whitespace() => '_',
-            c => c,
-        })
-        .collect::<String>();
-
-    let sanitized = sanitized.trim_matches(|ch: char| ch == '_' || ch == '.' || ch == '-');
-    if sanitized.is_empty() {
-        String::from("render")
-    } else {
-        sanitized.to_string()
-    }
-}
-
-fn derive_mp4_path(
-    blend_file: &std::path::Path,
-    output_path: &std::path::Path,
-    frame_start: i32,
-    frame_end: i32,
-) -> PathBuf {
-    let dir = if output_path.is_dir() {
-        output_path.to_path_buf()
-    } else {
-        output_path
-            .parent()
-            .map(|parent| parent.to_path_buf())
-            .unwrap_or_else(|| PathBuf::from("."))
-    };
-
-    let base_name = sanitize_file_name(
-        blend_file
-            .file_stem()
-            .and_then(|name| name.to_str())
-            .unwrap_or("render"),
-    );
-    let timestamp = Local::now().format("%Y%m%d-%H%M%S");
-
-    dir.join(format!("{base_name}_{timestamp}_{frame_start}-{frame_end}.mp4"))
-}
-
-fn write_ffmpeg_concat_index(
-    index_path: &std::path::Path,
-    files: &[PathBuf],
-    fps: f32,
-) -> Result<(), String> {
-    if files.is_empty() {
-        return Err("No input frames found.".into());
-    }
-
-    let frame_duration = 1.0f64 / (fps.max(0.001) as f64);
-    let mut lines = String::new();
-
-    for file in files {
-        let escaped = file
-            .to_string_lossy()
-            .replace('\'', "\\'")
-            .replace('\n', "")
-            .replace('\r', "");
-        lines.push_str(&format!("file '{}'\n", escaped));
-        lines.push_str(&format!("duration {:.12}\n", frame_duration));
-    }
-
-    if let Some(last) = files.last() {
-        let escaped = last
-            .to_string_lossy()
-            .replace('\'', "\\'")
-            .replace('\n', "")
-            .replace('\r', "");
-        lines.push_str(&format!("file '{}'\n", escaped));
-    }
-
-    std::fs::write(index_path, lines).map_err(|error| error.to_string())
-}
-
-async fn emit_mp4_stream<R>(
-    reader: R,
-    app: tauri::AppHandle,
-    job_id: String,
-    log_file_path: std::path::PathBuf,
-    log_write_lock: std::sync::Arc<tokio::sync::Mutex<()>>,
-) -> Vec<String>
-where
-    R: tokio::io::AsyncRead + Unpin,
-{
-    let mut collected = Vec::new();
-    let mut lines = BufReader::new(reader).lines();
-
-    while let Ok(Some(line)) = lines.next_line().await {
-        let _ = app.emit(
-            "mp4-log",
-            Mp4LogEvent {
-                job_id: job_id.clone(),
-                line: line.clone(),
-            },
-        );
-        {
-            let _guard = log_write_lock.lock().await;
-            let _ = crate::app_paths::append_log_line(&log_file_path, &line);
-        }
-        collected.push(line);
-    }
-
-    collected
-}
-
-async fn emit_mp4_log_line(
-    app: &AppHandle,
-    job_id: &str,
-    log_file_path: &Path,
-    log_write_lock: &std::sync::Arc<tokio::sync::Mutex<()>>,
-    line: impl Into<String>,
-) {
-    let line = line.into();
-    let _ = app.emit(
-        "mp4-log",
-        Mp4LogEvent {
-            job_id: job_id.to_string(),
-            line: line.clone(),
-        },
-    );
-    let _guard = log_write_lock.lock().await;
-    let _ = crate::app_paths::append_log_line(log_file_path, &line);
-}
-
 #[tauri::command]
-pub async fn encode_sequence_to_mp4(
-    job_id: String,
-    blender_executable: String,
-    blend_file: String,
-    output_path: String,
-    format: String,
-    frame_start: i32,
-    frame_end: i32,
-    strict_contiguous: bool,
-    state: State<'_, AppState>,
-    app: tauri::AppHandle,
-) -> Result<Mp4ExportResult, String> {
-    let blender_path = PathBuf::from(&blender_executable);
-    if !blender_path.exists() {
-        return Err(format!(
-            "Blender executable not found: {blender_executable}"
-        ));
-    }
+pub fn inspect_folder_frames(
+    folder_path: String,
+    format_hint: Option<String>,
+) -> Result<FolderFramesInspection, String> {
+    let dir = PathBuf::from(&folder_path);
+    let folder_name = dir
+        .file_name()
+        .map(|name| name.to_string_lossy().to_string())
+        .unwrap_or_default();
 
-    if frame_start > frame_end {
-        return Err(String::from("frameStart must be <= frameEnd"));
-    }
+    let (frames, detected_format) = inspect_folder_frame_files(&dir, format_hint.as_deref())?;
 
-    let output_template = PathBuf::from(&output_path);
-    let inspection = build_mp4_export_inspection(
-        &output_template,
-        &format,
-        Some(frame_start),
-        Some(frame_end),
-    );
-    if strict_contiguous && inspection.has_gaps {
-        let details = if inspection.missing_segments.is_empty() {
-            String::new()
-        } else {
-            format!(" 缺失帧: {}", inspection.missing_segments.join(", "))
-        };
-        return Err(format!(
-            "检测到导出范围内存在缺帧（{} 帧缺失）。{}",
-            inspection.missing_count,
-            details.trim()
-        ));
-    }
-
-    let frames = collect_sequence_frames(&output_template, &format, frame_start, frame_end);
     if frames.is_empty() {
-        return Err("No rendered frames found in the output directory.".into());
+        return Ok(FolderFramesInspection {
+            detected_format: None,
+            frame_start: None,
+            frame_end: None,
+            frame_count: 0,
+            missing_count: 0,
+            has_gaps: false,
+            folder_name,
+        });
     }
 
-    let fps = if PathBuf::from(&blend_file).exists() {
-        inspect_project_with_timeout(
-            &blender_path,
-            &PathBuf::from(&blend_file),
-            blend_inspect_timeout_seconds(&state),
-        )
-            .await
-            .map(|settings| if settings.fps > 0.0 { settings.fps } else { 24.0 })
-            .unwrap_or(24.0)
-    } else {
-        24.0
-    };
+    let frame_start = frames.first().map(|frame| frame.frame).unwrap_or_default();
+    let frame_end = frames.last().map(|frame| frame.frame).unwrap_or_default();
+    let expected = (frame_end - frame_start + 1).max(0) as usize;
+    let actual = frames.len();
+    let missing_count = expected.saturating_sub(actual) as i32;
 
-    let app_settings = crate::commands::settings::get_settings(app.clone()).unwrap_or_default();
-    let configured_ffmpeg = if app_settings.ffmpeg_executable.trim().is_empty() {
-        None
-    } else {
-        Some(PathBuf::from(app_settings.ffmpeg_executable.trim()))
-    };
-
-    let ffmpeg_lookup =
-        crate::blender::ffmpeg::find_ffmpeg_executable(
-            Some(&app),
-            configured_ffmpeg.as_deref(),
-            &blender_path,
-        );
-    let ffmpeg_source = ffmpeg_lookup.source;
-    let ffmpeg_executable = match ffmpeg_lookup.executable {
-        Some(path) => path,
-        None => {
-            let message = if let Some(configured) = configured_ffmpeg.as_ref() {
-                format!(
-                    "未找到可用的 FFmpeg。当前设置路径不存在或不可用：{}。请前往设置页重新指定 FFmpeg 可执行文件。",
-                    configured.display()
-                )
-            } else {
-                String::from(
-                    "未找到可用的 FFmpeg。请前往设置页指定 FFmpeg 可执行文件。",
-                )
-            };
-            let _ = app.emit(
-                "mp4-log",
-                Mp4LogEvent {
-                    job_id: job_id.clone(),
-                    line: format!("[ffmpeg] {message}"),
-                },
-            );
-            return Err(message);
-        }
-    };
-
-    let output_video = derive_mp4_path(
-        &PathBuf::from(&blend_file),
-        &output_template,
-        frame_start,
-        frame_end,
-    );
-    let (job_number, resolved_job_id) = sqlx::query_as::<_, (i32, String)>("SELECT job_number, id FROM jobs WHERE id = ?")
-        .bind(&job_id)
-        .fetch_one(&state.pool)
-        .await
-        .map_err(|error| error.to_string())?;
-    let mp4_log_file_path = crate::app_paths::create_job_log_file(
-        job_number,
-        &resolved_job_id,
-        crate::app_paths::FFMPEG_LOG_KIND,
-    )
-    .map_err(|error| error.to_string())?;
-    let mp4_log_write_lock = std::sync::Arc::new(tokio::sync::Mutex::new(()));
-
-    if let Some(parent) = output_video.parent() {
-        std::fs::create_dir_all(parent).map_err(|error| error.to_string())?;
-    }
-
-    let temp_root = std::env::temp_dir().join(format!("sik-render-mp4-{}", uuid::Uuid::new_v4()));
-    std::fs::create_dir_all(&temp_root).map_err(|error| error.to_string())?;
-    let _temp_root_guard = TempDirGuard(temp_root.clone());
-    let concat_index_path = temp_root.join("ffmpeg-input.txt");
-    write_ffmpeg_concat_index(&concat_index_path, &frames, fps)?;
-
-    emit_mp4_log_line(
-        &app,
-        &job_id,
-        &mp4_log_file_path,
-        &mp4_log_write_lock,
-        format!("[ffmpeg] executable: {}", ffmpeg_executable.display()),
-    )
-    .await;
-    if let Some(source) = ffmpeg_source {
-        emit_mp4_log_line(
-            &app,
-            &job_id,
-            &mp4_log_file_path,
-            &mp4_log_write_lock,
-            format!("[ffmpeg] source: {source}"),
-        )
-        .await;
-    }
-    if let Some(configured) = configured_ffmpeg.as_ref() {
-        emit_mp4_log_line(
-            &app,
-            &job_id,
-            &mp4_log_file_path,
-            &mp4_log_write_lock,
-            format!("[ffmpeg] configured path: {}", configured.display()),
-        )
-        .await;
-    }
-    emit_mp4_log_line(
-        &app,
-        &job_id,
-        &mp4_log_file_path,
-        &mp4_log_write_lock,
-        format!("[ffmpeg] output: {}", output_video.display()),
-    )
-    .await;
-    emit_mp4_log_line(
-        &app,
-        &job_id,
-        &mp4_log_file_path,
-        &mp4_log_write_lock,
-        format!(
-            "[ffmpeg] target fps: {:.3} (FFmpeg input log may still show a default 25 fps stream)",
-            fps
-        ),
-    )
-    .await;
-
-    let mut child = crate::blender::ffmpeg::concat_to_mp4_command(
-        &ffmpeg_executable,
-        &concat_index_path,
-        fps,
-        &output_video,
-    )
-    .into_tokio_command();
-    child.stdout(std::process::Stdio::piped());
-    child.stderr(std::process::Stdio::piped());
-    #[cfg(any(target_os = "linux", target_os = "macos"))]
-    child.process_group(0);
-
-    let mut child = child
-        .spawn()
-        .map_err(|error| format!("Failed to launch ffmpeg: {error}"))?;
-
-    let stdout = child
-        .stdout
-        .take()
-        .ok_or_else(|| String::from("Failed to capture ffmpeg stdout"))?;
-    let stderr = child
-        .stderr
-        .take()
-        .ok_or_else(|| String::from("Failed to capture ffmpeg stderr"))?;
-
-    if let Some(pid) = child.id() {
-        state
-            .active_mp4_exports
-            .lock()
-            .await
-            .insert(job_id.clone(), pid);
-    }
-
-    let stdout_task = tokio::spawn(emit_mp4_stream(
-        stdout,
-        app.clone(),
-        job_id.clone(),
-        mp4_log_file_path.clone(),
-        mp4_log_write_lock.clone(),
-    ));
-    let stderr_task = tokio::spawn(emit_mp4_stream(
-        stderr,
-        app.clone(),
-        job_id.clone(),
-        mp4_log_file_path.clone(),
-        mp4_log_write_lock.clone(),
-    ));
-    let status = child
-        .wait()
-        .await
-        .map_err(|error| format!("Failed to wait for ffmpeg: {error}"))?;
-    state.active_mp4_exports.lock().await.remove(&job_id);
-    let was_cancelled = state.cancelled_mp4_exports.lock().await.remove(&job_id);
-
-    let mut output_lines = stdout_task.await.unwrap_or_default();
-    output_lines.extend(stderr_task.await.unwrap_or_default());
-
-    if was_cancelled {
-        let message = "MP4 export cancelled";
-        emit_mp4_log_line(
-            &app,
-            &job_id,
-            &mp4_log_file_path,
-            &mp4_log_write_lock,
-            format!("[ffmpeg] {message}"),
-        )
-        .await;
-        return Err(message.into());
-    }
-
-    if !status.success() {
-        let details = output_lines
-            .iter()
-            .rev()
-            .take(24)
-            .cloned()
-            .collect::<Vec<_>>()
-            .into_iter()
-            .rev()
-            .collect::<Vec<_>>()
-            .join("\n");
-        let message = format!("MP4 export failed: {details}");
-        emit_mp4_log_line(
-            &app,
-            &job_id,
-            &mp4_log_file_path,
-            &mp4_log_write_lock,
-            format!("[ffmpeg] {message}"),
-        )
-        .await;
-        return Err(message);
-    }
-
-    emit_mp4_log_line(
-        &app,
-        &job_id,
-        &mp4_log_file_path,
-        &mp4_log_write_lock,
-        format!(
-            "[ffmpeg] export completed: {} frames -> {} ({:.3} fps)",
-            frames.len(),
-            output_video.display(),
-            fps
-        ),
-    )
-    .await;
-
-    Ok(Mp4ExportResult {
-        output_path: output_video.to_string_lossy().to_string(),
-        fps,
-        frame_count: frames.len() as u32,
+    Ok(FolderFramesInspection {
+        detected_format,
+        frame_start: Some(frame_start),
+        frame_end: Some(frame_end),
+        frame_count: actual as i32,
+        missing_count,
+        has_gaps: missing_count > 0,
+        folder_name,
     })
-}
-
-#[tauri::command]
-pub async fn cancel_mp4_export(
-    job_id: String,
-    state: State<'_, AppState>,
-    app: tauri::AppHandle,
-) -> Result<(), String> {
-    let pid = {
-        let active = state.active_mp4_exports.lock().await;
-        active.get(&job_id).copied()
-    };
-
-    if let Some(pid) = pid {
-        state.cancelled_mp4_exports.lock().await.insert(job_id.clone());
-        let _ = app.emit(
-            "mp4-log",
-            Mp4LogEvent {
-                job_id: job_id.clone(),
-                line: "[ffmpeg] cancellation requested".into(),
-            },
-        );
-        if let Ok((job_number, resolved_job_id)) = sqlx::query_as::<_, (i32, String)>("SELECT job_number, id FROM jobs WHERE id = ?")
-            .bind(&job_id)
-            .fetch_one(&state.pool)
-            .await
-        {
-            if let Ok(path) = crate::app_paths::job_logs_dir(job_number, &resolved_job_id) {
-                let mut files = std::fs::read_dir(&path)
-                    .ok()
-                    .into_iter()
-                    .flatten()
-                    .filter_map(|entry| entry.ok())
-                    .map(|entry| entry.path())
-                    .filter(|path| {
-                        path.file_name()
-                            .and_then(|name| name.to_str())
-                            .map(|name| name.starts_with("ffmpeg-") && name.ends_with(".log"))
-                            .unwrap_or(false)
-                    })
-                    .collect::<Vec<_>>();
-                files.sort();
-                if let Some(last) = files.last() {
-                    let _ = crate::app_paths::append_log_line(last, "[ffmpeg] cancellation requested");
-                }
-            }
-        }
-        let _ = AppState::kill_process_tree(pid);
-    }
-
-    Ok(())
 }

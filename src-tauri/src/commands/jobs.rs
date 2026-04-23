@@ -11,6 +11,9 @@ use tauri::{AppHandle, Emitter, State};
 #[derive(Deserialize)]
 pub struct AddJobPayload {
     pub name: String,
+    pub note: Option<String>,
+    pub auto_transcode_mp4: bool,
+    pub fps: Option<f32>,
     pub blend_file: String,
     pub blender_executable: String,
     pub output_path: String,
@@ -26,6 +29,30 @@ pub struct AddJobPayload {
     pub priority: i32,
 }
 
+#[derive(Deserialize)]
+pub struct UpdateJobMetadataPayload {
+    pub id: String,
+    pub name: String,
+    pub note: Option<String>,
+}
+
+#[derive(Deserialize)]
+pub struct UpdateJobTranscodeSettingsPayload {
+    pub id: String,
+    pub auto_transcode_mp4: bool,
+    pub transcode_name_override: Option<String>,
+    pub transcode_fps_override: Option<f32>,
+    pub transcode_output_path_override: Option<String>,
+    pub transcode_crf_override: Option<u32>,
+    pub transcode_preset_override: Option<String>,
+}
+
+#[derive(Deserialize)]
+pub struct UpdateJobFpsPayload {
+    pub id: String,
+    pub fps: f32,
+}
+
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct JobLogSummary {
@@ -35,10 +62,11 @@ pub struct JobLogSummary {
     pub total_count: usize,
 }
 
-#[derive(Serialize)]
+#[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct QueueState {
     pub paused: bool,
+    pub paused_job: Option<String>,
 }
 
 async fn append_manual_cancel_log(
@@ -79,6 +107,15 @@ async fn fetch_jobs(pool: &sqlx::SqlitePool) -> Result<Vec<RenderJob>, sqlx::Err
             id,
             job_number,
             name,
+            note,
+            crash_count,
+            auto_transcode_mp4,
+            transcode_name_override,
+            transcode_fps_override,
+            transcode_output_path_override,
+            transcode_crf_override,
+            transcode_preset_override,
+            fps,
             blend_file,
             blender_exec,
             output_path,
@@ -99,29 +136,7 @@ async fn fetch_jobs(pool: &sqlx::SqlitePool) -> Result<Vec<RenderJob>, sqlx::Err
             time_elapsed,
             remaining_secs
         FROM jobs
-        ORDER BY
-            CASE status
-                WHEN 'running' THEN 0
-                WHEN 'pending' THEN 1
-                WHEN 'failed' THEN 2
-                WHEN 'cancelled' THEN 2
-                WHEN 'interrupted' THEN 2
-                WHEN 'done' THEN 3
-                ELSE 4
-            END,
-            CASE
-                WHEN status = 'running' THEN COALESCE(started_at, created_at)
-            END DESC,
-            CASE
-                WHEN status IN ('failed', 'cancelled', 'interrupted') THEN COALESCE(finished_at, created_at)
-            END DESC,
-            CASE
-                WHEN status = 'done' THEN COALESCE(finished_at, created_at)
-            END DESC,
-            CASE
-                WHEN status = 'pending' THEN priority
-            END ASC,
-            created_at DESC
+        ORDER BY priority ASC, created_at ASC
         "#,
     )
     .fetch_all(pool)
@@ -134,10 +149,29 @@ where
     E: sqlx::Executor<'e, Database = sqlx::Sqlite>,
 {
     let next = sqlx::query_scalar::<_, i32>("SELECT COALESCE(MAX(priority), 0) + 1 FROM jobs")
-    .fetch_one(executor)
-    .await?;
+        .fetch_one(executor)
+        .await?;
 
     Ok(next.max(1))
+}
+
+fn normalize_optional_text(value: Option<String>) -> Option<String> {
+    value.and_then(|text| {
+        let trimmed = text.trim();
+        if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed.to_string())
+        }
+    })
+}
+
+fn normalize_optional_positive_f32(value: Option<f32>, field_name: &str) -> Result<Option<f32>, String> {
+    match value {
+        Some(current) if current > 0.0 => Ok(Some(current)),
+        Some(_) => Err(format!("{field_name} must be greater than 0")),
+        None => Ok(None),
+    }
 }
 
 #[tauri::command]
@@ -146,23 +180,113 @@ pub async fn list_jobs(state: State<'_, AppState>) -> Result<Vec<RenderJob>, Str
 }
 
 #[tauri::command]
-pub fn get_queue_state(state: State<'_, AppState>) -> Result<QueueState, String> {
+pub async fn get_queue_state(state: State<'_, AppState>) -> Result<QueueState, String> {
+    let paused_job = state.paused_job_id.lock().await.clone();
     Ok(QueueState {
         paused: state.is_queue_paused(),
+        paused_job,
     })
 }
 
 #[tauri::command]
-pub fn start_queue(state: State<'_, AppState>) -> Result<QueueState, String> {
+pub async fn start_queue(
+    state: State<'_, AppState>,
+    app: tauri::AppHandle,
+) -> Result<QueueState, String> {
     state.set_queue_paused(false);
+
+    let paused_id = state.paused_job_id.lock().await.take();
+
+    if let Some(job_id) = &paused_id {
+        let status = sqlx::query_scalar::<_, crate::queue::job::JobStatus>(
+            "SELECT status FROM jobs WHERE id = ?",
+        )
+        .bind(job_id)
+        .fetch_optional(&state.pool)
+        .await
+        .unwrap_or(None);
+
+        if matches!(status, Some(crate::queue::job::JobStatus::Interrupted)) {
+            let _ = sqlx::query(
+                "UPDATE jobs \
+                 SET status = 'pending', \
+                     started_at = NULL, \
+                     finished_at = NULL, \
+                     resume_from_existing = 1, \
+                     crash_count = 0, \
+                     time_elapsed = NULL, \
+                     remaining_secs = NULL \
+                 WHERE id = ?",
+            )
+            .bind(job_id)
+            .execute(&state.pool)
+            .await;
+
+            if let Ok(job) = crate::queue::scheduler::load_job(&state.pool, job_id).await {
+                crate::queue::scheduler::emit_job_update(&app, &job);
+            }
+        }
+    }
+
     state.scheduler_notify.notify_one();
-    Ok(QueueState { paused: false })
+    scheduler::emit_queue_state_full(&app, false, None);
+    Ok(QueueState {
+        paused: false,
+        paused_job: None,
+    })
 }
 
 #[tauri::command]
-pub fn pause_queue(state: State<'_, AppState>) -> Result<QueueState, String> {
+pub async fn pause_queue(
+    state: State<'_, AppState>,
+    app: tauri::AppHandle,
+) -> Result<QueueState, String> {
+    let pause_line = "[paused] Reason: user paused the queue. The render was stopped mid-job. \
+        Progress is preserved; the job will auto-resume from the last recorded frame when the \
+        queue is started again.";
+
     state.set_queue_paused(true);
-    Ok(QueueState { paused: true })
+
+    let running = {
+        let active = state.active_jobs.lock().await;
+        active.iter().map(|(id, pid)| (id.clone(), *pid)).next()
+    };
+
+    let paused_id = if let Some((job_id, pid)) = running {
+        state.interrupted_jobs.lock().await.insert(job_id.clone());
+
+        let _ = sqlx::query(
+            "UPDATE jobs \
+             SET status = 'interrupted', \
+                 finished_at = ?, \
+                 resume_from_existing = 1 \
+             WHERE id = ? AND status = 'running'",
+        )
+        .bind(chrono::Utc::now().timestamp_millis())
+        .bind(&job_id)
+        .execute(&state.pool)
+        .await;
+
+        let _ = append_manual_cancel_log(&app, &state, &job_id, pause_line).await;
+
+        if let Ok(job) = crate::queue::scheduler::load_job(&state.pool, &job_id).await {
+            crate::queue::scheduler::emit_job_update(&app, &job);
+        }
+
+        let _ = AppState::kill_process_tree(pid);
+
+        Some(job_id)
+    } else {
+        None
+    };
+
+    *state.paused_job_id.lock().await = paused_id.clone();
+
+    scheduler::emit_queue_state_full(&app, true, paused_id.clone());
+    Ok(QueueState {
+        paused: true,
+        paused_job: paused_id,
+    })
 }
 
 #[tauri::command]
@@ -186,6 +310,9 @@ pub async fn add_job(
         payload.resume_from_existing,
         payload.priority,
     );
+    job.note = normalize_optional_text(payload.note);
+    job.auto_transcode_mp4 = payload.auto_transcode_mp4;
+    job.fps = payload.fps.filter(|value| *value > 0.0);
     job.preview_width = payload.preview_width;
     job.preview_height = payload.preview_height;
     if payload.resume_from_existing {
@@ -219,6 +346,15 @@ pub async fn add_job(
             id,
             job_number,
             name,
+            note,
+            crash_count,
+            auto_transcode_mp4,
+            transcode_name_override,
+            transcode_fps_override,
+            transcode_output_path_override,
+            transcode_crf_override,
+            transcode_preset_override,
+            fps,
             blend_file,
             blender_exec,
             output_path,
@@ -238,12 +374,25 @@ pub async fn add_job(
             last_rendered_frame,
             time_elapsed,
             remaining_secs
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         "#,
     )
     .bind(&job.id)
     .bind(job.job_number)
     .bind(&job.name)
+    .bind(&job.note)
+    .bind(job.crash_count)
+    .bind(job.auto_transcode_mp4)
+    .bind(&job.transcode_name_override)
+    .bind(job.transcode_fps_override)
+    .bind(
+        job.transcode_output_path_override
+            .as_ref()
+            .map(|value| value.to_string_lossy().to_string()),
+    )
+    .bind(job.transcode_crf_override)
+    .bind(&job.transcode_preset_override)
+    .bind(job.fps)
     .bind(job.blend_file.to_string_lossy().to_string())
     .bind(job.blender_executable.to_string_lossy().to_string())
     .bind(job.output_path.to_string_lossy().to_string())
@@ -270,8 +419,119 @@ pub async fn add_job(
     tx.commit().await.map_err(|error| error.to_string())?;
 
     scheduler::emit_job_update(&app, &job);
-    state.scheduler_notify.notify_one();
 
+    Ok(job)
+}
+
+#[tauri::command]
+pub async fn update_job_metadata(
+    payload: UpdateJobMetadataPayload,
+    state: State<'_, AppState>,
+    app: tauri::AppHandle,
+) -> Result<RenderJob, String> {
+    let name = payload.name.trim();
+    if name.is_empty() {
+        return Err("name cannot be empty".into());
+    }
+
+    let rows_affected = sqlx::query("UPDATE jobs SET name = ?, note = ? WHERE id = ?")
+        .bind(name)
+        .bind(normalize_optional_text(payload.note))
+        .bind(&payload.id)
+        .execute(&state.pool)
+        .await
+        .map_err(|error| error.to_string())?
+        .rows_affected();
+
+    if rows_affected == 0 {
+        return Err(format!("job {} was not found", payload.id));
+    }
+
+    let job = scheduler::load_job(&state.pool, &payload.id)
+        .await
+        .map_err(|error| error.to_string())?;
+    scheduler::emit_job_update(&app, &job);
+    Ok(job)
+}
+
+#[tauri::command]
+pub async fn update_job_transcode_settings(
+    payload: UpdateJobTranscodeSettingsPayload,
+    state: State<'_, AppState>,
+    app: tauri::AppHandle,
+) -> Result<RenderJob, String> {
+    let transcode_name_override = normalize_optional_text(payload.transcode_name_override);
+    let transcode_output_path_override =
+        normalize_optional_text(payload.transcode_output_path_override);
+    let transcode_preset_override = payload
+        .transcode_preset_override
+        .map(|value| crate::commands::transcode::normalize_preset(value.trim()))
+        .filter(|value| !value.is_empty());
+    let transcode_fps_override =
+        normalize_optional_positive_f32(payload.transcode_fps_override, "transcode_fps_override")?;
+    let transcode_crf_override = payload
+        .transcode_crf_override
+        .map(|value| value.min(51) as i32);
+
+    let rows_affected = sqlx::query(
+        "UPDATE jobs
+         SET auto_transcode_mp4 = ?,
+             transcode_name_override = ?,
+             transcode_fps_override = ?,
+             transcode_output_path_override = ?,
+             transcode_crf_override = ?,
+             transcode_preset_override = ?
+         WHERE id = ?",
+    )
+        .bind(payload.auto_transcode_mp4)
+        .bind(transcode_name_override)
+        .bind(transcode_fps_override)
+        .bind(transcode_output_path_override)
+        .bind(transcode_crf_override)
+        .bind(transcode_preset_override)
+        .bind(&payload.id)
+        .execute(&state.pool)
+        .await
+        .map_err(|error| error.to_string())?
+        .rows_affected();
+
+    if rows_affected == 0 {
+        return Err(format!("job {} was not found", payload.id));
+    }
+
+    let job = scheduler::load_job(&state.pool, &payload.id)
+        .await
+        .map_err(|error| error.to_string())?;
+    scheduler::emit_job_update(&app, &job);
+    Ok(job)
+}
+
+#[tauri::command]
+pub async fn update_job_fps(
+    payload: UpdateJobFpsPayload,
+    state: State<'_, AppState>,
+    app: tauri::AppHandle,
+) -> Result<RenderJob, String> {
+    if payload.fps <= 0.0 {
+        return Err("fps must be greater than 0".into());
+    }
+
+    let rows_affected = sqlx::query("UPDATE jobs SET fps = ? WHERE id = ?")
+        .bind(payload.fps)
+        .bind(&payload.id)
+        .execute(&state.pool)
+        .await
+        .map_err(|error| error.to_string())?
+        .rows_affected();
+
+    if rows_affected == 0 {
+        return Err(format!("job {} was not found", payload.id));
+    }
+
+    let job = scheduler::load_job(&state.pool, &payload.id)
+        .await
+        .map_err(|error| error.to_string())?;
+    scheduler::emit_job_update(&app, &job);
     Ok(job)
 }
 
@@ -281,7 +541,6 @@ pub async fn update_job_preview_dimensions(
     width: i32,
     height: i32,
     state: State<'_, AppState>,
-    app: tauri::AppHandle,
 ) -> Result<RenderJob, String> {
     if width <= 0 || height <= 0 {
         return Err("preview dimensions must be positive".into());
@@ -295,11 +554,9 @@ pub async fn update_job_preview_dimensions(
         .await
         .map_err(|error| error.to_string())?;
 
-    let job = scheduler::load_job(&state.pool, &id)
+    scheduler::load_job(&state.pool, &id)
         .await
-        .map_err(|error| error.to_string())?;
-    scheduler::emit_job_update(&app, &job);
-    Ok(job)
+        .map_err(|error| error.to_string())
 }
 
 #[tauri::command]
@@ -433,36 +690,6 @@ pub async fn get_job_latest_logs(
 }
 
 #[tauri::command]
-pub async fn get_job_mp4_logs(
-    job_id: String,
-    state: State<'_, AppState>,
-) -> Result<Vec<String>, String> {
-    let (job_number, job_id) = sqlx::query_as::<_, (i32, String)>("SELECT job_number, id FROM jobs WHERE id = ?")
-        .bind(&job_id)
-        .fetch_one(&state.pool)
-        .await
-        .map_err(|e| e.to_string())?;
-
-    crate::app_paths::read_job_log_lines(job_number, &job_id, crate::app_paths::FFMPEG_LOG_KIND)
-        .map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-pub async fn get_job_latest_mp4_logs(
-    job_id: String,
-    state: State<'_, AppState>,
-) -> Result<Vec<String>, String> {
-    let (job_number, job_id) = sqlx::query_as::<_, (i32, String)>("SELECT job_number, id FROM jobs WHERE id = ?")
-        .bind(&job_id)
-        .fetch_one(&state.pool)
-        .await
-        .map_err(|e| e.to_string())?;
-
-    crate::app_paths::read_latest_job_log_lines(job_number, &job_id, crate::app_paths::FFMPEG_LOG_KIND)
-        .map_err(|e| e.to_string())
-}
-
-#[tauri::command]
 pub async fn get_job_log_summary(
     job_id: String,
     state: State<'_, AppState>,
@@ -526,13 +753,6 @@ pub async fn reset_job(
         target_frame_start != current_frame_start || target_frame_end != current_frame_end;
     let preserve_progress = resume_from_existing && !range_changed && status != JobStatus::Done;
     let mut tx = state.pool.begin().await.map_err(|e| e.to_string())?;
-    let next_priority = if status == JobStatus::Done {
-        next_queue_priority(&mut *tx)
-            .await
-            .map_err(|e| e.to_string())?
-    } else {
-        current_priority
-    };
 
     sqlx::query(
         "UPDATE jobs SET status = 'pending', started_at = NULL, finished_at = NULL, \
@@ -540,13 +760,13 @@ pub async fn reset_job(
            current_frame = CASE WHEN ? THEN current_frame ELSE NULL END, \
            total_frames = CASE WHEN ? THEN total_frames ELSE NULL END, \
            last_rendered_frame = CASE WHEN ? THEN last_rendered_frame ELSE NULL END, \
-           time_elapsed = NULL, remaining_secs = NULL \
+           crash_count = 0, time_elapsed = NULL, remaining_secs = NULL \
            WHERE id = ?",
     )
     .bind(target_frame_start)
     .bind(target_frame_end)
     .bind(resume_from_existing)
-    .bind(next_priority)
+    .bind(current_priority)
     .bind(preserve_progress)
     .bind(preserve_progress)
     .bind(preserve_progress)

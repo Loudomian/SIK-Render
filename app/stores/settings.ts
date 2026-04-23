@@ -7,9 +7,13 @@ export const useSettingsStore = defineStore('settings', () => {
     defaultBlender: '',
     ffmpegExecutable: '',
     blendInspectTimeoutSeconds: 30,
+    transcodeCrf: 18,
+    transcodePreset: 'medium',
+    ffmpegMaxConcurrent: 2,
     theme: 'dark',
     extraBlenderPaths: [],
     excludedBlenderPaths: [],
+    maxCrashRetries: 3,
   })
   const blenderVersions = ref<BlenderInstall[]>([])
   const { getSettings, saveSettings, addBlenderByPath, getBlenderVersions } = useTauri()
@@ -25,14 +29,20 @@ export const useSettingsStore = defineStore('settings', () => {
 
   async function load() {
     const loaded = await getSettings()
-    settings.value = { extraBlenderPaths: [], excludedBlenderPaths: [], ...loaded }
+    settings.value = {
+      ...settings.value,
+      ...loaded,
+      extraBlenderPaths: loaded.extraBlenderPaths ?? [],
+      excludedBlenderPaths: loaded.excludedBlenderPaths ?? [],
+    }
     blenderVersions.value = mergeInstalls(await getBlenderVersions())
   }
 
   async function refreshBlenderVersions() {
     blenderVersions.value = mergeInstalls(await getBlenderVersions())
-    if (!settings.value.defaultBlender && blenderVersions.value.length > 0) {
-      settings.value.defaultBlender = blenderVersions.value[0].executable
+    const firstBlender = blenderVersions.value[0]
+    if (!settings.value.defaultBlender && firstBlender) {
+      settings.value.defaultBlender = firstBlender.executable
     }
   }
 
@@ -97,6 +107,12 @@ export const useSettingsStore = defineStore('settings', () => {
     await saveSettings(settings.value)
   }
 
+  async function setDefaultBlender(executable: string) {
+    if (settings.value.defaultBlender === executable) return
+    settings.value.defaultBlender = executable
+    await saveSettings(settings.value)
+  }
+
   async function save() {
     await saveSettings(settings.value)
   }
@@ -110,6 +126,7 @@ export const useSettingsStore = defineStore('settings', () => {
     browseAndSetFfmpeg,
     clearFfmpeg,
     removeBlenderVersion,
+    setDefaultBlender,
     save,
   }
 })

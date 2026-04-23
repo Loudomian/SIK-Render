@@ -9,11 +9,19 @@ pub struct AppSettings {
     #[serde(default)]
     pub ffmpeg_executable: String,
     pub blend_inspect_timeout_seconds: u64,
+    #[serde(default = "default_transcode_crf")]
+    pub transcode_crf: u32,
+    #[serde(default = "default_transcode_preset")]
+    pub transcode_preset: String,
+    #[serde(default = "default_ffmpeg_max_concurrent")]
+    pub ffmpeg_max_concurrent: u32,
     pub theme: String,
     #[serde(default)]
     pub extra_blender_paths: Vec<String>,
     #[serde(default)]
     pub excluded_blender_paths: Vec<String>,
+    #[serde(default = "default_max_crash_retries")]
+    pub max_crash_retries: u32,
 }
 
 impl Default for AppSettings {
@@ -22,9 +30,13 @@ impl Default for AppSettings {
             default_blender: String::new(),
             ffmpeg_executable: String::new(),
             blend_inspect_timeout_seconds: default_blend_inspect_timeout_seconds(),
+            transcode_crf: default_transcode_crf(),
+            transcode_preset: default_transcode_preset(),
+            ffmpeg_max_concurrent: default_ffmpeg_max_concurrent(),
             theme: "dark".into(),
             extra_blender_paths: Vec::new(),
             excluded_blender_paths: Vec::new(),
+            max_crash_retries: default_max_crash_retries(),
         }
     }
 }
@@ -47,6 +59,14 @@ struct ToolsSettings {
     ffmpeg_executable: String,
     #[serde(default = "default_blend_inspect_timeout_seconds")]
     blend_inspect_timeout_seconds: u64,
+    #[serde(default = "default_transcode_crf")]
+    transcode_crf: u32,
+    #[serde(default = "default_transcode_preset")]
+    transcode_preset: String,
+    #[serde(default = "default_ffmpeg_max_concurrent")]
+    ffmpeg_max_concurrent: u32,
+    #[serde(default = "default_max_crash_retries")]
+    max_crash_retries: u32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -82,6 +102,22 @@ fn default_blend_inspect_timeout_seconds() -> u64 {
     30
 }
 
+fn default_max_crash_retries() -> u32 {
+    3
+}
+
+fn default_transcode_crf() -> u32 {
+    18
+}
+
+fn default_transcode_preset() -> String {
+    String::from("medium")
+}
+
+fn default_ffmpeg_max_concurrent() -> u32 {
+    2
+}
+
 fn default_theme() -> String {
     String::from("dark")
 }
@@ -97,6 +133,22 @@ fn normalize_blend_inspect_timeout_seconds(seconds: u64) -> u64 {
     seconds.clamp(5, 600)
 }
 
+fn normalize_max_crash_retries(retries: u32) -> u32 {
+    retries.min(10)
+}
+
+fn normalize_ffmpeg_max_concurrent(value: u32) -> u32 {
+    value.clamp(1, 8)
+}
+
+fn normalize_preset(preset: &str) -> String {
+    match preset {
+        "ultrafast" | "superfast" | "veryfast" | "faster" | "fast" | "medium" | "slow"
+        | "slower" | "veryslow" => preset.to_string(),
+        _ => default_transcode_preset(),
+    }
+}
+
 impl From<SettingsFile> for AppSettings {
     fn from(value: SettingsFile) -> Self {
         Self {
@@ -105,9 +157,15 @@ impl From<SettingsFile> for AppSettings {
             blend_inspect_timeout_seconds: normalize_blend_inspect_timeout_seconds(
                 value.tools.blend_inspect_timeout_seconds,
             ),
+            transcode_crf: value.tools.transcode_crf.min(51),
+            transcode_preset: normalize_preset(&value.tools.transcode_preset),
+            ffmpeg_max_concurrent: normalize_ffmpeg_max_concurrent(
+                value.tools.ffmpeg_max_concurrent,
+            ),
             theme: normalize_theme(value.ui.theme),
             extra_blender_paths: value.blender.extra_blender_paths,
             excluded_blender_paths: value.blender.excluded_blender_paths,
+            max_crash_retries: normalize_max_crash_retries(value.tools.max_crash_retries),
         }
     }
 }
@@ -121,6 +179,12 @@ impl From<AppSettings> for SettingsFile {
                 blend_inspect_timeout_seconds: normalize_blend_inspect_timeout_seconds(
                     value.blend_inspect_timeout_seconds,
                 ),
+                transcode_crf: value.transcode_crf.min(51),
+                transcode_preset: value.transcode_preset.clone(),
+                ffmpeg_max_concurrent: normalize_ffmpeg_max_concurrent(
+                    value.ffmpeg_max_concurrent,
+                ),
+                max_crash_retries: normalize_max_crash_retries(value.max_crash_retries),
             },
             ui: UiSettings { theme: value.theme },
             blender: BlenderSettings {
@@ -238,6 +302,11 @@ pub fn save_settings(app: AppHandle, settings: AppSettings) -> Result<(), String
     settings.theme = normalize_theme(settings.theme);
     settings.blend_inspect_timeout_seconds =
         normalize_blend_inspect_timeout_seconds(settings.blend_inspect_timeout_seconds);
+    settings.transcode_crf = settings.transcode_crf.min(51);
+    settings.transcode_preset = normalize_preset(&settings.transcode_preset);
+    settings.ffmpeg_max_concurrent =
+        normalize_ffmpeg_max_concurrent(settings.ffmpeg_max_concurrent);
+    settings.max_crash_retries = normalize_max_crash_retries(settings.max_crash_retries);
     let content = toml::to_string_pretty(&SettingsFile::from(settings.clone()))
         .map_err(|error| error.to_string())?;
     let tmp_path = path.with_extension("toml.tmp");

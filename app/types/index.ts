@@ -8,6 +8,15 @@ export interface RenderJob {
   id: string
   jobNumber: number
   name: string
+  note: string | null
+  crashCount: number
+  autoTranscodeMp4: boolean
+  transcodeNameOverride: string | null
+  transcodeFpsOverride: number | null
+  transcodeOutputPathOverride: string | null
+  transcodeCrfOverride: number | null
+  transcodePresetOverride: string | null
+  fps?: number | null
   blendFile: string
   blenderExecutable: string
   outputPath: string
@@ -31,6 +40,9 @@ export interface RenderJob {
 
 export interface AddJobPayload {
   name: string
+  note?: string | null
+  auto_transcode_mp4: boolean
+  fps?: number | null
   blend_file: string
   blender_executable: string
   output_path: string
@@ -65,9 +77,89 @@ export interface RenderLogEvent {
   line: string
 }
 
-export interface Mp4LogEvent {
+export type FfmpegJobStatus = 'pending' | 'running' | 'done' | 'failed' | 'cancelled'
+export type FfmpegJobSourceType = 'blender_job' | 'folder'
+
+export interface FfmpegJob {
+  id: string
+  jobNumber: number
+  name: string
+  sourceType: FfmpegJobSourceType
+  sourceBlenderJobId: string | null
+  inputPath: string
+  frameStart: number
+  frameEnd: number
+  fps: number
+  outputPath: string
+  crf: number
+  preset: string
+  status: FfmpegJobStatus
+  priority: number
+  createdAt: number
+  startedAt: number | null
+  finishedAt: number | null
+  progressFrame: number | null
+  totalFrames: number | null
+  outputSizeBytes: number | null
+  outputDurationSecs: number | null
+}
+
+export interface AddFfmpegJobPayload {
+  name: string
+  source_type: 'blender_job' | 'folder'
+  source_blender_job_id?: string | null
+  input_path: string
+  frame_start: number
+  frame_end: number
+  fps: number
+  output_path: string
+  crf: number
+  preset: string
+}
+
+export interface RenderJobTranscodeConfig {
+  name: string
+  fps: number
+  outputPath: string
+  outputDir: string
+  outputStem: string
+  crf: number
+  preset: string
+}
+
+export interface TranscodeProgressEvent {
+  jobId: string
+  frame: number
+  totalFrames: number
+  encodeSpeed: number | null
+}
+
+export interface TranscodeLogEvent {
   jobId: string
   line: string
+}
+
+export interface FfmpegJobUpdatedEvent {
+  job: FfmpegJob
+}
+
+export interface FolderFramesInspection {
+  detectedFormat: string | null
+  frameStart: number | null
+  frameEnd: number | null
+  frameCount: number
+  missingCount: number
+  hasGaps: boolean
+  folderName: string
+}
+
+export interface FolderFrameGroup {
+  name: string
+  inputPath: string
+  frameStart: number
+  frameEnd: number
+  frameCount: number
+  detectedFormat: string
 }
 
 export interface JobLogSummary {
@@ -79,6 +171,7 @@ export interface JobLogSummary {
 
 export interface QueueState {
   paused: boolean
+  pausedJob: string | null
 }
 
 export interface BlenderInstall {
@@ -104,26 +197,6 @@ export interface BlendProjectSettings {
   fps: number
 }
 
-export interface Mp4ExportResult {
-  outputPath: string
-  fps: number
-  frameCount: number
-}
-
-export type Mp4RangeMode = 'job' | 'all' | 'custom'
-
-export interface Mp4ExportInspection {
-  availableStart: number | null
-  availableEnd: number | null
-  selectedStart: number | null
-  selectedEnd: number | null
-  frameCount: number
-  missingCount: number
-  hasGaps: boolean
-  missingSegments: string[]
-  missingSegmentsTruncated: boolean
-}
-
 export interface RenderedFramesStatus {
   frameCount: number
   lastFrame: number | null
@@ -134,7 +207,11 @@ export interface AppSettings {
   defaultBlender: string
   ffmpegExecutable: string
   blendInspectTimeoutSeconds: number
+  transcodeCrf: number
+  transcodePreset: string
+  ffmpegMaxConcurrent: number
   theme: 'dark' | 'light'
   extraBlenderPaths: string[]
   excludedBlenderPaths: string[]
+  maxCrashRetries: number
 }

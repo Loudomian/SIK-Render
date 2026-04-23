@@ -1,5 +1,13 @@
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
-import type { JobUpdatedEvent, RenderLogEvent, RenderProgressEvent } from '~/types'
+import type {
+  FfmpegJobUpdatedEvent,
+  JobUpdatedEvent,
+  QueueState,
+  RenderLogEvent,
+  RenderProgressEvent,
+  TranscodeLogEvent,
+  TranscodeProgressEvent,
+} from '~/types'
 
 export const useRenderEvents = () => {
   const onProgress = async (
@@ -26,5 +34,45 @@ export const useRenderEvents = () => {
     })
   }
 
-  return { onProgress, onJobUpdated, onLog }
+  const onQueueState = async (
+    handler: (event: QueueState) => void,
+  ): Promise<UnlistenFn> => {
+    return listen<QueueState>('queue-state', (e) => {
+      handler(e.payload)
+    })
+  }
+
+  const onTranscodeProgress = async (
+    handler: (event: TranscodeProgressEvent) => void,
+  ): Promise<UnlistenFn> => {
+    return listen<TranscodeProgressEvent>('transcode-progress', (e) => {
+      handler(e.payload)
+    })
+  }
+
+  const onTranscodeLog = async (
+    handler: (event: TranscodeLogEvent) => void,
+  ): Promise<UnlistenFn> => {
+    return listen<TranscodeLogEvent>('transcode-log', (e) => {
+      handler(e.payload)
+    })
+  }
+
+  const onFfmpegJobUpdated = async (
+    handler: (event: FfmpegJobUpdatedEvent) => void,
+  ): Promise<UnlistenFn> => {
+    return listen<FfmpegJobUpdatedEvent>('ffmpeg-job-updated', (e) => {
+      handler(e.payload)
+    })
+  }
+
+  return {
+    onProgress,
+    onJobUpdated,
+    onLog,
+    onQueueState,
+    onTranscodeProgress,
+    onTranscodeLog,
+    onFfmpegJobUpdated,
+  }
 }

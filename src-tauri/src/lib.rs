@@ -30,6 +30,12 @@ pub fn run() {
                 .inner()
                 .clone();
             queue::scheduler::start(app_handle, state);
+            let app_handle = app.handle().clone();
+            let state = app_handle
+                .state::<state::AppState>()
+                .inner()
+                .clone();
+            queue::transcode_scheduler::start(app_handle, state);
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -38,13 +44,14 @@ pub fn run() {
             commands::jobs::start_queue,
             commands::jobs::pause_queue,
             commands::jobs::add_job,
+            commands::jobs::update_job_metadata,
+            commands::jobs::update_job_transcode_settings,
             commands::jobs::remove_job,
             commands::jobs::cancel_job,
             commands::jobs::reorder_job,
+            commands::jobs::update_job_fps,
             commands::jobs::get_job_logs,
             commands::jobs::get_job_latest_logs,
-            commands::jobs::get_job_mp4_logs,
-            commands::jobs::get_job_latest_mp4_logs,
             commands::jobs::get_job_log_summary,
             commands::jobs::reset_job,
             commands::jobs::update_job_preview_dimensions,
@@ -54,14 +61,21 @@ pub fn run() {
             commands::blender::has_output_files,
             commands::blender::count_rendered_frames,
             commands::blender::inspect_rendered_frames,
-            commands::blender::inspect_mp4_export,
             commands::blender::open_path,
             commands::blender::validate_blend_file,
             commands::blender::inspect_blend_file,
             commands::blender::clear_rendered_frames,
             commands::blender::get_last_rendered_frame,
-            commands::blender::encode_sequence_to_mp4,
-            commands::blender::cancel_mp4_export,
+            commands::blender::inspect_folder_frames,
+            commands::transcode::list_ffmpeg_jobs,
+            commands::transcode::get_ffmpeg_job,
+            commands::transcode::add_ffmpeg_job,
+            commands::transcode::cancel_ffmpeg_job,
+            commands::transcode::delete_ffmpeg_job,
+            commands::transcode::reorder_ffmpeg_jobs,
+            commands::transcode::get_ffmpeg_job_logs,
+            commands::transcode::get_ffmpeg_job_latest_logs,
+            commands::transcode::scan_folder_frame_groups,
             commands::settings::get_settings,
             commands::settings::save_settings,
         ])

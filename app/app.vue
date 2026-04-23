@@ -44,7 +44,8 @@ import appIconUrl from '~/assets/app-icon.png'
 
 const jobsStore = useJobsStore()
 const settingsStore = useSettingsStore()
-const { onProgress, onJobUpdated, onLog } = useRenderEvents()
+const { onProgress, onJobUpdated, onLog, onQueueState } = useRenderEvents()
+const CONTEXT_MENU_ALLOW_SELECTOR = '[data-context-menu]'
 
 const navItems = computed(() => [
   {
@@ -52,6 +53,11 @@ const navItems = computed(() => [
     icon: 'i-lucide-layers',
     to: '/',
     badge: jobsStore.runningJobs.length || undefined,
+  },
+  {
+    label: '转码队列',
+    icon: 'i-lucide-film',
+    to: '/transcode',
   },
   {
     label: '节点',
@@ -67,6 +73,12 @@ const navItems = computed(() => [
 
 const unlisteners: Array<() => void> = []
 
+function handleGlobalContextMenu(event: MouseEvent) {
+  const target = event.target as HTMLElement | null
+  if (target?.closest(CONTEXT_MENU_ALLOW_SELECTOR)) return
+  event.preventDefault()
+}
+
 if (import.meta.client) {
   watch(
     () => settingsStore.settings.theme,
@@ -80,6 +92,7 @@ if (import.meta.client) {
 }
 
 onMounted(async () => {
+  window.addEventListener('contextmenu', handleGlobalContextMenu, true)
   await Promise.all([
     jobsStore.fetchJobs(),
     jobsStore.fetchQueueState(),
@@ -88,9 +101,11 @@ onMounted(async () => {
   unlisteners.push(await onProgress(jobsStore.applyProgress))
   unlisteners.push(await onJobUpdated(jobsStore.applyJobUpdate))
   unlisteners.push(await onLog(jobsStore.applyLog))
+  unlisteners.push(await onQueueState(jobsStore.applyQueueState))
 })
 
 onUnmounted(() => {
+  window.removeEventListener('contextmenu', handleGlobalContextMenu, true)
   for (const unlisten of unlisteners) {
     unlisten()
   }

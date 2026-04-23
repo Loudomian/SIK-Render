@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core'
-import type { AddJobPayload, AppSettings, BlenderInstall, BlendProjectSettings, JobLogSummary, Mp4ExportInspection, Mp4ExportResult, QueueState, RenderJob, RenderedFramesStatus, ToolchainStatus } from '~/types'
+import type { AddFfmpegJobPayload, AddJobPayload, AppSettings, BlenderInstall, BlendProjectSettings, FfmpegJob, FolderFrameGroup, FolderFramesInspection, JobLogSummary, QueueState, RenderJob, RenderedFramesStatus, ToolchainStatus } from '~/types'
 
 // Typed wrappers around Tauri IPC commands
 
@@ -18,6 +18,25 @@ const tauriApi = {
 
   addJob: (payload: AddJobPayload) =>
     invoke<RenderJob>('add_job', { payload }),
+
+  updateJobMetadata: (id: string, name: string, note?: string | null) =>
+    invoke<RenderJob>('update_job_metadata', { payload: { id, name, note } }),
+
+  updateJobTranscodeSettings: (
+    payload: {
+      id: string
+      auto_transcode_mp4: boolean
+      transcode_name_override: string | null
+      transcode_fps_override: number | null
+      transcode_output_path_override: string | null
+      transcode_crf_override: number | null
+      transcode_preset_override: string | null
+    },
+  ) =>
+    invoke<RenderJob>('update_job_transcode_settings', { payload }),
+
+  updateJobFps: (id: string, fps: number) =>
+    invoke<RenderJob>('update_job_fps', { payload: { id, fps } }),
 
   removeJob: (id: string) =>
     invoke<void>('remove_job', { id }),
@@ -58,48 +77,14 @@ const tauriApi = {
   getLastRenderedFrame: (outputPath: string, format: string, frameStart: number, frameEnd: number) =>
     invoke<string | null>('get_last_rendered_frame', { outputPath, format, frameStart, frameEnd }),
 
-  inspectMp4Export: (
-    outputPath: string,
-    format: string,
-    jobFrameStart: number,
-    jobFrameEnd: number,
-    rangeMode: string,
-    customStart?: number | null,
-    customEnd?: number | null,
-  ) =>
-    invoke<Mp4ExportInspection>('inspect_mp4_export', {
-      outputPath,
-      format,
-      jobFrameStart,
-      jobFrameEnd,
-      rangeMode,
-      customStart,
-      customEnd,
+  inspectFolderFrames: (folderPath: string, formatHint?: string | null) =>
+    invoke<FolderFramesInspection>('inspect_folder_frames', {
+      folderPath,
+      formatHint: formatHint ?? null,
     }),
 
-  encodeSequenceToMp4: (
-    jobId: string,
-    blenderExecutable: string,
-    blendFile: string,
-    outputPath: string,
-    format: string,
-    frameStart: number,
-    frameEnd: number,
-    strictContiguous: boolean,
-  ) =>
-    invoke<Mp4ExportResult>('encode_sequence_to_mp4', {
-      jobId,
-      blenderExecutable,
-      blendFile,
-      outputPath,
-      format,
-      frameStart,
-      frameEnd,
-      strictContiguous,
-    }),
-
-  cancelMp4Export: (jobId: string) =>
-    invoke<void>('cancel_mp4_export', { jobId }),
+  scanFolderFrameGroups: (folderPath: string) =>
+    invoke<{ groups: FolderFrameGroup[] }>('scan_folder_frame_groups', { folderPath }),
 
   openPath: (path: string) =>
     invoke<void>('open_path', { path }),
@@ -116,14 +101,32 @@ const tauriApi = {
   getJobLatestLogs: (jobId: string) =>
     invoke<string[]>('get_job_latest_logs', { jobId }),
 
-  getJobMp4Logs: (jobId: string) =>
-    invoke<string[]>('get_job_mp4_logs', { jobId }),
-
-  getJobLatestMp4Logs: (jobId: string) =>
-    invoke<string[]>('get_job_latest_mp4_logs', { jobId }),
-
   getJobLogSummary: (jobId: string) =>
     invoke<JobLogSummary>('get_job_log_summary', { jobId }),
+
+  listFfmpegJobs: () =>
+    invoke<FfmpegJob[]>('list_ffmpeg_jobs'),
+
+  getFfmpegJob: (id: string) =>
+    invoke<FfmpegJob>('get_ffmpeg_job', { id }),
+
+  addFfmpegJob: (payload: AddFfmpegJobPayload) =>
+    invoke<FfmpegJob>('add_ffmpeg_job', { payload }),
+
+  cancelFfmpegJob: (id: string) =>
+    invoke<void>('cancel_ffmpeg_job', { id }),
+
+  deleteFfmpegJob: (id: string) =>
+    invoke<void>('delete_ffmpeg_job', { id }),
+
+  reorderFfmpegJobs: (orderedIds: string[]) =>
+    invoke<FfmpegJob[]>('reorder_ffmpeg_jobs', { orderedIds }),
+
+  getFfmpegJobLogs: (jobId: string) =>
+    invoke<string[]>('get_ffmpeg_job_logs', { jobId }),
+
+  getFfmpegJobLatestLogs: (jobId: string) =>
+    invoke<string[]>('get_ffmpeg_job_latest_logs', { jobId }),
 
   getSettings: () =>
     invoke<AppSettings>('get_settings'),

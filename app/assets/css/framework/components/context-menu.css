@@ -1,0 +1,32 @@
+.job-context-menu-target,
+.detail-context-menu-target {
+  min-width: 0;
+}
+
+.job-context-menu-target {
+  width: 100%;
+}
+
+.job-context-menu-content,
+.detail-context-menu-content {
+  min-width: 12rem;
+}
+
+.metadata-modal-content {
+  width: min(42rem, calc(100vw - 2rem));
+}
+
+.metadata-modal-stack {
+  gap: 1rem;
+}
+
+.metadata-form {
+  display: grid;
+  gap: 0.9rem;
+  width: 100%;
+}
+
+.metadata-form-field {
+  min-width: 0;
+  width: 100%;
+}

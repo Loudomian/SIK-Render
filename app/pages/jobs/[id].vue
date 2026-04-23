@@ -1,94 +1,120 @@
 <template>
   <div v-if="job" class="detail-page">
     <section class="page-hero detail-hero">
-      <div class="page-hero-copy detail-title">
-        <div class="detail-title-row">
-          <div class="detail-heading-stack">
-            <div class="detail-heading-line">
-              <UBadge
-                :label="STATUS_LABEL[job.status] ?? job.status"
-                :color="statusBadgeColor"
-                variant="subtle"
-              />
-              <UBadge v-if="orderBadgeLabel" :label="orderBadgeLabel" color="neutral" variant="subtle" />
+        <div class="page-hero-copy detail-title">
+          <UContextMenu
+            :items="buildJobContextMenuItems(job)"
+            :ui="{ content: 'detail-context-menu-content' }"
+          >
+            <div class="detail-context-menu-target" data-context-menu>
+              <div class="detail-title-row">
+                <div class="detail-heading-stack">
+                  <div class="detail-heading-line">
+                    <UBadge
+                      :label="STATUS_LABEL[job.status] ?? job.status"
+                      :color="statusBadgeColor"
+                      variant="subtle"
+                    />
+                    <UBadge v-if="orderBadgeLabel" :label="orderBadgeLabel" color="neutral" variant="subtle" />
+                    <UBadge
+                      v-if="job.crashCount > 0"
+                      :label="`崩溃 ${job.crashCount} 次`"
+                      color="warning"
+                      variant="subtle"
+                    />
+                  </div>
+                  <UBreadcrumb
+                    as="h1"
+                    :items="detailBreadcrumbItems"
+                    :ui="{
+                      root: 'detail-breadcrumb',
+                      list: 'detail-breadcrumb-list',
+                      item: 'detail-breadcrumb-item',
+                      link: 'detail-breadcrumb-link',
+                      linkLabel: 'detail-breadcrumb-label',
+                      separator: 'detail-breadcrumb-separator-wrap',
+                      separatorIcon: 'detail-breadcrumb-separator',
+                    }"
+                  >
+                    <template #separator>
+                      <span class="detail-breadcrumb-separator" aria-hidden="true">&gt;</span>
+                    </template>
+                    <template #item-label="{ item, active }">
+                      <span :class="active ? 'detail-breadcrumb-current' : 'detail-breadcrumb-ancestor'">
+                        {{ item.label }}
+                      </span>
+                    </template>
+                  </UBreadcrumb>
+                  <p v-if="job.note" class="page-note detail-note">{{ job.note }}</p>
+                </div>
+              </div>
             </div>
-            <UBreadcrumb
-              as="h1"
-              :items="detailBreadcrumbItems"
-              :ui="{
-                root: 'detail-breadcrumb',
-                list: 'detail-breadcrumb-list',
-                item: 'detail-breadcrumb-item',
-                link: 'detail-breadcrumb-link',
-                linkLabel: 'detail-breadcrumb-label',
-                separator: 'detail-breadcrumb-separator-wrap',
-                separatorIcon: 'detail-breadcrumb-separator',
-              }"
-            >
-              <template #separator>
-                <span class="detail-breadcrumb-separator" aria-hidden="true">&gt;</span>
-              </template>
-              <template #item-label="{ item, active }">
-                <span :class="active ? 'detail-breadcrumb-current' : 'detail-breadcrumb-ancestor'">
-                  {{ item.label }}
-                </span>
-              </template>
-            </UBreadcrumb>
-          </div>
+          </UContextMenu>
         </div>
-      </div>
-      <div class="detail-header-actions">
-        <UButton
-          v-if="exportingMp4"
-          icon="i-lucide-square"
-          :label="cancelingMp4 ? '中断中…' : '中断转码'"
-          :loading="cancelingMp4"
-          color="warning"
-          variant="outline"
-          @click="handleCancelExportMp4"
-        />
-        <UButton
-          v-else
-          icon="i-lucide-film"
-          label="转码"
-          :disabled="job.status === 'running'"
-          color="neutral"
-          variant="outline"
-          @click="openMp4Dialog"
-        />
-        <UButton
-          v-if="exportedMp4Path"
-          icon="i-lucide-external-link"
-          label="打开视频"
-          color="neutral"
-          variant="outline"
-          @click="openPath(exportedMp4Path)"
-        />
-        <UButton
-          v-if="job.status === 'failed' || job.status === 'cancelled' || job.status === 'interrupted' || job.status === 'done'"
-          icon="i-lucide-rotate-ccw"
-          :label="job.status === 'cancelled' || job.status === 'interrupted' ? '继续' : '重试'"
-          :color="job.status === 'cancelled' || job.status === 'interrupted' ? 'warning' : 'neutral'"
-          variant="outline"
-          @click="handleRetry"
-        />
-        <UButton
-          v-if="job.status === 'running' || job.status === 'pending'"
-          icon="i-lucide-x"
-          label="取消"
-          color="warning"
-          variant="outline"
-          @click="jobsStore.stopJob(job.id)"
-        />
-        <UButton
-          v-if="job.status === 'done' || job.status === 'failed' || job.status === 'cancelled' || job.status === 'interrupted'"
-          icon="i-lucide-trash-2"
-          label="删除"
-          color="error"
-          variant="outline"
-          @click="showDeleteConfirm = true"
-        />
-      </div>
+        <div class="detail-header-actions">
+          <UFieldGroup size="md" class="detail-action-fieldgroup">
+            <UButton
+              :icon="transcodePrimaryAction.icon"
+              :label="transcodePrimaryAction.label"
+              :color="transcodePrimaryAction.color"
+              variant="subtle"
+              size="md"
+              :loading="transcodePrimaryAction.loading"
+              :disabled="transcodePrimaryAction.disabled"
+              @click="handlePrimaryTranscodeAction"
+            />
+            <UDropdownMenu
+              :items="transcodeActionItems"
+              arrow
+              :content="{ side: 'bottom', align: 'end', sideOffset: 8 }"
+            >
+              <UButton
+                icon="i-lucide-chevron-down"
+                color="neutral"
+                variant="outline"
+                size="md"
+                square
+              />
+              <template #auto-transcode-trailing>
+                <USwitch
+                  :model-value="autoTranscodeEnabled"
+                  color="neutral"
+                  :disabled="updatingAutoTranscode"
+                  @pointerdown.stop
+                  @click.stop
+                  @update:model-value="handleAutoTranscodeSwitchUpdate"
+                />
+              </template>
+            </UDropdownMenu>
+          </UFieldGroup>
+          <UButton
+            v-if="job.status === 'failed' || job.status === 'cancelled' || job.status === 'interrupted' || job.status === 'done'"
+            icon="i-lucide-rotate-ccw"
+            :label="job.status === 'cancelled' || job.status === 'interrupted' ? '继续' : '重试'"
+            :color="job.status === 'cancelled' || job.status === 'interrupted' ? 'warning' : 'neutral'"
+            variant="outline"
+            size="md"
+            @click="handleRetry"
+          />
+          <UButton
+            v-if="job.status === 'running' || job.status === 'pending'"
+            icon="i-lucide-x"
+            label="取消"
+            color="warning"
+            variant="outline"
+            size="md"
+            @click="jobsStore.stopJob(job.id)"
+          />
+          <UButton
+            v-if="job.status === 'done' || job.status === 'failed' || job.status === 'cancelled' || job.status === 'interrupted'"
+            icon="i-lucide-trash-2"
+            label="删除"
+            color="error"
+            variant="outline"
+            size="md"
+            @click="showDeleteConfirm = true"
+          />
+        </div>
     </section>
 
     <UModal
@@ -109,6 +135,43 @@
         </div>
       </template>
     </UModal>
+
+    <JobMetadataModal
+      v-model:open="metadataDialogOpen"
+      :job="metadataJob"
+    />
+
+    <TranscodeSubmitModal
+      v-if="transcodeModalOpen && job"
+      :open="transcodeModalOpen"
+      :initial-config="effectiveTranscodeConfig"
+      :blender-job-id="job.id"
+      :blender-job-name="job.name"
+      :blender-job-fps="job.fps ?? null"
+      :blender-job-frame-start="job.frameStart"
+      :blender-job-frame-end="job.frameEnd"
+      :blender-job-output-path="job.outputPath"
+      @submit="handleTranscodeSubmit"
+      @close="transcodeModalOpen = false"
+      @update:open="transcodeModalOpen = $event"
+    />
+
+    <TranscodeSubmitModal
+      v-if="transcodeSettingsModalOpen && job"
+      :open="transcodeSettingsModalOpen"
+      mode="settings"
+      :initial-config="effectiveTranscodeConfig"
+      :base-config="baseTranscodeConfig"
+      :blender-job-id="job.id"
+      :blender-job-name="job.name"
+      :blender-job-fps="job.fps ?? null"
+      :blender-job-frame-start="job.frameStart"
+      :blender-job-frame-end="job.frameEnd"
+      :blender-job-output-path="job.outputPath"
+      @save-settings="handleTranscodeSettingsSave"
+      @close="transcodeSettingsModalOpen = false"
+      @update:open="transcodeSettingsModalOpen = $event"
+    />
 
     <UModal
       :open="showRetryConfirm"
@@ -218,161 +281,18 @@
       </template>
     </UModal>
 
-    <UModal
-      :open="showMp4Dialog"
-      :close="false"
-      title="转码"
-      :ui="{ content: 'job-modal-content mp4-modal-content' }"
-      @update:open="v => { if (!v) closeMp4Dialog() }"
-    >
-      <template #body>
-        <div class="modal-stack mp4-modal-stack">
-          <section class="surface-panel mp4-config-section">
-            <div class="form-section-header">
-              <div>
-                <h2 class="form-section-title">转码范围</h2>
-                <p class="form-section-note">从当前任务输出目录中匹配序列帧，并导出为 H.264 MP4。</p>
-              </div>
-            </div>
-
-            <div class="mp4-range-mode-grid">
-              <UButton
-                v-for="option in mp4RangeOptions"
-                :key="option.value"
-                :label="option.label"
-                size="sm"
-                color="neutral"
-                :variant="mp4RangeMode === option.value ? 'solid' : 'outline'"
-                class="mp4-range-mode-button"
-                @click="mp4RangeMode = option.value"
-              />
-            </div>
-
-            <div v-if="mp4RangeMode === 'custom'" class="job-form-control-grid mp4-custom-grid">
-              <UFormField label="起始帧">
-                <UInputNumber v-model="mp4CustomStart" :min="1" />
-              </UFormField>
-              <UFormField label="结束帧">
-                <UInputNumber v-model="mp4CustomEnd" :min="1" />
-              </UFormField>
-            </div>
-
-            <div class="job-form-stats mp4-target-grid">
-              <div class="job-form-stat">
-                <span class="job-form-stat-label">目标帧段</span>
-                <strong>{{ formatFrameRange(mp4Inspection?.selectedStart, mp4Inspection?.selectedEnd) }}</strong>
-              </div>
-              <div class="job-form-stat">
-                <span class="job-form-stat-label">编码格式</span>
-                <strong>MP4 / H.264</strong>
-              </div>
-            </div>
-
-            <div class="mp4-strict-row">
-              <USwitch
-                v-model="mp4AllowMissingFrames"
-                color="neutral"
-                label="允许跳过缺帧"
-                :description="mp4AllowMissingFrames ? '开启后会跳过缺失帧，只转码当前实际存在的序列。' : '关闭后会严格检查连续性，检测到缺帧时禁止开始转码。'"
-                class="mp4-strict-switch"
-              />
-            </div>
-          </section>
-
-          <section class="surface-panel mp4-config-section">
-            <div class="form-section-header">
-              <div>
-                <h2 class="form-section-title">帧检查</h2>
-                <p class="form-section-note">确认当前目录里能参与转码的帧数量、范围和缺帧情况。</p>
-              </div>
-            </div>
-
-            <div v-if="mp4InspectionLoading" class="job-form-empty">
-              <UIcon name="i-lucide-loader-circle" class="job-form-empty-icon spin" />
-              <p>正在检查可转码的帧范围…</p>
-            </div>
-
-            <div v-else-if="mp4Inspection" class="mp4-inspection-stack">
-              <div class="job-form-stats mp4-stats-grid">
-                <div class="job-form-stat">
-                  <span class="job-form-stat-label">已匹配帧</span>
-                  <strong>{{ mp4Inspection.frameCount }}</strong>
-                </div>
-                <div class="job-form-stat">
-                  <span class="job-form-stat-label">可用范围</span>
-                  <strong>{{ formatFrameRange(mp4Inspection.availableStart, mp4Inspection.availableEnd) }}</strong>
-                </div>
-                <div class="job-form-stat">
-                  <span class="job-form-stat-label">转码范围</span>
-                  <strong>{{ formatFrameRange(mp4Inspection.selectedStart, mp4Inspection.selectedEnd) }}</strong>
-                </div>
-                <div class="job-form-stat">
-                  <span class="job-form-stat-label">缺失帧</span>
-                  <strong>{{ mp4Inspection.missingCount }}</strong>
-                </div>
-              </div>
-
-              <div v-if="mp4Inspection.hasGaps" class="mp4-missing-stack">
-                <span class="job-form-stat-label">缺失片段</span>
-                <p class="mp4-missing-list">
-                  {{ mp4Inspection.missingSegments.join('，') }}
-                  <template v-if="mp4Inspection.missingSegmentsTruncated"> 等更多</template>
-                </p>
-              </div>
-
-              <p v-else class="hint-text">当前帧段连续，可以直接开始转码。</p>
-            </div>
-
-            <div v-else class="job-form-empty">
-              <UIcon name="i-lucide-film" class="job-form-empty-icon" />
-              <p>当前还没有可用的帧检查结果。</p>
-            </div>
-          </section>
-
-          <div class="mp4-config-grid">
-            <UAlert
-              v-if="mp4Inspection?.hasGaps"
-              color="warning"
-              variant="subtle"
-              :description="mp4StrictContiguous ? '当前启用了严格连续帧，必须先补齐缺失帧后才能开始转码。' : '当前会跳过缺失帧，只使用实际存在的图像序列进行转码。'"
-            />
-            <UAlert
-              v-if="mp4Inspection && !mp4Inspection.frameCount"
-              color="warning"
-              variant="subtle"
-              description="当前选择的范围内没有找到可用于转码的序列帧。"
-            />
-          </div>
-
-          <p v-if="mp4ActionError" class="form-error">{{ mp4ActionError }}</p>
-
-          <div class="modal-actions">
-            <UButton icon="i-lucide-x" label="取消" color="warning" variant="outline" @click="closeMp4Dialog" />
-            <UButton
-              label="开始转码"
-              color="neutral"
-              variant="solid"
-              :loading="exportingMp4"
-              :disabled="!canStartMp4Export"
-              @click="confirmExportMp4"
-            />
-          </div>
-        </div>
-      </template>
-    </UModal>
-
     <RenderProgress
       v-if="job.status === 'running'"
       class="detail-progress"
       :frame="job.currentFrame ?? 0"
       :total-frames="job.totalFrames ?? (job.frameEnd - job.frameStart + 1)"
       :warming-up="jobsStore.isJobWarmingUp(job.id)"
-      :time-elapsed="job.timeElapsed"
+      :time-elapsed="job.timeElapsed ?? undefined"
       :remaining-secs="job.remainingSecs"
     />
 
     <div class="detail-grid">
-      <UCard variant="subtle" :ui="{ root: 'detail-section detail-full', body: 'detail-card-body' }">
+        <UCard variant="subtle" :ui="{ root: 'detail-section detail-full', body: 'detail-card-body' }">
         <h2 class="detail-card-title">文件路径</h2>
         <div class="detail-info-stack">
           <section class="detail-info-item">
@@ -396,41 +316,44 @@
             </div>
           </section>
         </div>
-      </UCard>
+        </UCard>
 
-      <UCard variant="subtle" :ui="{ root: 'detail-section detail-full', body: 'detail-card-body' }">
-        <div class="detail-meta-grid">
-          <section class="detail-meta-column">
-            <h2 class="detail-card-title">渲染设置</h2>
-            <dl class="detail-spec-list">
-              <dt>格式</dt>
-              <dd>{{ job.outputFormat }}</dd>
-              <dt>帧范围</dt>
-              <dd>{{ job.frameStart }} – {{ job.frameEnd }}（共 {{ job.frameEnd - job.frameStart + 1 }} 帧）</dd>
-              <dt>Blender</dt>
-              <dd>{{ blenderVersion }}</dd>
-              <template v-if="crashCount">
-                <dt>崩溃恢复</dt>
-                <dd>{{ crashCount }} 次</dd>
-              </template>
-            </dl>
-          </section>
-
-          <section class="detail-meta-column">
-            <h2 class="detail-card-title">任务时间</h2>
-            <dl class="detail-spec-list">
-              <dt>开始</dt>
-              <dd>{{ formatTime(job.startedAt ?? job.createdAt) }}</dd>
-              <dt>完成</dt>
-              <dd>{{ job.finishedAt ? formatTime(job.finishedAt) : '—' }}</dd>
-              <dt>耗时</dt>
-              <dd>{{ duration }}</dd>
-            </dl>
-          </section>
+        <UCard variant="subtle" :ui="{ root: 'detail-section detail-full', body: 'detail-card-body' }">
+        <div class="stat-row">
+          <div class="stat-item">
+            <p class="stat-label">格式</p>
+            <p class="stat-value">{{ job.outputFormat }}</p>
+          </div>
+          <div class="stat-item">
+            <p class="stat-label">帧范围</p>
+            <p class="stat-value">{{ job.frameStart }} – {{ job.frameEnd }}（共 {{ job.frameEnd - job.frameStart + 1 }} 帧）</p>
+          </div>
+          <div class="stat-item">
+            <p class="stat-label">Blender</p>
+            <p class="stat-value">{{ blenderVersion }}</p>
+          </div>
+          <div v-if="crashCount" class="stat-item">
+            <p class="stat-label">崩溃恢复</p>
+            <p class="stat-value">{{ crashCount }} 次</p>
+          </div>
         </div>
-      </UCard>
+        <div class="stat-row">
+          <div class="stat-item">
+            <p class="stat-label">开始</p>
+            <p class="stat-value">{{ formatTime(job.startedAt ?? job.createdAt) }}</p>
+          </div>
+          <div class="stat-item">
+            <p class="stat-label">完成</p>
+            <p class="stat-value">{{ job.finishedAt ? formatTime(job.finishedAt) : '—' }}</p>
+          </div>
+          <div class="stat-item">
+            <p class="stat-label">耗时</p>
+            <p class="stat-value">{{ duration }}</p>
+          </div>
+        </div>
+        </UCard>
 
-      <UCard variant="subtle" :ui="{ root: 'detail-section detail-full preview-card', body: 'detail-card-body' }">
+        <UCard variant="subtle" :ui="{ root: 'detail-section detail-full preview-card', body: 'detail-card-body' }">
         <h2 class="detail-card-title">帧预览</h2>
         <div
           class="surface-panel preview-thumb-wrap"
@@ -451,8 +374,51 @@
             class="preview-frame-label"
           />
         </div>
+        </UCard>
+
+      </div>
+
+      <div v-if="warnings.length" class="detail-warnings">
+        <UAlert
+          v-for="(w, i) in warnings"
+          :key="i"
+          icon="i-lucide-triangle-alert"
+          color="warning"
+          variant="subtle"
+          title="渲染警告"
+          :description="w"
+        />
+      </div>
+
+      <p v-if="retryActionError" class="form-error">{{ retryActionError }}</p>
+
+      <UCard variant="subtle" :ui="{ root: 'detail-section log-section', body: 'detail-card-body' }">
+        <div class="log-header">
+          <h2 class="detail-card-title log-title">输出日志</h2>
+          <div class="log-header-actions">
+            <UBadge :label="`当前 ${jobLogs.length} 行`" color="neutral" variant="subtle" />
+            <UBadge :label="`Blender ${logSummary?.blenderCount ?? 0} 份`" color="neutral" variant="subtle" />
+            <UBadge :label="`FFmpeg Job ${relatedFfmpegJobs.length} 条`" color="neutral" variant="subtle" />
+            <UButton
+              v-if="logSummary?.directory"
+              icon="i-lucide-folder-open"
+              label="打开日志目录"
+              color="neutral"
+              variant="subtle"
+              size="sm"
+              @click="openPath(logSummary.directory)"
+            />
+          </div>
+        </div>
+        <div class="log-surface">
+          <div class="log-panel" ref="logEl" @scroll="onLogScroll">
+            <span v-if="jobLogs.length === 0" class="log-empty">
+              {{ job.status === 'pending' ? '等待开始…' : '暂无输出内容。' }}
+            </span>
+            <div v-for="(line, i) in jobLogs" :key="i" class="log-line">{{ line }}</div>
+          </div>
+        </div>
       </UCard>
-    </div>
 
     <UModal v-model:open="lightboxOpen" :close="false" :ui="{ content: 'preview-lightbox' }">
       <template #body>
@@ -463,80 +429,6 @@
         </div>
       </template>
     </UModal>
-
-    <div v-if="warnings.length" class="detail-warnings">
-      <UAlert
-        v-for="(w, i) in warnings"
-        :key="i"
-        icon="i-lucide-triangle-alert"
-        color="warning"
-        variant="subtle"
-        title="渲染警告"
-        :description="w"
-      />
-    </div>
-
-    <p v-if="retryActionError" class="form-error">{{ retryActionError }}</p>
-
-    <UCard variant="subtle" :ui="{ root: 'detail-section log-section', body: 'detail-card-body' }">
-      <div class="log-header">
-        <h2 class="detail-card-title log-title">输出日志</h2>
-        <div class="log-header-actions">
-          <UButton
-            :label="`当前 ${activeLogLineCount} 行`"
-            color="neutral"
-            variant="subtle"
-            size="sm"
-            class="log-header-chip log-header-stat"
-          />
-          <UButton
-            :label="`Blender ${logSummary?.blenderCount ?? 0} 份`"
-            color="neutral"
-            variant="subtle"
-            size="sm"
-            class="log-header-chip log-header-stat"
-          />
-          <UButton
-            :label="`FFMPEG ${logSummary?.ffmpegCount ?? 0} 份`"
-            color="neutral"
-            variant="subtle"
-            size="sm"
-            class="log-header-chip log-header-stat"
-          />
-          <UButton
-            v-if="logSummary?.directory"
-            icon="i-lucide-folder-open"
-            label="打开日志目录"
-            color="neutral"
-            variant="subtle"
-            size="sm"
-            class="log-header-chip log-header-button"
-            @click="openPath(logSummary.directory)"
-          />
-        </div>
-      </div>
-      <UTabs
-        v-model="activeLogTab"
-        :items="logTabs"
-        :content="false"
-        color="neutral"
-        variant="link"
-        size="md"
-        class="log-tabs"
-      />
-      <div v-if="activeLogTab === 'blender'" ref="logEl" class="log-panel" @scroll="onLogScroll">
-        <span v-if="jobLogs.length === 0" class="log-empty">
-          {{ job.status === 'pending' ? '等待开始…' : '暂无输出内容。' }}
-        </span>
-        <div v-for="(line, i) in jobLogs" :key="i" class="log-line">{{ line }}</div>
-      </div>
-      <div v-else ref="mp4LogEl" class="log-panel" @scroll="onMp4LogScroll">
-        <span v-if="mp4Logs.length === 0" class="log-empty">
-          {{ exportingMp4 ? 'ffmpeg 已启动，等待日志…' : '尚未开始转码。' }}
-        </span>
-        <div v-for="(line, i) in mp4Logs" :key="`mp4-${i}`" class="log-line">{{ line }}</div>
-      </div>
-    </UCard>
   </div>
 
   <div v-else class="empty">找不到该任务。</div>
@@ -544,38 +436,32 @@
 
 <script setup lang="ts">
 import { convertFileSrc } from '@tauri-apps/api/core'
-import { listen, type UnlistenFn } from '@tauri-apps/api/event'
-import type { JobLogSummary, Mp4ExportInspection, Mp4LogEvent, Mp4RangeMode, RenderJob, RenderedFramesStatus } from '~/types'
+import type { DropdownMenuItem } from '@nuxt/ui'
+import type { AddFfmpegJobPayload, JobLogSummary, RenderJob, RenderJobTranscodeConfig, RenderedFramesStatus } from '~/types'
+import { JOB_STATUS_COLOR, JOB_STATUS_LABEL } from '~/composables/useJobStatus'
+import { resolveBaseRenderJobTranscodeConfig, resolveEffectiveRenderJobTranscodeConfig } from '~/composables/useTranscodeConfig'
 
 const route = useRoute()
 const router = useRouter()
 const jobsStore = useJobsStore()
+const transcodeStore = useTranscodeStore()
 
 const settingsStore = useSettingsStore()
 
-const { openPath, inspectRenderedFrames, inspectMp4Export, getLastRenderedFrame, encodeSequenceToMp4, cancelMp4Export, getJobLatestMp4Logs, getJobLogSummary, updateJobPreviewDimensions } = useTauri()
-
-const STATUS_LABEL: Record<string, string> = {
-  pending: '等待中',
-  running: '渲染中',
-  done: '已完成',
-  failed: '失败',
-  cancelled: '已取消',
-  interrupted: '已中断',
-}
-
-const STATUS_COLOR: Record<string, 'neutral' | 'info' | 'success' | 'error' | 'warning'> = {
-  pending: 'neutral',
-  running: 'info',
-  done: 'success',
-  failed: 'error',
-  cancelled: 'warning',
-  interrupted: 'warning',
-}
+const { openPath, inspectRenderedFrames, getLastRenderedFrame, getJobLogSummary, updateJobPreviewDimensions } = useTauri()
+const { onFfmpegJobUpdated } = useRenderEvents()
+const STATUS_LABEL = JOB_STATUS_LABEL
 
 const jobId = computed(() => route.params.id as string)
 const job = computed(() => jobsStore.jobs.find((j) => j.id === jobId.value))
 const jobLogs = computed(() => jobsStore.getJobLogs(jobId.value))
+const relatedFfmpegJobs = computed(() => transcodeStore.getRelatedJobs(jobId.value))
+const primaryTranscodeJob = computed(() =>
+  relatedFfmpegJobs.value.find(entry => entry.status === 'running')
+  ?? relatedFfmpegJobs.value.find(entry => entry.status === 'pending')
+  ?? relatedFfmpegJobs.value[0]
+  ?? null,
+)
 const detailBreadcrumbItems = computed(() => {
   const currentJob = job.value
   if (!currentJob) return []
@@ -584,39 +470,91 @@ const detailBreadcrumbItems = computed(() => {
     { label: `#${currentJob.jobNumber} ${currentJob.name}` },
   ]
 })
-const statusBadgeColor = computed(() => STATUS_COLOR[job.value?.status ?? 'pending'] ?? 'neutral')
+const statusBadgeColor = computed(() => JOB_STATUS_COLOR[job.value?.status ?? 'pending'] ?? 'neutral')
 const orderBadgeLabel = computed(() => {
   if (!job.value || job.value.status === 'running') return null
   const queue = jobsStore.jobs.filter(item => item.status !== 'running')
   const index = queue.findIndex(item => item.id === job.value?.id)
   return index === -1 ? null : `顺序 ${index + 1}`
 })
+const metadataDialogOpen = ref(false)
+const metadataJob = computed(() => job.value ?? null)
+const transcodeModalOpen = ref(false)
+const transcodeSettingsModalOpen = ref(false)
 const blenderVersion = computed(() => {
   const exe = job.value?.blenderExecutable
   if (!exe) return '—'
   const match = settingsStore.blenderVersions.find((b) => b.executable === exe)
   return match ? `Blender ${match.version}` : exe
 })
+const baseTranscodeConfig = computed<RenderJobTranscodeConfig | null>(() => {
+  if (!job.value) return null
+  return resolveBaseRenderJobTranscodeConfig(job.value, settingsStore.settings)
+})
+const effectiveTranscodeConfig = computed<RenderJobTranscodeConfig | null>(() => {
+  if (!job.value) return null
+  return resolveEffectiveRenderJobTranscodeConfig(job.value, settingsStore.settings)
+})
+const autoTranscodeEnabled = computed(() => Boolean(job.value?.autoTranscodeMp4))
+const transcodePrimaryAction = computed(() => {
+  const currentJob = job.value
+  const currentTranscodeJob = primaryTranscodeJob.value
+  if (!currentJob) {
+    return {
+      label: '提交转码',
+      icon: 'i-lucide-film',
+      color: 'neutral' as const,
+      loading: false,
+      disabled: true,
+    }
+  }
 
-const exportingMp4 = ref(false)
-const cancelingMp4 = ref(false)
-const exportedMp4Path = ref('')
-const showMp4Dialog = ref(false)
-const mp4RangeMode = ref<Mp4RangeMode>('job')
-const mp4CustomStart = ref<number | null>(null)
-const mp4CustomEnd = ref<number | null>(null)
-const mp4StrictContiguous = ref(false)
-const mp4Inspection = ref<Mp4ExportInspection | null>(null)
-const mp4InspectionLoading = ref(false)
-const mp4ActionError = ref('')
-const mp4Logs = ref<string[]>([])
+  if (!currentTranscodeJob) {
+    return {
+      label: '提交转码',
+      icon: 'i-lucide-film',
+      color: 'neutral' as const,
+      loading: false,
+      disabled: currentJob.status === 'running',
+    }
+  }
+
+  const statusMap = {
+    pending: { icon: 'i-lucide-loader-circle', color: 'warning' as const, loading: false },
+    running: { icon: 'i-lucide-loader-circle', color: 'info' as const, loading: true },
+    done: { icon: 'i-lucide-circle-check-big', color: 'success' as const, loading: false },
+    failed: { icon: 'i-lucide-triangle-alert', color: 'error' as const, loading: false },
+    cancelled: { icon: 'i-lucide-square', color: 'warning' as const, loading: false },
+  }[currentTranscodeJob.status]
+
+  return {
+    label: '查看转码',
+    icon: statusMap.icon,
+    color: statusMap.color,
+    loading: statusMap.loading,
+    disabled: false,
+  }
+})
+
+function openMetadataDialog() {
+  if (!job.value) return
+  metadataDialogOpen.value = true
+}
+
+function buildJobContextMenuItems(currentJob: RenderJob) {
+  return [
+    {
+      label: '编辑项目信息',
+      icon: 'i-lucide-notebook-pen',
+      onSelect: () => openMetadataDialog(),
+    },
+  ]
+}
+
+const updatingAutoTranscode = ref(false)
 const logSummary = ref<JobLogSummary | null>(null)
-const mp4LogEl = ref<HTMLDivElement | null>(null)
-const pinMp4LogToBottom = ref(true)
-let unlistenMp4Log: UnlistenFn | null = null
-let mp4InspectToken = 0
+const transcodeUnlisteners: Array<() => void> = []
 let logSummaryTimer: ReturnType<typeof setTimeout> | null = null
-const activeLogTab = ref<'blender' | 'ffmpeg'>('blender')
 
 const LOG_WARNINGS: Array<{ pattern: RegExp; message: string }> = [
   {
@@ -625,38 +563,57 @@ const LOG_WARNINGS: Array<{ pattern: RegExp; message: string }> = [
   },
 ]
 
-const crashCount = computed(() =>
-  jobLogs.value.filter(line => line.includes('[crash-recovery]')).length
-)
+const crashCount = computed(() => job.value?.crashCount ?? 0)
 
-const logTabs = computed(() => [
-  { label: 'Blender', value: 'blender' },
-  { label: 'FFMPEG', value: 'ffmpeg' },
-])
+const transcodeActionItems = computed<DropdownMenuItem[][]>(() => {
+  const items: DropdownMenuItem[][] = [[
+    {
+      slot: 'auto-transcode',
+      label: '渲染完成后自动转码',
+      icon: 'i-lucide-clapperboard',
+      loading: updatingAutoTranscode.value,
+      disabled: updatingAutoTranscode.value,
+      onSelect: (event: Event) => {
+        event.preventDefault()
+        void handleAutoTranscodeToggle(!autoTranscodeEnabled.value)
+      },
+    },
+  ], [
+    {
+      label: '转码设置',
+      icon: 'i-lucide-sliders',
+      disabled: !job.value,
+      onSelect: () => {
+        transcodeSettingsModalOpen.value = true
+      },
+    },
+    {
+      label: '立即提交转码',
+      icon: 'i-lucide-film',
+      disabled: job.value?.status === 'running',
+      onSelect: () => {
+        void submitTranscodeForJob()
+      },
+    },
+  ], [
+    {
+      label: '前往转码队列',
+      icon: 'i-lucide-list-video',
+      onSelect: () => router.push('/transcode'),
+    },
+  ]]
 
-const activeLogLineCount = computed(() =>
-  activeLogTab.value === 'ffmpeg' ? mp4Logs.value.length : jobLogs.value.length
-)
+  if (primaryTranscodeJob.value) {
+    items.push([
+      {
+        label: '查看 FFmpeg Job',
+        icon: 'i-lucide-file-text',
+        onSelect: () => router.push(`/transcode/${primaryTranscodeJob.value?.id}`),
+      },
+    ])
+  }
 
-const mp4RangeOptions: Array<{ label: string, value: Mp4RangeMode }> = [
-  { label: '当前任务帧段', value: 'job' },
-  { label: '输出目录全部匹配帧', value: 'all' },
-  { label: '自定义帧段', value: 'custom' },
-]
-
-const canStartMp4Export = computed(() => {
-  if (exportingMp4.value || mp4InspectionLoading.value) return false
-  if (!mp4Inspection.value?.frameCount) return false
-  if (mp4StrictContiguous.value && mp4Inspection.value.hasGaps) return false
-  if (mp4RangeMode.value === 'custom' && (mp4CustomStart.value == null || mp4CustomEnd.value == null)) return false
-  return true
-})
-
-const mp4AllowMissingFrames = computed({
-  get: () => !mp4StrictContiguous.value,
-  set: (value: boolean) => {
-    mp4StrictContiguous.value = !value
-  },
+  return items
 })
 
 const warnings = computed(() => {
@@ -750,7 +707,8 @@ async function refreshPreview() {
     void syncStoredPreviewDimensions(width, height)
     // Extract frame number from filename
     const match = path.match(/(\d+)\.[^.]+$/)
-    previewFrame.value = match ? parseInt(match[1]) : null
+    const frameToken = match?.[1]
+    previewFrame.value = frameToken ? parseInt(frameToken) : null
   } catch {
     previewUrl.value = null
     previewFrame.value = null
@@ -780,14 +738,6 @@ watch(
   { immediate: true },
 )
 
-watch(
-  () => [showMp4Dialog.value, mp4RangeMode.value, mp4CustomStart.value, mp4CustomEnd.value] as const,
-  () => {
-    if (!showMp4Dialog.value) return
-    void refreshMp4Inspection()
-  },
-)
-
 // ─────────────────────────────────────────────────────────────────────────────
 
 const logEl = ref<HTMLDivElement | null>(null)
@@ -799,15 +749,6 @@ watch(
     if (!pinToBottom.value) return
     await nextTick()
     if (logEl.value) logEl.value.scrollTop = logEl.value.scrollHeight
-  },
-)
-
-watch(
-  () => mp4Logs.value.length,
-  async () => {
-    if (!pinMp4LogToBottom.value) return
-    await nextTick()
-    if (mp4LogEl.value) mp4LogEl.value.scrollTop = mp4LogEl.value.scrollHeight
   },
 )
 
@@ -827,7 +768,7 @@ async function refreshLogSummary() {
 }
 
 watch(
-  () => [jobLogs.value.length, mp4Logs.value.length] as const,
+  () => jobLogs.value.length,
   () => {
     scheduleLogSummaryRefresh()
   },
@@ -840,38 +781,14 @@ watch(
   },
 )
 
-watch(
-  activeLogTab,
-  async (tab) => {
-    await nextTick()
-    if (tab === 'ffmpeg' && mp4LogEl.value) {
-      mp4LogEl.value.scrollTop = mp4LogEl.value.scrollHeight
-    }
-    if (tab === 'blender' && logEl.value) {
-      logEl.value.scrollTop = logEl.value.scrollHeight
-    }
-  },
-)
-
 function onLogScroll() {
   const el = logEl.value
   if (!el) return
   pinToBottom.value = el.scrollTop + el.clientHeight >= el.scrollHeight - 40
 }
 
-function onMp4LogScroll() {
-  const el = mp4LogEl.value
-  if (!el) return
-  pinMp4LogToBottom.value = el.scrollTop + el.clientHeight >= el.scrollHeight - 40
-}
-
 function formatTime(ms: number) {
   return new Date(ms).toLocaleString()
-}
-
-function formatFrameRange(start: number | null | undefined, end: number | null | undefined) {
-  if (start == null || end == null) return '—'
-  return `${start}–${end}`
 }
 
 const duration = computed(() => {
@@ -887,23 +804,25 @@ const duration = computed(() => {
 })
 
 onMounted(async () => {
-  if (!settingsStore.blenderVersions.length) settingsStore.load()
-  unlistenMp4Log = await listen<Mp4LogEvent>('mp4-log', (event) => {
-    if (event.payload.jobId !== jobId.value) return
-    mp4Logs.value.push(event.payload.line)
-  })
+  await Promise.all([
+    settingsStore.load(),
+    jobsStore.fetchJobs(),
+    transcodeStore.fetchFfmpegJobs(),
+  ])
+  transcodeUnlisteners.push(await onFfmpegJobUpdated((event) => {
+    transcodeStore.applyFfmpegJobUpdate(event)
+  }))
   await Promise.all([
     jobsStore.loadJobLogs(jobId.value),
-    getJobLatestMp4Logs(jobId.value).then((lines) => {
-      if (lines.length) mp4Logs.value = lines
-    }),
     refreshLogSummary(),
   ])
   await refreshPreview()
 })
 
 onUnmounted(() => {
-  unlistenMp4Log?.()
+  for (const unlisten of transcodeUnlisteners) {
+    unlisten()
+  }
   if (logSummaryTimer) clearTimeout(logSummaryTimer)
 })
 
@@ -920,52 +839,28 @@ const retryCustomFrameStatus = ref<RenderedFramesStatus | null>(null)
 const retryCustomInspectLoading = ref(false)
 let retryCustomInspectToken = 0
 
-function openMp4Dialog() {
-  const j = job.value
-  if (!j || exportingMp4.value) return
-  mp4ActionError.value = ''
-  mp4RangeMode.value = 'job'
-  mp4CustomStart.value = j.frameStart
-  mp4CustomEnd.value = j.frameEnd
-  mp4StrictContiguous.value = false
-  showMp4Dialog.value = true
-  void refreshMp4Inspection()
-}
+async function handleAutoTranscodeToggle(value: boolean) {
+  const currentJob = job.value
+  if (!currentJob || updatingAutoTranscode.value) return
 
-function closeMp4Dialog() {
-  showMp4Dialog.value = false
-  mp4ActionError.value = ''
-}
-
-async function refreshMp4Inspection() {
-  const j = job.value
-  if (!j || !showMp4Dialog.value) return
-
-  const token = ++mp4InspectToken
-  mp4InspectionLoading.value = true
-  mp4ActionError.value = ''
-
+  updatingAutoTranscode.value = true
   try {
-    const result = await inspectMp4Export(
-      j.outputPath,
-      j.outputFormat,
-      j.frameStart,
-      j.frameEnd,
-      mp4RangeMode.value,
-      mp4RangeMode.value === 'custom' ? mp4CustomStart.value : null,
-      mp4RangeMode.value === 'custom' ? mp4CustomEnd.value : null,
-    )
-    if (token !== mp4InspectToken) return
-    mp4Inspection.value = result
-  } catch (error) {
-    if (token !== mp4InspectToken) return
-    mp4Inspection.value = null
-    mp4ActionError.value = error instanceof Error ? error.message : String(error)
+    await jobsStore.updateJobTranscodeSettings({
+      id: currentJob.id,
+      auto_transcode_mp4: value,
+      transcode_name_override: currentJob.transcodeNameOverride,
+      transcode_fps_override: currentJob.transcodeFpsOverride,
+      transcode_output_path_override: currentJob.transcodeOutputPathOverride,
+      transcode_crf_override: currentJob.transcodeCrfOverride,
+      transcode_preset_override: currentJob.transcodePresetOverride,
+    })
   } finally {
-    if (token === mp4InspectToken) {
-      mp4InspectionLoading.value = false
-    }
+    updatingAutoTranscode.value = false
   }
+}
+
+function handleAutoTranscodeSwitchUpdate(value: boolean) {
+  void handleAutoTranscodeToggle(value)
 }
 
 async function handleRetry() {
@@ -1007,6 +902,53 @@ function resetRetryConfirmState() {
 function closeRetryConfirm() {
   if (retrySubmittingMode.value) return
   resetRetryConfirmState()
+}
+
+async function submitTranscodeForJob() {
+  const currentJob = job.value
+  if (!currentJob || currentJob.status === 'running') return
+  retryActionError.value = ''
+  transcodeModalOpen.value = true
+}
+
+async function handleTranscodeSettingsSave(payload: {
+  transcode_name_override: string | null
+  transcode_fps_override: number | null
+  transcode_output_path_override: string | null
+  transcode_crf_override: number | null
+  transcode_preset_override: string | null
+}) {
+  const currentJob = job.value
+  if (!currentJob) return
+
+  try {
+    await jobsStore.updateJobTranscodeSettings({
+      id: currentJob.id,
+      auto_transcode_mp4: currentJob.autoTranscodeMp4,
+      ...payload,
+    })
+    transcodeSettingsModalOpen.value = false
+  } catch (error) {
+    retryActionError.value = error instanceof Error ? error.message : String(error)
+  }
+}
+
+async function handleTranscodeSubmit(payload: AddFfmpegJobPayload) {
+  try {
+    const ffmpegJob = await transcodeStore.submitFfmpegJob(payload)
+    transcodeModalOpen.value = false
+    router.push(`/transcode/${ffmpegJob.id}`)
+  } catch (error) {
+    retryActionError.value = error instanceof Error ? error.message : String(error)
+  }
+}
+
+async function handlePrimaryTranscodeAction() {
+  if (primaryTranscodeJob.value) {
+    await router.push(`/transcode/${primaryTranscodeJob.value.id}`)
+    return
+  }
+  await submitTranscodeForJob()
 }
 
 async function confirmRetryContinue() {
@@ -1092,6 +1034,10 @@ async function confirmRetryCustomRange() {
     retryActionError.value = '起始帧不能大于结束帧。'
     return
   }
+  if (start < j.frameStart || end > j.frameEnd) {
+    retryActionError.value = `帧范围必须在任务范围 ${j.frameStart}–${j.frameEnd} 内。`
+    return
+  }
 
   retrySubmittingMode.value = retryCustomResumeFromExisting.value ? 'range-continue' : 'range-restart'
   try {
@@ -1121,59 +1067,5 @@ async function removeAndBack() {
   if (!j) return
   await jobsStore.deleteJob(j.id)
   router.push('/')
-}
-
-async function confirmExportMp4() {
-  const j = job.value
-  const inspection = mp4Inspection.value
-  if (!j || exportingMp4.value || !inspection?.selectedStart || !inspection.selectedEnd) return
-
-  mp4ActionError.value = ''
-  exportingMp4.value = true
-  cancelingMp4.value = false
-  exportedMp4Path.value = ''
-  mp4Logs.value = []
-  pinMp4LogToBottom.value = true
-  activeLogTab.value = 'ffmpeg'
-  closeMp4Dialog()
-
-  try {
-    const result = await encodeSequenceToMp4(
-      j.id,
-      j.blenderExecutable,
-      j.blendFile,
-      j.outputPath,
-      j.outputFormat,
-      inspection.selectedStart,
-      inspection.selectedEnd,
-      mp4StrictContiguous.value,
-    )
-    exportedMp4Path.value = result.outputPath
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error)
-    if (message !== 'MP4 export cancelled' && !mp4Logs.value.some(line => line.includes(message))) {
-      mp4Logs.value.push(`[ffmpeg] ${message}`)
-    }
-    mp4ActionError.value = message
-  } finally {
-    exportingMp4.value = false
-    cancelingMp4.value = false
-  }
-}
-
-async function handleCancelExportMp4() {
-  const j = job.value
-  if (!j || !exportingMp4.value || cancelingMp4.value) return
-
-  cancelingMp4.value = true
-  try {
-    await cancelMp4Export(j.id)
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error)
-    if (!mp4Logs.value.some(line => line.includes(message))) {
-      mp4Logs.value.push(`[ffmpeg] ${message}`)
-    }
-    cancelingMp4.value = false
-  }
 }
 </script>

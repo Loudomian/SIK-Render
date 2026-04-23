@@ -1,8 +1,11 @@
 // https://nuxt.com/docs/api/configuration/nuxt-config
+const buildDir = process.env.NUXT_BUILD_DIR || '.nuxt-dev'
+const viteCacheDir = process.env.VITE_CACHE_DIR || `.vite-cache/${buildDir.replace(/[\\/]/g, '-')}`
+
 export default defineNuxtConfig({
   ssr: false, // Tauri requires SPA mode
   srcDir: 'app/',
-  buildDir: '.nuxt-build',
+  buildDir,
   devtools: {
     enabled: false,
   },
@@ -34,6 +37,15 @@ export default defineNuxtConfig({
   ],
 
   vite: {
+    cacheDir: viteCacheDir,
+    optimizeDeps: {
+      include: [
+        '@tauri-apps/api/core',
+        '@tauri-apps/api/event',
+        '@tauri-apps/api/window',
+        '@tauri-apps/plugin-dialog',
+      ],
+    },
     // Prevent Vite from obscuring Rust errors
     clearScreen: false,
     envPrefix: ['VITE_', 'TAURI_'],
@@ -45,6 +57,7 @@ export default defineNuxtConfig({
           '**/src-tauri/target/**',
           '**/.output/**',
           '**/.nuxt/**',
+          '**/.nuxt-dev*/**',
           '**/.nuxt-build/**',
         ],
       },

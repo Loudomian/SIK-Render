@@ -16,7 +16,7 @@
       <section class="page-hero queue-hero">
         <div class="page-hero-copy">
           <div class="queue-title-row">
-            <UBadge label="Render Queue" color="primary" variant="subtle" class="page-eyebrow" />
+            <UBadge label="Render Queue" color="neutral" variant="subtle" class="page-eyebrow" />
             <UBadge
               :label="jobsStore.queuePaused ? '队列已暂停' : '队列运行中'"
               :color="jobsStore.queuePaused ? 'warning' : 'success'"
@@ -39,11 +39,11 @@
                 label="开始任务队列"
                 color="success"
                 variant="outline"
-                :disabled="!jobsStore.queuePaused || !jobsStore.pendingJobs.length"
+                :disabled="!jobsStore.queuePaused || (!jobsStore.pendingJobs.length && !jobsStore.pausedJobId)"
                 @click="handleStartQueue"
               />
             </UTooltip>
-            <UTooltip text="暂停队列，不再启动新的任务" arrow :content="{ side: 'bottom', sideOffset: 8 }">
+            <UTooltip text="立即中止当前渲染任务并暂停队列，恢复时会从断点自动续跑" arrow :content="{ side: 'bottom', sideOffset: 8 }">
               <UButton
                 icon="i-lucide-pause"
                 label="暂停任务队列"
@@ -80,14 +80,13 @@
     <section class="queue-content">
       <div v-if="jobsStore.loading" class="loading">加载中…</div>
 
-      <UCard v-else-if="jobsStore.jobs.length === 0" variant="subtle" class="empty-state" :ui="{ body: 'empty-state-body' }">
+        <UCard v-else-if="jobsStore.jobs.length === 0" variant="subtle" class="empty-state" :ui="{ body: 'empty-state-body' }">
         <div class="empty-state-icon">
           <UIcon name="i-lucide-film" />
         </div>
         <div class="empty-state-title">还没有渲染任务</div>
-        <div class="empty-state-note">拖拽 .blend 工程到窗口，或点击“新建任务”加入队列，然后手动开始。</div>
+        <div class="empty-state-note">拖拽 .blend 工程到窗口，或点击“新建任务”按钮创建渲染任务。</div>
         <div class="empty-state-actions">
-          <UButton icon="i-lucide-plus" label="新建任务" color="success" variant="solid" @click="openAddJob" />
           <UButton
             v-if="showInitializeTools"
             icon="i-lucide-scan-search"
@@ -95,7 +94,7 @@
             color="neutral"
             variant="outline"
             :loading="initializingTools"
-            @click="initializeTools"
+            @click="handleInitializeTools"
           />
         </div>
       </UCard>
@@ -128,15 +127,27 @@
         }"
         @pointerdown="handleQueuePointerDown(job, $event)"
       >
-        <JobCard
-          :job="job"
-          @cancel="jobsStore.stopJob(job.id)"
-          @remove="deleteConfirmJob = job"
-          @retry="handleRetry(job)"
-        />
+        <UContextMenu
+          :items="buildJobContextMenuItems(job)"
+          :ui="{ content: 'job-context-menu-content' }"
+        >
+          <div class="job-context-menu-target" data-context-menu>
+            <JobCard
+              :job="job"
+              @cancel="jobsStore.stopJob(job.id)"
+              @remove="deleteConfirmJob = job"
+              @retry="handleRetry(job)"
+            />
+          </div>
+        </UContextMenu>
       </div>
       </TransitionGroup>
     </section>
+
+    <JobMetadataModal
+      v-model:open="metadataDialogOpen"
+      :job="metadataJob"
+    />
 
     <UModal
       :open="!!retryConfirmJob"
@@ -273,7 +284,7 @@
       :open="showAddJob"
       title="新建渲染任务"
       :dismissible="false"
-      :content="{ class: 'job-modal-content job-form-modal' }"
+      :ui="{ content: 'job-modal-content job-form-modal' }"
       @update:open="v => { if (!v) closeAddJob() }"
     >
       <template #body>
@@ -284,13 +295,23 @@
                 <div class="form-section-header">
                   <div>
                     <h2 class="form-section-title">项目</h2>
-                    <p class="form-section-note">先确定任务名称和 Blender 工程路径。</p>
                   </div>
                 </div>
 
                 <div class="job-form-stack">
                   <UFormField label="任务名称" size="lg" class="job-form-field">
                     <UTextarea v-model.trim="form.name" :rows="1" autoresize class="job-name-textarea" placeholder="Shot_010_Lighting" :ui="{ root: 'w-full' }" />
+                  </UFormField>
+
+                  <UFormField label="任务备注" size="lg" class="job-form-field">
+                    <UTextarea
+                      v-model="formNote"
+                      :rows="2"
+                      autoresize
+                      class="path-textarea"
+                      placeholder="例如：客户返修、补帧说明、交付要求。"
+                      :ui="{ root: 'w-full' }"
+                    />
                   </UFormField>
 
                   <UFormField label="Blend 文件" size="lg" class="job-form-field">
@@ -303,7 +324,6 @@
                 <div class="form-section-header">
                   <div>
                     <h2 class="form-section-title">输出</h2>
-                    <p class="form-section-note">输出模板完整展开显示，方便直接检查目录和命名规则，建议使用包含 ###### 的路径模板，方便 Blender 输出序列帧。</p>
                   </div>
                 </div>
 
@@ -320,7 +340,6 @@
                 <div class="form-section-header">
                   <div>
                     <h2 class="form-section-title">渲染控制</h2>
-                    <p class="form-section-note">先选择 Blender 版本，再确认输出格式和渲染帧段。新任务会自动追加到队列末尾。</p>
                   </div>
                 </div>
 
@@ -333,35 +352,36 @@
                       size="sm"
                       :color="form.blender_executable === b.executable ? 'primary' : 'neutral'"
                       :variant="form.blender_executable === b.executable ? 'solid' : 'outline'"
-                      :label="b.version"
+                      :label="`Blender ${b.version}`"
                       @click="selectBlender(b.executable)"
                     />
                   </div>
 
-                  <div class="job-form-control-grid job-form-control-grid-meta">
-                    <UFormField label="格式">
+                  <div class="job-form-control-grid job-form-control-grid-render job-render-control-row">
+                    <UFormField label="格式" class="job-format-field">
                       <USelect
-                          v-model="form.output_format"
-                          :items="outputFormatOptions"
-                          trailing-icon="i-lucide-chevron-down"
-                          :ui="{
-                            base: 'w-full pe-9',
-                            trailing: 'pointer-events-none absolute inset-y-0 end-0 flex items-center pe-3',
-                            trailingIcon: 'size-4 text-primary',
-                            item: 'relative justify-center',
-                            itemLabel: 'w-full text-center',
-                            itemTrailing: 'absolute end-2'
-                          }"
-                        >
-                          <template #default="{ modelValue }">
-                            <span class="min-w-0 flex-1 truncate opacity-0 pointer-events-none select-none" aria-hidden="true">
-                              {{ modelValue || '选择格式' }}
-                            </span>
-                            <span class="absolute inset-0 flex items-center justify-center px-8 pointer-events-none">
-                              {{ modelValue || '选择格式' }}
-                            </span>
-                          </template>
-                        </USelect>
+                        v-model="form.output_format"
+                        :items="outputFormatOptions"
+                        trailing-icon="i-lucide-chevron-down"
+                        class="job-format-select"
+                        :ui="{
+                          base: 'w-full pe-9',
+                          trailing: 'pointer-events-none absolute inset-y-0 end-0 flex items-center pe-3',
+                          trailingIcon: 'size-4 text-primary',
+                          item: 'relative justify-center',
+                          itemLabel: 'w-full text-center',
+                          itemTrailing: 'absolute end-2'
+                        }"
+                      >
+                        <template #default="{ modelValue }">
+                          <span class="min-w-0 flex-1 truncate opacity-0 pointer-events-none select-none" aria-hidden="true">
+                            {{ modelValue || '选择格式' }}
+                          </span>
+                          <span class="absolute inset-0 flex items-center justify-center px-6 pointer-events-none">
+                            {{ modelValue || '选择格式' }}
+                          </span>
+                        </template>
+                      </USelect>
                     </UFormField>
                   </div>
                   <div class="job-form-control-grid job-form-control-grid-frames">
@@ -372,6 +392,12 @@
                       <UInputNumber v-model="form.frame_end" :min="1" :ui="{ root: 'w-full' }" />
                     </UFormField>
                   </div>
+                  <UFormField label="渲染后自动转 MP4">
+                    <div class="form-inline-toggle surface-panel">
+                      <UToggle v-model="form.auto_transcode_mp4" />
+                      <span class="hint-text">渲染完成后自动调用 FFmpeg 将序列帧合并为 MP4，需要先在设置中配置好 FFmpeg。</span>
+                    </div>
+                  </UFormField>
                 </div>
                 <p v-else class="hint-text">
                   未检测到 Blender，请前往
@@ -398,7 +424,6 @@
                 <div class="form-section-header">
                   <div>
                     <h2 class="form-section-title">工程参数</h2>
-                    <p class="form-section-note">读取后会同步当前工程里的核心渲染信息。</p>
                   </div>
                 </div>
 
@@ -451,7 +476,7 @@
           <UAlert v-if="formError" color="error" variant="subtle" :description="formError" />
 
           <div class="modal-actions">
-            <UButton type="button" icon="i-lucide-x" label="取消" color="warning" variant="outline" @click="closeAddJob" />
+            <UButton type="button" icon="i-lucide-x" label="取消" color="warning" variant="outline" @click="handleCloseAddJob" />
             <UButton type="submit" color="neutral" variant="solid" :loading="submitting" :label="submitting ? '提交中…' : '加入渲染队列'" />
           </div>
         </form>
@@ -532,6 +557,7 @@
 
 <script setup lang="ts">
 import { getCurrentWindow } from '@tauri-apps/api/window'
+import type { TabsItem } from '@nuxt/ui'
 import { useRouter } from 'vue-router'
 import type { AddJobPayload, BlendProjectSettings, RenderJob, RenderedFramesStatus } from '~/types'
 
@@ -640,12 +666,19 @@ async function initializeTools(options?: { silent?: boolean }) {
   }
 }
 
+function handleInitializeTools() {
+  return initializeTools()
+}
+
 async function handleStartQueue() {
+  const hadPausedJob = !!jobsStore.pausedJobId
   try {
     await jobsStore.startQueue()
     toast.add({
       title: '队列已开始',
-      description: '等待中的任务会按当前队列顺序依次启动。',
+      description: hadPausedJob
+        ? '已恢复被暂停的任务，将从断点继续渲染。'
+        : '等待中的任务会按当前队列顺序依次启动。',
       color: 'success',
     })
   } catch (error) {
@@ -662,7 +695,7 @@ async function handlePauseQueue() {
     await jobsStore.pauseQueue()
     toast.add({
       title: '队列已暂停',
-      description: '不会再启动新的渲染任务，当前正在运行的任务不会被中断。',
+      description: '当前渲染任务已中止，点击“开始任务队列”可从断点自动续跑。',
       color: 'warning',
     })
   } catch (error) {
@@ -830,6 +863,10 @@ async function confirmRetryCustomRange() {
     retryActionError.value = '起始帧不能大于结束帧。'
     return
   }
+  if (start < job.frameStart || end > job.frameEnd) {
+    retryActionError.value = `帧范围必须在任务范围 ${job.frameStart}–${job.frameEnd} 内。`
+    return
+  }
 
   retrySubmittingMode.value = retryCustomResumeFromExisting.value ? 'range-continue' : 'range-restart'
   try {
@@ -878,6 +915,8 @@ onMounted(async () => {
 
 const showAddJob = ref(false)
 const showAddJobConfirm = ref(false)
+const metadataDialogOpen = ref(false)
+const metadataJob = ref<RenderJob | null>(null)
 const submitting = ref(false)
 const addJobSubmitMode = ref<'restart' | 'continue' | null>(null)
 const inspectingProject = ref(false)
@@ -902,11 +941,11 @@ function displayEngine(engine: string) {
 
 const SEQUENCE_FORMATS = ['PNG', 'JPEG', 'OPEN_EXR']
 const outputFormatOptions = ['PNG', 'JPEG', 'OPEN_EXR']
-const queueTabItems = computed(() => [
-  { label: '总任务', value: 'all', badge: { label: String(jobsStore.jobs.length), color: 'neutral', variant: 'subtle' }, icon: 'i-lucide-layers', class: 'queue-tab-tone-all', ui: { trigger: 'queue-tab-tone-all' } },
-  { label: '排队任务', value: 'queue', badge: { label: String(jobsStore.queueJobs.length), color: 'info', variant: 'subtle' }, icon: 'i-lucide-loader-circle', class: 'queue-tab-tone-queue', ui: { trigger: 'queue-tab-tone-queue' } },
-  { label: '已完成任务', value: 'done', badge: { label: String(jobsStore.doneJobs.length), color: 'success', variant: 'subtle' }, icon: 'i-lucide-circle-check-big', class: 'queue-tab-tone-done', ui: { trigger: 'queue-tab-tone-done' } },
-  { label: '已中止任务', value: 'error', badge: { label: String(jobsStore.errorJobs.length), color: 'warning', variant: 'subtle' }, icon: 'i-lucide-triangle-alert', class: 'queue-tab-tone-error', ui: { trigger: 'queue-tab-tone-error' } },
+const queueTabItems = computed<TabsItem[]>(() => [
+  { label: '总任务', value: 'all', badge: { label: String(jobsStore.jobs.length), color: 'neutral' as const, variant: 'subtle' as const }, icon: 'i-lucide-layers', class: 'queue-tab-tone-all', ui: { trigger: 'queue-tab-tone-all' } },
+  { label: '排队任务', value: 'queue', badge: { label: String(jobsStore.queueJobs.length), color: 'info' as const, variant: 'subtle' as const }, icon: 'i-lucide-loader-circle', class: 'queue-tab-tone-queue', ui: { trigger: 'queue-tab-tone-queue' } },
+  { label: '已完成任务', value: 'done', badge: { label: String(jobsStore.doneJobs.length), color: 'success' as const, variant: 'subtle' as const }, icon: 'i-lucide-circle-check-big', class: 'queue-tab-tone-done', ui: { trigger: 'queue-tab-tone-done' } },
+  { label: '已中止任务', value: 'error', badge: { label: String(jobsStore.errorJobs.length), color: 'warning' as const, variant: 'subtle' as const }, icon: 'i-lucide-triangle-alert', class: 'queue-tab-tone-error', ui: { trigger: 'queue-tab-tone-error' } },
 ])
 const filteredJobs = computed(() => {
   switch (activeQueueTab.value) {
@@ -1070,7 +1109,7 @@ function handleQueuePointerDown(job: RenderJob, event: PointerEvent) {
   if (event.button !== 0) return
   if (!canDragQueueJob(job) || reorderingQueue.value) return
   const target = event.target as HTMLElement | null
-  if (target?.closest('button, a, input, textarea, select, [role="button"], .job-actions, .job-preview-clickable')) {
+  if (target?.closest('button, a, input, textarea, select, [data-no-drag], [role="menuitem"], [role="checkbox"], [contenteditable="true"]')) {
     return
   }
 
@@ -1092,6 +1131,8 @@ function autoFillOutputPath(blendPath: string) {
 
 const form = reactive<AddJobPayload>({
   name: '',
+  note: '',
+  auto_transcode_mp4: false,
   blend_file: '',
   blender_executable: '',
   output_path: '',
@@ -1102,8 +1143,17 @@ const form = reactive<AddJobPayload>({
   priority: 0,
 })
 
+const formNote = computed({
+  get: () => form.note ?? '',
+  set: (value: string) => {
+    form.note = value
+  },
+})
+
 function resetForm() {
   form.name = ''
+  form.note = ''
+  form.auto_transcode_mp4 = false
   form.blend_file = ''
   form.blender_executable = settingsStore.settings.defaultBlender || settingsStore.blenderVersions[0]?.executable || ''
   form.output_path = ''
@@ -1131,6 +1181,21 @@ async function openAddJob() {
   showAddJob.value = true
 }
 
+function openMetadataDialog(job: RenderJob) {
+  metadataJob.value = job
+  metadataDialogOpen.value = true
+}
+
+function buildJobContextMenuItems(job: RenderJob) {
+  return [
+    {
+      label: '编辑项目信息',
+      icon: 'i-lucide-notebook-pen',
+      onSelect: () => openMetadataDialog(job),
+    },
+  ]
+}
+
 async function openAddJobWithFile(blendPath: string) {
   await ensureSettingsLoaded()
   resetForm()
@@ -1148,6 +1213,10 @@ function closeAddJob(force = false) {
   projectSettingsMessage.value = ''
   outputFrameStatus.value = null
   addJobFrameStatus.value = null
+}
+
+function handleCloseAddJob() {
+  closeAddJob()
 }
 
 function closeAddJobConfirm() {
@@ -1253,6 +1322,7 @@ function buildJobPayload(resumeFromExisting: boolean): AddJobPayload {
   return {
     ...form,
     name: form.name || inferJobName(form.blend_file) || 'Untitled Render Job',
+    fps: projectSettings.value?.fps ?? null,
     preview_width: projectSettings.value?.resolutionX ?? null,
     preview_height: projectSettings.value?.resolutionY ?? null,
     resume_from_existing: resumeFromExisting,
@@ -1267,12 +1337,12 @@ async function submitNewJob() {
   formError.value = ''
 
   if (!form.blend_file || !form.blender_executable || !form.output_path) {
-    formError.value = 'Blend file, Blender executable, and output path are required.'
+    formError.value = 'Blend 文件、Blender 可执行文件和输出路径不能为空。'
     return
   }
 
   if (form.frame_start > form.frame_end) {
-    formError.value = 'Frame start must be less than or equal to frame end.'
+    formError.value = '起始帧不能大于结束帧。'
     return
   }
 

@@ -12,6 +12,7 @@ use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Child;
 use tokio::sync::Mutex;
 
+
 #[derive(Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RenderProgressEvent {
@@ -30,8 +31,42 @@ pub struct RenderLogEvent {
     pub line: String,
 }
 
-/// Max automatic crash-recovery retries before giving up.
-const MAX_CRASH_RETRIES: u32 = 3;
+/// Sliding window for per-frame render times used to compute stable ETA.
+/// The first `warmup` frames are discarded (they include scene load and cache
+/// warm-up and are significantly slower than steady-state).
+struct FrameTimeWindow {
+    times: VecDeque<f32>,
+    capacity: usize,
+    warmup_remaining: u32,
+}
+
+impl FrameTimeWindow {
+    fn new(warmup: u32, capacity: usize) -> Self {
+        Self {
+            times: VecDeque::with_capacity(capacity + 1),
+            capacity,
+            warmup_remaining: warmup,
+        }
+    }
+
+    fn push(&mut self, secs: f32) {
+        if self.warmup_remaining > 0 {
+            self.warmup_remaining -= 1;
+            return;
+        }
+        if self.times.len() >= self.capacity {
+            self.times.pop_front();
+        }
+        self.times.push_back(secs);
+    }
+
+    fn average(&self) -> Option<f32> {
+        if self.times.is_empty() {
+            return None;
+        }
+        Some(self.times.iter().sum::<f32>() / self.times.len() as f32)
+    }
+}
 
 pub fn format_to_ext(format: &str) -> &'static str {
     match format {
@@ -221,6 +256,14 @@ async fn persist_job_progress(
     .await;
 }
 
+async fn persist_crash_count(state: &AppState, job_id: &str, crash_count: u32) {
+    let _ = sqlx::query("UPDATE jobs SET crash_count = ? WHERE id = ?")
+        .bind(crash_count as i32)
+        .bind(job_id)
+        .execute(&state.pool)
+        .await;
+}
+
 fn compute_resume_frame(job: &RenderJob) -> i32 {
     if !job.resume_from_existing {
         return job.frame_start;
@@ -235,6 +278,10 @@ fn compute_resume_frame(job: &RenderJob) -> i32 {
 }
 
 pub async fn run_job(app: AppHandle, state: AppState, job: RenderJob) -> Result<JobStatus> {
+    let max_crash_retries = state
+        .cached_settings()
+        .map(|s| s.max_crash_retries.min(10))
+        .unwrap_or(3);
     let total_frames = job.total_frames() as u32;
     let mut resume_from_existing = job.resume_from_existing;
     let mut last_rendered_frame = job.last_rendered_frame;
@@ -450,6 +497,8 @@ pub async fn run_job(app: AppHandle, state: AppState, job: RenderJob) -> Result<
         let mut saved_in_run = 0u32;
         let mut stdout_last_frame = actual_start.max(job_frame_start) as u32;
         let mut latest_frame_time_secs: Option<f32> = None;
+        // Sliding window: skip first 3 warmup frames, then average last 8.
+        let mut frame_window = FrameTimeWindow::new(3, 8);
         let mut lines = BufReader::new(stdout).lines();
         while let Some(line) = lines.next_line().await? {
             let _ = app.emit(
@@ -468,16 +517,35 @@ pub async fn run_job(app: AppHandle, state: AppState, job: RenderJob) -> Result<
                 let completed = (already_done + saved_in_run).min(total_frames);
                 let abs_frame = (job_frame_start + completed as i32 - 1).clamp(job_frame_start, job_frame_end);
                 last_rendered_frame = Some(abs_frame);
-                let remaining = latest_frame_time_secs
+
+                // Primary: RenderTime from PNG metadata. Fallback: stdout Time: value.
+                let frame_secs = tokio::task::block_in_place(|| {
+                    frame_filename(&job.output_path, abs_frame, &job.output_format)
+                        .filter(|p| {
+                            p.extension()
+                                .map_or(false, |e| e.eq_ignore_ascii_case("png"))
+                        })
+                        .and_then(|p| crate::blender::metadata::read_png_render_time(&p))
+                })
+                .or(latest_frame_time_secs);
+
+                if let Some(secs) = frame_secs {
+                    frame_window.push(secs);
+                }
+
+                // Window average gives stable ETA; fall back to raw value while warming up.
+                let effective_secs = frame_window.average().or(latest_frame_time_secs);
+                let remaining = effective_secs
                     .filter(|_| completed < total_frames)
                     .map(|secs| secs * (total_frames - completed) as f32);
+
                 persist_job_progress(
                     &state,
                     &job.id,
                     Some(completed),
                     total_frames,
                     Some(abs_frame),
-                    latest_frame_time_secs,
+                    effective_secs,
                     remaining,
                 )
                 .await;
@@ -488,7 +556,7 @@ pub async fn run_job(app: AppHandle, state: AppState, job: RenderJob) -> Result<
                         job_id: job.id.clone(),
                         frame: completed,
                         total_frames,
-                        time_elapsed: latest_frame_time_secs.unwrap_or(0.0),
+                        time_elapsed: effective_secs.unwrap_or(0.0),
                         memory_mb: 0.0,
                         remaining_secs: remaining,
                     },
@@ -587,15 +655,15 @@ pub async fn run_job(app: AppHandle, state: AppState, job: RenderJob) -> Result<
                 "[crash-recovery] Blender exited with an error (crash #{}) but all {} frames are complete.",
                 crash_count, total_frames
             )
-        } else if crash_count < MAX_CRASH_RETRIES {
+        } else if crash_count < max_crash_retries {
             format!(
                 "[crash-recovery] Blender exited with an error (crash #{}/{}). {} frame(s) done — resuming from frame {}…",
-                crash_count, MAX_CRASH_RETRIES, frames_done, next_start
+                crash_count, max_crash_retries, frames_done, next_start
             )
         } else {
             format!(
                 "[crash-recovery] Blender exited with an error (crash #{}/{}). {} frame(s) done — max retries reached, giving up.",
-                crash_count, MAX_CRASH_RETRIES, frames_done
+                crash_count, max_crash_retries, frames_done
             )
         };
 
@@ -608,12 +676,16 @@ pub async fn run_job(app: AppHandle, state: AppState, job: RenderJob) -> Result<
             let _guard = log_write_lock.lock().await;
             let _ = crate::app_paths::append_log_line(&log_file_path, &recovery_line);
         }
+        persist_crash_count(&state, &job.id, crash_count).await;
+        if let Ok(updated_job) = crate::queue::scheduler::load_job(&state.pool, &job.id).await {
+            crate::queue::scheduler::emit_job_update(&app, &updated_job);
+        }
 
         if next_start > job.frame_end {
             break Ok(JobStatus::Done);
         }
 
-        if crash_count >= MAX_CRASH_RETRIES {
+        if crash_count >= max_crash_retries {
             break Err(anyhow::anyhow!(
                 "Blender crashed {} time(s).{}",
                 crash_count,

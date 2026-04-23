@@ -1,0 +1,89 @@
+.ffmpeg-card-layout {
+  grid-template-columns: 1fr;
+}
+
+.job-meta-path {
+  margin: 0;
+  color: var(--ui-text-muted);
+  font-size: 0.82rem;
+  line-height: 1.5;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── TranscodeSubmitModal ── */
+
+.transcode-submit-modal {
+  width: min(540px, 92vw);
+}
+
+.transcode-submit-stack {
+  display: grid;
+  gap: 1rem;
+}
+
+.transcode-submit-section {
+  padding: 1rem;
+}
+
+.transcode-submit-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.8rem;
+  margin-bottom: 0.9rem;
+}
+
+.transcode-submit-fields {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.transcode-submit-path-row {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  min-width: 0;
+}
+
+.transcode-submit-path-row > :first-child {
+  flex: 1;
+  min-width: 0;
+}
+
+.transcode-submit-filename-row {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-width: 0;
+}
+
+.transcode-submit-filename-row > :first-child {
+  flex: 1;
+  min-width: 0;
+}
+
+.transcode-submit-suffix {
+  flex-shrink: 0;
+  color: var(--ui-text-muted);
+  font-size: 0.9rem;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+/* ── ──────────────────── ── */
+
+@media (max-width: 720px) {
+  .job-meta-path {
+    white-space: normal;
+    overflow: visible;
+    text-overflow: unset;
+  }
+
+  .transcode-submit-path-row,
+  .transcode-submit-filename-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}

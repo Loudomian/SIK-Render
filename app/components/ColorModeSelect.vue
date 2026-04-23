@@ -4,7 +4,7 @@
     :items="items"
     value-key="value"
     label-key="label"
-    :leading-icon="selectedItem.icon"
+    :leading-icon="selectedItem?.icon"
     :ui="{ base: 'w-36' }"
     @update:model-value="value => emit('update:modelValue', value)"
   />
@@ -27,6 +27,6 @@ const items: Array<{ label: string, value: ThemeMode, icon: string }> = [
 ]
 
 const selectedItem = computed(() => {
-  return items.find(item => item.value === props.modelValue) ?? items[0]
+  return items.find(item => item.value === props.modelValue) ?? items[0]!
 })
 </script>

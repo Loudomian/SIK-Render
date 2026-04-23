@@ -1,4 +1,5 @@
 use crate::blender::process;
+use crate::commands::jobs::QueueState;
 use crate::queue::job::{DbRenderJob, JobStatus, RenderJob};
 use crate::state::AppState;
 use chrono::Utc;
@@ -65,12 +66,26 @@ async fn schedule_jobs(app: &AppHandle, state: &AppState) -> anyhow::Result<bool
     }
 
     let Some(job) = try_start_next_job(app, state).await? else {
+        pause_queue_if_idle(app, state).await?;
         return Ok(false);
     };
 
     spawn_job_runner(app.clone(), state.clone(), job);
 
     Ok(true)
+}
+
+async fn pause_queue_if_idle(app: &AppHandle, state: &AppState) -> anyhow::Result<()> {
+    let pending_jobs = sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM jobs WHERE status = 'pending'")
+        .fetch_one(&state.pool)
+        .await?;
+
+    if pending_jobs <= 0 && !state.is_queue_paused() {
+        state.set_queue_paused(true);
+        emit_queue_state(app, true);
+    }
+
+    Ok(())
 }
 
 async fn try_start_next_job(app: &AppHandle, state: &AppState) -> anyhow::Result<Option<RenderJob>> {
@@ -80,6 +95,15 @@ async fn try_start_next_job(app: &AppHandle, state: &AppState) -> anyhow::Result
             id,
             job_number,
             name,
+            note,
+            crash_count,
+            auto_transcode_mp4,
+            transcode_name_override,
+            transcode_fps_override,
+            transcode_output_path_override,
+            transcode_crf_override,
+            transcode_preset_override,
+            fps,
             blend_file,
             blender_exec,
             output_path,
@@ -170,7 +194,34 @@ fn spawn_job_runner(app: AppHandle, state: AppState, running_job: RenderJob) {
         }
 
         match load_job(&state.pool, &running_job.id).await {
-            Ok(updated_job) => emit_job_update(&app, &updated_job),
+            Ok(updated_job) => {
+                emit_job_update(&app, &updated_job);
+                if matches!(
+                    updated_job.status,
+                    JobStatus::Done
+                        | JobStatus::Failed
+                        | JobStatus::Cancelled
+                        | JobStatus::Interrupted
+                ) {
+                    let _ = crate::commands::transcode::write_blender_job_toml(&updated_job);
+                }
+                if updated_job.status == JobStatus::Done && updated_job.auto_transcode_mp4 {
+                    let settings = state.cached_settings();
+                    let payload = crate::commands::transcode::build_ffmpeg_payload_for_render_job(
+                        &updated_job,
+                        settings.as_ref(),
+                    );
+                    if let Err(error) = crate::commands::transcode::enqueue_ffmpeg_job(
+                        &app,
+                        &state,
+                        payload,
+                    )
+                    .await
+                    {
+                        log::error!("Auto FFmpeg job enqueue failed for job {}: {error}", updated_job.id);
+                    }
+                }
+            }
             Err(error) => log::error!("Failed to reload job {}: {error}", running_job.id),
         }
         state.scheduler_notify.notify_one();
@@ -184,6 +235,15 @@ pub async fn load_job(pool: &sqlx::SqlitePool, id: &str) -> anyhow::Result<Rende
             id,
             job_number,
             name,
+            note,
+            crash_count,
+            auto_transcode_mp4,
+            transcode_name_override,
+            transcode_fps_override,
+            transcode_output_path_override,
+            transcode_crf_override,
+            transcode_preset_override,
+            fps,
             blend_file,
             blender_exec,
             output_path,
@@ -216,4 +276,12 @@ pub async fn load_job(pool: &sqlx::SqlitePool, id: &str) -> anyhow::Result<Rende
 
 pub fn emit_job_update(app: &AppHandle, job: &RenderJob) {
     let _ = app.emit("job-updated", JobUpdatedEvent { job: job.clone() });
+}
+
+pub fn emit_queue_state_full(app: &AppHandle, paused: bool, paused_job: Option<String>) {
+    let _ = app.emit("queue-state", QueueState { paused, paused_job });
+}
+
+pub fn emit_queue_state(app: &AppHandle, paused: bool) {
+    emit_queue_state_full(app, paused, None);
 }

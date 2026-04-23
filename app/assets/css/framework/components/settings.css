@@ -1,3 +1,25 @@
+.settings-section {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.settings-section + .settings-section {
+  margin-top: 1.35rem;
+}
+
+.settings-section-heading {
+  display: grid;
+  gap: 0.3rem;
+}
+
+.settings-section-title {
+  margin: 0;
+  color: var(--ui-text);
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
 .settings-card-body {
   padding: 1.1rem 1.2rem;
 }
@@ -51,6 +73,28 @@
   color: var(--ui-text-muted);
   font-size: 0.82rem;
   line-height: 1.55;
+}
+
+.settings-summary-panel {
+  padding: 0.95rem 1rem;
+}
+
+.settings-summary-text {
+  margin: 0;
+  color: var(--ui-text);
+  font-size: 0.92rem;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.settings-brand-line {
+  margin: 0;
+  color: var(--ui-text);
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  line-height: 1.35;
+  text-transform: uppercase;
 }
 
 .settings-version-value {
@@ -115,6 +159,20 @@
   white-space: nowrap;
 }
 
+.settings-modal-content {
+  width: min(720px, 92vw);
+}
+
+.settings-modal-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+}
+
+.settings-modal-spacer {
+  min-height: 1px;
+}
+
 @media (max-width: 900px) {
   .settings-grid-2 {
     grid-template-columns: 1fr;
@@ -137,5 +195,9 @@
 
   .blender-version-actions {
     justify-content: flex-start;
+  }
+
+  .settings-modal-actions {
+    grid-template-columns: 1fr;
   }
 }

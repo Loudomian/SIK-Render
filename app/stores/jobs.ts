@@ -7,12 +7,15 @@ export const useJobsStore = defineStore('jobs', () => {
   const renderStarted = ref<Record<string, boolean>>({})
   const loading = ref(false)
   const queuePaused = ref(true)
+  const pausedJobId = ref<string | null>(null)
   const {
     listJobs,
     getQueueState,
     startQueue: invokeStartQueue,
     pauseQueue: invokePauseQueue,
     addJob,
+    updateJobMetadata: invokeUpdateJobMetadata,
+    updateJobTranscodeSettings: invokeUpdateJobTranscodeSettings,
     removeJob,
     cancelJob,
     resetJob,
@@ -20,45 +23,9 @@ export const useJobsStore = defineStore('jobs', () => {
     getJobLatestLogs: fetchJobLogs,
   } = useTauri()
 
-  function jobOrderWeight(status: RenderJob['status']) {
-    switch (status) {
-      case 'running':
-        return 0
-      case 'pending':
-        return 1
-      case 'failed':
-      case 'cancelled':
-      case 'interrupted':
-        return 2
-      case 'done':
-        return 3
-      default:
-        return 4
-    }
-  }
-
   function sortJobs() {
-    // TODO: Sorting is currently mirrored in both SQL and the frontend store.
-    // Keep this until event-driven updates are refactored to consume backend
-    // ordering directly; otherwise transient local events can reorder cards.
     jobs.value = [...jobs.value].sort((a, b) =>
-      jobOrderWeight(a.status) - jobOrderWeight(b.status)
-      || (a.status === 'running' && b.status === 'running'
-        ? (b.startedAt ?? b.createdAt) - (a.startedAt ?? a.createdAt)
-        : 0)
-      || (
-        ['failed', 'cancelled', 'interrupted'].includes(a.status)
-        && ['failed', 'cancelled', 'interrupted'].includes(b.status)
-          ? (b.finishedAt ?? b.createdAt) - (a.finishedAt ?? a.createdAt)
-          : 0
-      )
-      || (a.status === 'done' && b.status === 'done'
-        ? (b.finishedAt ?? b.createdAt) - (a.finishedAt ?? a.createdAt)
-        : 0)
-      || (a.status === 'pending' && b.status === 'pending'
-        ? a.priority - b.priority
-        : 0)
-      || b.createdAt - a.createdAt,
+      a.priority - b.priority || a.createdAt - b.createdAt,
     )
   }
 
@@ -81,16 +48,24 @@ export const useJobsStore = defineStore('jobs', () => {
   async function fetchQueueState() {
     const state = await getQueueState()
     queuePaused.value = state.paused
+    pausedJobId.value = state.pausedJob ?? null
   }
 
   async function startQueue() {
     const state = await invokeStartQueue()
     queuePaused.value = state.paused
+    pausedJobId.value = state.pausedJob ?? null
   }
 
   async function pauseQueue() {
     const state = await invokePauseQueue()
     queuePaused.value = state.paused
+    pausedJobId.value = state.pausedJob ?? null
+  }
+
+  function applyQueueState(state: { paused: boolean; pausedJob?: string | null }) {
+    queuePaused.value = state.paused
+    pausedJobId.value = state.pausedJob ?? null
   }
 
   async function submitJob(payload: AddJobPayload) {
@@ -107,6 +82,44 @@ export const useJobsStore = defineStore('jobs', () => {
   async function reorderQueueJobs(orderedIds: string[]) {
     jobs.value = await reorderJob(orderedIds)
     sortJobs()
+  }
+
+  async function updateJobMetadata(id: string, name: string, note?: string | null) {
+    const updated = await invokeUpdateJobMetadata(id, name, note ?? null)
+    const index = jobs.value.findIndex(job => job.id === updated.id)
+    if (index === -1) {
+      jobs.value.push(updated)
+    } else {
+      jobs.value[index] = {
+        ...jobs.value[index],
+        ...updated,
+      }
+    }
+    sortJobs()
+    return updated
+  }
+
+  async function updateJobTranscodeSettings(payload: {
+    id: string
+    auto_transcode_mp4: boolean
+    transcode_name_override: string | null
+    transcode_fps_override: number | null
+    transcode_output_path_override: string | null
+    transcode_crf_override: number | null
+    transcode_preset_override: string | null
+  }) {
+    const updated = await invokeUpdateJobTranscodeSettings(payload)
+    const index = jobs.value.findIndex(job => job.id === updated.id)
+    if (index === -1) {
+      jobs.value.push(updated)
+    } else {
+      jobs.value[index] = {
+        ...jobs.value[index],
+        ...updated,
+      }
+    }
+    sortJobs()
+    return updated
   }
 
   async function deleteJob(id: string) {
@@ -138,9 +151,6 @@ export const useJobsStore = defineStore('jobs', () => {
       frameRange?.end ?? null,
     )
     _applyReset(updated)
-    if (queuePaused.value) {
-      await startQueue()
-    }
   }
 
   async function retryJobFromStart(job: RenderJob, frameRange?: { start: number, end: number }) {
@@ -172,8 +182,9 @@ export const useJobsStore = defineStore('jobs', () => {
   }
 
   function applyLog(event: RenderLogEvent) {
-    if (!logs.value[event.jobId]) logs.value[event.jobId] = []
-    logs.value[event.jobId].push(event.line)
+    const existing = logs.value[event.jobId] ?? []
+    existing.push(event.line)
+    logs.value[event.jobId] = existing
     if (/\bFra:\d+/.test(event.line) || /\bSaved:\s/i.test(event.line)) {
       renderStarted.value[event.jobId] = true
     }
@@ -202,14 +213,30 @@ export const useJobsStore = defineStore('jobs', () => {
       return
     }
     const current = jobs.value[index]
+    if (!current) return
+    const isRunning = event.job.status === 'running'
+    const storedFrame = current.currentFrame ?? 0
+    const incomingFrame = event.job.currentFrame ?? 0
+    // A job-updated event carries a DB snapshot that may lag behind a render-progress
+    // event already applied to the store. For running jobs, never let frame counters
+    // go backwards, and skip timing fields entirely when the snapshot is stale.
+    const timingIsStale = isRunning && incomingFrame < storedFrame
     jobs.value[index] = {
       ...current,
       ...event.job,
-      currentFrame: event.job.currentFrame ?? (event.job.status === 'running' ? current.currentFrame : undefined),
-      totalFrames: event.job.totalFrames ?? (event.job.status === 'running' ? current.totalFrames : undefined),
-      lastRenderedFrame: event.job.lastRenderedFrame ?? (event.job.status === 'running' ? current.lastRenderedFrame : undefined),
-      timeElapsed: event.job.timeElapsed ?? (event.job.status === 'running' ? current.timeElapsed : undefined),
-      remainingSecs: event.job.remainingSecs ?? (event.job.status === 'running' ? current.remainingSecs : undefined),
+      currentFrame: isRunning ? (Math.max(storedFrame, incomingFrame) || undefined) : event.job.currentFrame,
+      totalFrames: event.job.totalFrames ?? (isRunning ? current.totalFrames : undefined),
+      lastRenderedFrame: isRunning
+        ? (current.lastRenderedFrame != null && event.job.lastRenderedFrame != null
+            ? Math.max(current.lastRenderedFrame, event.job.lastRenderedFrame)
+            : (current.lastRenderedFrame ?? event.job.lastRenderedFrame))
+        : event.job.lastRenderedFrame,
+      timeElapsed: timingIsStale
+        ? current.timeElapsed
+        : (event.job.timeElapsed ?? (isRunning ? current.timeElapsed : undefined)),
+      remainingSecs: timingIsStale
+        ? current.remainingSecs
+        : (event.job.remainingSecs ?? (isRunning ? current.remainingSecs : undefined)),
     }
     if (event.job.status !== 'running') {
       delete renderStarted.value[event.job.id]
@@ -234,6 +261,7 @@ export const useJobsStore = defineStore('jobs', () => {
     logs,
     loading,
     queuePaused,
+    pausedJobId,
     pendingJobs,
     runningJobs,
     doneJobs,
@@ -243,7 +271,10 @@ export const useJobsStore = defineStore('jobs', () => {
     fetchQueueState,
     startQueue,
     pauseQueue,
+    applyQueueState,
     submitJob,
+    updateJobMetadata,
+    updateJobTranscodeSettings,
     reorderQueueJobs,
     retryJob,
     retryJobFromStart,

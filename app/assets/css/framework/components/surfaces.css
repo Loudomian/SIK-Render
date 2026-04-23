@@ -28,18 +28,30 @@
   border-color: color-mix(in srgb, var(--ui-border-accented) 92%, transparent);
 }
 
-.surface-card-subtle:hover,
-.surface-card-outline:hover {
-  background: color-mix(in srgb, var(--ui-bg-elevated) 100%, white 4%);
-}
-
-.surface-card-soft:hover {
-  background: color-mix(in srgb, var(--ui-bg-muted) 100%, white 3%);
-}
-
 .surface-card-solid:hover {
   border-color: color-mix(in srgb, var(--ui-primary) 28%, var(--ui-border-accented));
   background: color-mix(in srgb, var(--ui-primary) 12%, var(--ui-bg-elevated));
+}
+
+.dark .surface-card-subtle:hover,
+.dark .surface-card-outline:hover {
+  background: color-mix(in srgb, var(--ui-bg-elevated) 100%, white 4%);
+}
+
+.dark .surface-card-soft:hover {
+  background: color-mix(in srgb, var(--ui-bg-muted) 100%, white 3%);
+}
+
+.light .surface-card-subtle:hover,
+.light .surface-card-outline:hover,
+:root:not(.dark) .surface-card-subtle:hover,
+:root:not(.dark) .surface-card-outline:hover {
+  background: color-mix(in srgb, var(--ui-bg-elevated) 100%, black 4%);
+}
+
+.light .surface-card-soft:hover,
+:root:not(.dark) .surface-card-soft:hover {
+  background: color-mix(in srgb, var(--ui-bg-muted) 100%, black 3%);
 }
 
 .surface-panel {

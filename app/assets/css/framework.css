@@ -14,6 +14,8 @@
 @import "./framework/components/job-card.css";
 @import "./framework/components/settings.css";
 @import "./framework/components/detail.css";
+@import "./framework/components/context-menu.css";
 @import "./framework/components/preview.css";
 @import "./framework/components/log.css";
 @import "./framework/components/node.css";
+@import "./framework/components/transcode.css";

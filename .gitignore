@@ -8,12 +8,18 @@ src-tauri/ta*.pdb
 node_modules/
 .output/
 .nuxt/
+.nuxt-dev*/
 .nuxt-build/
+.vite-cache/
+.vite-cache*/
 dist/
 bun.lockb
+.bun-install/
+.codex-tmp/
 
 # Tauri build outputs
 src-tauri/gen/
+src-tauri/target-codex-check*/
 
 # OS
 .DS_Store
