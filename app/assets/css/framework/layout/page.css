@@ -45,6 +45,12 @@
   gap: 1.25rem;
 }
 
+.detail-page {
+  height: calc(100vh - 4rem);
+  grid-template-rows: auto minmax(0, 1fr);
+  min-height: 0;
+}
+
 @media (max-width: 720px) {
   .page-hero {
     align-items: stretch;

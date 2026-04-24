@@ -457,9 +457,10 @@ pub async fn run_job(app: AppHandle, state: AppState, job: RenderJob) -> Result<
         let stderr_task = tokio::spawn(async move {
             let mut lines = BufReader::new(stderr).lines();
             while let Ok(Some(line)) = lines.next_line().await {
+                let rendered_line = crate::app_paths::timestamped_log_line(&line);
                 let _ = app_stderr.emit(
                     "render-log",
-                    RenderLogEvent { job_id: job_id_stderr.clone(), line: line.clone() },
+                    RenderLogEvent { job_id: job_id_stderr.clone(), line: rendered_line.clone() },
                 );
                 if let Some(frame) = parser::parse_frame(&line) {
                     stderr_last_frame = frame;
@@ -487,7 +488,7 @@ pub async fn run_job(app: AppHandle, state: AppState, job: RenderJob) -> Result<
                 }
                 stderr_tail.push_back(line.clone());
                 let _guard = log_write_lock_stderr.lock().await;
-                let _ = crate::app_paths::append_log_line(&log_file_path_stderr, &line);
+                let _ = crate::app_paths::append_log_line(&log_file_path_stderr, &rendered_line);
             }
         });
 
@@ -501,13 +502,14 @@ pub async fn run_job(app: AppHandle, state: AppState, job: RenderJob) -> Result<
         let mut frame_window = FrameTimeWindow::new(3, 8);
         let mut lines = BufReader::new(stdout).lines();
         while let Some(line) = lines.next_line().await? {
+            let rendered_line = crate::app_paths::timestamped_log_line(&line);
             let _ = app.emit(
                 "render-log",
-                RenderLogEvent { job_id: job.id.clone(), line: line.clone() },
+                RenderLogEvent { job_id: job.id.clone(), line: rendered_line.clone() },
             );
             {
                 let _guard = log_write_lock_stdout.lock().await;
-                let _ = crate::app_paths::append_log_line(&log_file_path_stdout, &line);
+                let _ = crate::app_paths::append_log_line(&log_file_path_stdout, &rendered_line);
             }
             if let Some(frame) = parser::parse_frame(&line) {
                 stdout_last_frame = frame;

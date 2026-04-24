@@ -823,15 +823,16 @@ async fn append_ffmpeg_log_line(
     line: impl Into<String>,
 ) {
     let line = line.into();
+    let rendered_line = crate::app_paths::timestamped_log_line(&line);
     let _ = app.emit(
         "transcode-log",
         TranscodeLogEvent {
             job_id: job_id.to_string(),
-            line: line.clone(),
+            line: rendered_line.clone(),
         },
     );
     let _guard = log_write_lock.lock().await;
-    let _ = crate::app_paths::append_log_line(log_file_path, &line);
+    let _ = crate::app_paths::append_log_line(log_file_path, &rendered_line);
 }
 
 fn parse_ffmpeg_progress(line: &str) -> Option<FfmpegProgress> {
@@ -1515,11 +1516,8 @@ pub async fn delete_ffmpeg_job(id: String, state: State<'_, AppState>) -> Result
         .await
         .map_err(|error| error.to_string())?;
 
-    let logs_dir = crate::app_paths::logs_dir().map_err(|error| error.to_string())?;
-    let target = logs_dir.join(crate::app_paths::ffmpeg_job_logs_dir_name(
-        job_number,
-        &resolved_job_id,
-    ));
+    let target = crate::app_paths::ffmpeg_job_logs_dir(job_number, &resolved_job_id)
+        .map_err(|error| error.to_string())?;
     if target.exists() {
         std::fs::remove_dir_all(&target).map_err(|error| error.to_string())?;
     }

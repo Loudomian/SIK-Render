@@ -700,18 +700,17 @@ pub async fn get_job_log_summary(
         .await
         .map_err(|e| e.to_string())?;
 
-    let directory = crate::app_paths::job_logs_dir(job_number, &job_id)
+    let directory = crate::app_paths::job_log_dir(job_number, &job_id)
         .map_err(|e| e.to_string())?;
     let blender_count = crate::app_paths::count_job_log_files(job_number, &job_id, crate::app_paths::BLENDER_LOG_KIND)
         .map_err(|e| e.to_string())?;
-    let ffmpeg_count = crate::app_paths::count_job_log_files(job_number, &job_id, crate::app_paths::FFMPEG_LOG_KIND)
-        .map_err(|e| e.to_string())?;
+    let ffmpeg_count = 0;
 
     Ok(JobLogSummary {
         directory: directory.to_string_lossy().to_string(),
         blender_count,
         ffmpeg_count,
-        total_count: blender_count + ffmpeg_count,
+        total_count: blender_count,
     })
 }
 

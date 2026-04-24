@@ -2,50 +2,65 @@
   <div v-if="job" class="detail-page">
     <section class="page-hero detail-hero">
         <div class="page-hero-copy detail-title">
-          <div class="detail-heading-stack">
-            <div class="detail-heading-line">
-              <UBadge :label="statusLabel(job.status)" :color="statusColor(job.status)" variant="subtle" />
-              <UBadge :label="`#${job.jobNumber}`" color="neutral" variant="subtle" />
-              <UBadge :label="job.sourceType === 'blender_job' ? '来自 Blender Job' : '来自文件夹'" color="neutral" variant="subtle" />
+          <div class="detail-title-row">
+            <div class="detail-heading-stack">
+              <div class="detail-heading-line">
+                <UBadge :label="statusLabel(job.status)" :color="statusColor(job.status)" variant="subtle" />
+                <UBadge :label="`#${job.jobNumber}`" color="neutral" variant="subtle" />
+                <UBadge :label="job.sourceType === 'blender_job' ? '来自 Blender Job' : '来自文件夹'" color="neutral" variant="subtle" />
+              </div>
+              <UBreadcrumb
+                as="h1"
+                :items="[
+                  { label: '转码队列', to: '/transcode' },
+                  { label: job.name },
+                ]"
+                :ui="{
+                  root: 'detail-breadcrumb',
+                  list: 'detail-breadcrumb-list',
+                  item: 'detail-breadcrumb-item',
+                  link: 'detail-breadcrumb-link',
+                  linkLabel: 'detail-breadcrumb-label',
+                  separator: 'detail-breadcrumb-separator-wrap',
+                  separatorIcon: 'detail-breadcrumb-separator',
+                }"
+              >
+                <template #separator>
+                  <span class="detail-breadcrumb-separator" aria-hidden="true">&gt;</span>
+                </template>
+                <template #item-label="{ item, active }">
+                  <span :class="active ? 'detail-breadcrumb-current' : 'detail-breadcrumb-ancestor'">
+                    {{ item.label }}
+                  </span>
+                </template>
+              </UBreadcrumb>
             </div>
-            <UBreadcrumb
-              as="h1"
-              :items="[
-                { label: '转码队列', to: '/transcode' },
-                { label: job.name },
-              ]"
-              :ui="{
-                root: 'detail-breadcrumb',
-                list: 'detail-breadcrumb-list',
-                item: 'detail-breadcrumb-item',
-                link: 'detail-breadcrumb-link',
-                linkLabel: 'detail-breadcrumb-label',
-              }"
-            />
-            <p class="page-note detail-note">{{ job.outputPath }}</p>
+            <div class="detail-header-actions">
+              <UButton
+                v-if="job.status === 'running'"
+                icon="i-lucide-square"
+                label="取消"
+                color="warning"
+                variant="outline"
+                size="md"
+                @click="handleCancel"
+              />
+              <UButton
+                v-if="job.status !== 'running'"
+                icon="i-lucide-trash-2"
+                label="删除"
+                color="error"
+                variant="outline"
+                size="md"
+                @click="handleDelete"
+              />
+            </div>
           </div>
-        </div>
-        <div class="detail-header-actions">
-          <UButton
-            v-if="job.status === 'running'"
-            icon="i-lucide-square"
-            label="取消"
-            color="warning"
-            variant="outline"
-            @click="handleCancel"
-          />
-          <UButton
-            v-if="job.status !== 'running'"
-            icon="i-lucide-trash-2"
-            label="删除"
-            color="error"
-            variant="outline"
-            @click="handleDelete"
-          />
         </div>
     </section>
 
-    <div class="detail-grid">
+    <section class="detail-content">
+      <div class="detail-grid">
         <UCard variant="subtle" :ui="{ root: 'detail-section detail-full', body: 'detail-card-body' }">
         <h2 class="detail-card-title">文件路径</h2>
         <div class="detail-info-stack">
@@ -190,7 +205,7 @@
                 :icon="showAllLogs ? 'i-lucide-clock' : 'i-lucide-layers'"
                 color="neutral"
                 variant="subtle"
-                size="xs"
+                size="md"
                 :loading="logsLoading"
                 @click="toggleLogScope"
               />
@@ -199,7 +214,7 @@
                 label="复制"
                 color="neutral"
                 variant="subtle"
-                size="xs"
+                size="md"
                 @click="copyLogs"
               />
               <UButton
@@ -208,7 +223,7 @@
                 label="输出目录"
                 color="neutral"
                 variant="subtle"
-                size="xs"
+                size="md"
                 @click="openPath(job.outputPath)"
               />
             </div>
@@ -216,11 +231,17 @@
           <div class="log-surface">
             <div ref="logEl" class="log-panel" @scroll="onLogScroll">
               <span v-if="logLines.length === 0" class="log-empty">当前还没有转码日志。</span>
-              <div v-for="(line, index) in logLines" :key="index" class="log-line">{{ line }}</div>
+              <div v-for="(entry, index) in displayLogLines" :key="index" class="log-line">
+                <div class="log-line-inner" :class="{ 'log-line-inner-no-timestamp': !entry.timestamp }">
+                  <span v-if="entry.timestamp" class="log-line-timestamp">{{ entry.timestamp }}</span>
+                  <span class="log-line-text">{{ entry.content || '\u00A0' }}</span>
+                </div>
+              </div>
             </div>
           </div>
         </UCard>
       </div>
+    </section>
   </div>
 
   <div v-else-if="loadError" class="detail-page">
@@ -245,6 +266,7 @@
 <script setup lang="ts">
 import type { TranscodeLogEvent } from '~/types'
 import { FFMPEG_STATUS_COLOR, FFMPEG_STATUS_LABEL } from '~/composables/useFfmpegStatus'
+import { parseLogLine } from '~/utils/log-line'
 
 const route = useRoute()
 const router = useRouter()
@@ -273,6 +295,7 @@ const allLogLines = ref<string[]>([])
 const logLines = computed(() =>
   showAllLogs.value ? allLogLines.value : (transcodeStore.logs[jobId.value] ?? []),
 )
+const displayLogLines = computed(() => logLines.value.map(line => parseLogLine(line)))
 const unlisteners: Array<() => void> = []
 const logEl = ref<HTMLDivElement | null>(null)
 const pinToBottom = ref(true)

@@ -7,22 +7,22 @@
             :ui="{ content: 'detail-context-menu-content' }"
           >
             <div class="detail-context-menu-target" data-context-menu>
-              <div class="detail-title-row">
-                <div class="detail-heading-stack">
-                  <div class="detail-heading-line">
-                    <UBadge
-                      :label="STATUS_LABEL[job.status] ?? job.status"
-                      :color="statusBadgeColor"
-                      variant="subtle"
-                    />
-                    <UBadge v-if="orderBadgeLabel" :label="orderBadgeLabel" color="neutral" variant="subtle" />
-                    <UBadge
-                      v-if="job.crashCount > 0"
-                      :label="`崩溃 ${job.crashCount} 次`"
-                      color="warning"
-                      variant="subtle"
-                    />
-                  </div>
+              <div class="detail-heading-stack">
+                <div class="detail-heading-line">
+                  <UBadge
+                    :label="STATUS_LABEL[job.status] ?? job.status"
+                    :color="statusBadgeColor"
+                    variant="subtle"
+                  />
+                  <UBadge v-if="orderBadgeLabel" :label="orderBadgeLabel" color="neutral" variant="subtle" />
+                  <UBadge
+                    v-if="job.crashCount > 0"
+                    :label="`崩溃 ${job.crashCount} 次`"
+                    color="warning"
+                    variant="subtle"
+                  />
+                </div>
+                <div class="detail-title-row">
                   <UBreadcrumb
                     as="h1"
                     :items="detailBreadcrumbItems"
@@ -45,75 +45,75 @@
                       </span>
                     </template>
                   </UBreadcrumb>
-                  <p v-if="job.note" class="page-note detail-note">{{ job.note }}</p>
+                  <div class="detail-header-actions">
+                    <UFieldGroup size="md" class="detail-action-fieldgroup">
+                      <UButton
+                        :icon="transcodePrimaryAction.icon"
+                        :label="transcodePrimaryAction.label"
+                        :color="transcodePrimaryAction.color"
+                        variant="subtle"
+                        size="md"
+                        :loading="transcodePrimaryAction.loading"
+                        :disabled="transcodePrimaryAction.disabled"
+                        @click="handlePrimaryTranscodeAction"
+                      />
+                      <UDropdownMenu
+                        :items="transcodeActionItems"
+                        arrow
+                        :content="{ side: 'bottom', align: 'end', sideOffset: 8 }"
+                      >
+                        <UButton
+                          icon="i-lucide-chevron-down"
+                          color="neutral"
+                          variant="outline"
+                          size="md"
+                          square
+                        />
+                        <template #auto-transcode-trailing>
+                          <USwitch
+                            :model-value="autoTranscodeEnabled"
+                            color="neutral"
+                            :disabled="updatingAutoTranscode"
+                            @pointerdown.stop
+                            @click.stop
+                            @update:model-value="handleAutoTranscodeSwitchUpdate"
+                          />
+                        </template>
+                      </UDropdownMenu>
+                    </UFieldGroup>
+                    <UButton
+                      v-if="job.status === 'failed' || job.status === 'cancelled' || job.status === 'interrupted' || job.status === 'done'"
+                      icon="i-lucide-rotate-ccw"
+                      :label="job.status === 'cancelled' || job.status === 'interrupted' ? '继续' : '重试'"
+                      :color="job.status === 'cancelled' || job.status === 'interrupted' ? 'warning' : 'neutral'"
+                      variant="outline"
+                      size="md"
+                      @click="handleRetry"
+                    />
+                    <UButton
+                      v-if="job.status === 'running' || job.status === 'pending'"
+                      icon="i-lucide-x"
+                      label="取消"
+                      color="warning"
+                      variant="outline"
+                      size="md"
+                      @click="jobsStore.stopJob(job.id)"
+                    />
+                    <UButton
+                      v-if="job.status === 'done' || job.status === 'failed' || job.status === 'cancelled' || job.status === 'interrupted'"
+                      icon="i-lucide-trash-2"
+                      label="删除"
+                      color="error"
+                      variant="outline"
+                      size="md"
+                      @click="showDeleteConfirm = true"
+                    />
+                  </div>
                 </div>
+                <p v-if="job.note" class="page-note detail-note">{{ job.note }}</p>
               </div>
             </div>
           </UContextMenu>
-        </div>
-        <div class="detail-header-actions">
-          <UFieldGroup size="md" class="detail-action-fieldgroup">
-            <UButton
-              :icon="transcodePrimaryAction.icon"
-              :label="transcodePrimaryAction.label"
-              :color="transcodePrimaryAction.color"
-              variant="subtle"
-              size="md"
-              :loading="transcodePrimaryAction.loading"
-              :disabled="transcodePrimaryAction.disabled"
-              @click="handlePrimaryTranscodeAction"
-            />
-            <UDropdownMenu
-              :items="transcodeActionItems"
-              arrow
-              :content="{ side: 'bottom', align: 'end', sideOffset: 8 }"
-            >
-              <UButton
-                icon="i-lucide-chevron-down"
-                color="neutral"
-                variant="outline"
-                size="md"
-                square
-              />
-              <template #auto-transcode-trailing>
-                <USwitch
-                  :model-value="autoTranscodeEnabled"
-                  color="neutral"
-                  :disabled="updatingAutoTranscode"
-                  @pointerdown.stop
-                  @click.stop
-                  @update:model-value="handleAutoTranscodeSwitchUpdate"
-                />
-              </template>
-            </UDropdownMenu>
-          </UFieldGroup>
-          <UButton
-            v-if="job.status === 'failed' || job.status === 'cancelled' || job.status === 'interrupted' || job.status === 'done'"
-            icon="i-lucide-rotate-ccw"
-            :label="job.status === 'cancelled' || job.status === 'interrupted' ? '继续' : '重试'"
-            :color="job.status === 'cancelled' || job.status === 'interrupted' ? 'warning' : 'neutral'"
-            variant="outline"
-            size="md"
-            @click="handleRetry"
-          />
-          <UButton
-            v-if="job.status === 'running' || job.status === 'pending'"
-            icon="i-lucide-x"
-            label="取消"
-            color="warning"
-            variant="outline"
-            size="md"
-            @click="jobsStore.stopJob(job.id)"
-          />
-          <UButton
-            v-if="job.status === 'done' || job.status === 'failed' || job.status === 'cancelled' || job.status === 'interrupted'"
-            icon="i-lucide-trash-2"
-            label="删除"
-            color="error"
-            variant="outline"
-            size="md"
-            @click="showDeleteConfirm = true"
-          />
         </div>
     </section>
 
@@ -281,17 +281,18 @@
       </template>
     </UModal>
 
-    <RenderProgress
-      v-if="job.status === 'running'"
-      class="detail-progress"
-      :frame="job.currentFrame ?? 0"
-      :total-frames="job.totalFrames ?? (job.frameEnd - job.frameStart + 1)"
-      :warming-up="jobsStore.isJobWarmingUp(job.id)"
-      :time-elapsed="job.timeElapsed ?? undefined"
-      :remaining-secs="job.remainingSecs"
-    />
+    <section class="detail-content">
+      <RenderProgress
+        v-if="job.status === 'running'"
+        class="detail-progress"
+        :frame="job.currentFrame ?? 0"
+        :total-frames="job.totalFrames ?? (job.frameEnd - job.frameStart + 1)"
+        :warming-up="jobsStore.isJobWarmingUp(job.id)"
+        :time-elapsed="job.timeElapsed ?? undefined"
+        :remaining-secs="job.remainingSecs"
+      />
 
-    <div class="detail-grid">
+      <div class="detail-grid">
         <UCard variant="subtle" :ui="{ root: 'detail-section detail-full', body: 'detail-card-body' }">
         <h2 class="detail-card-title">文件路径</h2>
         <div class="detail-info-stack">
@@ -398,14 +399,13 @@
           <div class="log-header-actions">
             <UBadge :label="`当前 ${jobLogs.length} 行`" color="neutral" variant="subtle" />
             <UBadge :label="`Blender ${logSummary?.blenderCount ?? 0} 份`" color="neutral" variant="subtle" />
-            <UBadge :label="`FFmpeg Job ${relatedFfmpegJobs.length} 条`" color="neutral" variant="subtle" />
             <UButton
               v-if="logSummary?.directory"
               icon="i-lucide-folder-open"
               label="打开日志目录"
               color="neutral"
               variant="subtle"
-              size="sm"
+              size="md"
               @click="openPath(logSummary.directory)"
             />
           </div>
@@ -415,10 +415,16 @@
             <span v-if="jobLogs.length === 0" class="log-empty">
               {{ job.status === 'pending' ? '等待开始…' : '暂无输出内容。' }}
             </span>
-            <div v-for="(line, i) in jobLogs" :key="i" class="log-line">{{ line }}</div>
+            <div v-for="(entry, i) in displayJobLogs" :key="i" class="log-line">
+              <div class="log-line-inner" :class="{ 'log-line-inner-no-timestamp': !entry.timestamp }">
+                <span v-if="entry.timestamp" class="log-line-timestamp">{{ entry.timestamp }}</span>
+                <span class="log-line-text">{{ entry.content || '\u00A0' }}</span>
+              </div>
+            </div>
           </div>
         </div>
       </UCard>
+    </section>
 
     <UModal v-model:open="lightboxOpen" :close="false" :ui="{ content: 'preview-lightbox' }">
       <template #body>
@@ -440,6 +446,7 @@ import type { DropdownMenuItem } from '@nuxt/ui'
 import type { AddFfmpegJobPayload, JobLogSummary, RenderJob, RenderJobTranscodeConfig, RenderedFramesStatus } from '~/types'
 import { JOB_STATUS_COLOR, JOB_STATUS_LABEL } from '~/composables/useJobStatus'
 import { resolveBaseRenderJobTranscodeConfig, resolveEffectiveRenderJobTranscodeConfig } from '~/composables/useTranscodeConfig'
+import { parseLogLine } from '~/utils/log-line'
 
 const route = useRoute()
 const router = useRouter()
@@ -455,6 +462,7 @@ const STATUS_LABEL = JOB_STATUS_LABEL
 const jobId = computed(() => route.params.id as string)
 const job = computed(() => jobsStore.jobs.find((j) => j.id === jobId.value))
 const jobLogs = computed(() => jobsStore.getJobLogs(jobId.value))
+const displayJobLogs = computed(() => jobLogs.value.map(line => parseLogLine(line)))
 const relatedFfmpegJobs = computed(() => transcodeStore.getRelatedJobs(jobId.value))
 const primaryTranscodeJob = computed(() =>
   relatedFfmpegJobs.value.find(entry => entry.status === 'running')
