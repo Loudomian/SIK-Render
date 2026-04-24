@@ -149,7 +149,7 @@
             <div class="settings-field-copy">
               <p class="settings-field-title">当前版本</p>
             </div>
-            <p class="settings-version-value">v0.1.0</p>
+            <p class="settings-version-value">v{{ appVersion }}</p>
           </section>
 
           <section class="surface-panel settings-field-panel">
@@ -169,12 +169,16 @@
 </template>
 
 <script setup lang="ts">
+import { getVersion } from '@tauri-apps/api/app'
+
 const settingsStore = useSettingsStore()
+const runtimeConfig = useRuntimeConfig()
 const blenderError = ref('')
 const ffmpegError = ref('')
 const blenderModalOpen = ref(false)
 const ffmpegModalOpen = ref(false)
 const settingsReady = ref(false)
+const appVersion = ref(String(runtimeConfig.public.appVersion ?? '0.0.0'))
 let autoSaveTimer: ReturnType<typeof setTimeout> | null = null
 
 const blenderSettingsSummary = computed(() =>
@@ -244,6 +248,12 @@ watch(
 onMounted(async () => {
   await settingsStore.load()
   settingsReady.value = true
+
+  try {
+    appVersion.value = await getVersion()
+  } catch {
+    // Browser dev mode falls back to the package version from runtime config.
+  }
 })
 
 onUnmounted(() => {

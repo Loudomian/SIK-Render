@@ -4,7 +4,32 @@
       <aside class="app-sidebar">
         <div class="app-sidebar-inner">
           <div class="app-brand">
-            <img :src="appIconUrl" width="40" height="40" alt="" class="logo-icon" />
+            <button
+              type="button"
+              class="app-brand-toggle"
+              :title="brandToggleTitle"
+              :aria-label="brandToggleTitle"
+              @click="handleBrandIconClick"
+            >
+              <span class="logo-icon-shell" aria-hidden="true">
+                <img
+                  :src="appIconLightUrl"
+                  width="52"
+                  height="52"
+                  alt=""
+                  class="logo-icon logo-icon-light"
+                  :class="{ 'is-active': settingsStore.settings.theme !== 'dark' }"
+                />
+                <img
+                  :src="appIconDarkUrl"
+                  width="52"
+                  height="52"
+                  alt=""
+                  class="logo-icon logo-icon-dark"
+                  :class="{ 'is-active': settingsStore.settings.theme === 'dark' }"
+                />
+              </span>
+            </button>
             <div class="app-brand-copy">
               <span class="app-brand-title">SIK Render</span>
             </div>
@@ -40,12 +65,14 @@
 </template>
 
 <script setup lang="ts">
-import appIconUrl from '~/assets/app-icon.png'
+import appIconLightUrl from '~/assets/app-icon-light.png'
+import appIconDarkUrl from '~/assets/app-icon-dark.png'
 
 const jobsStore = useJobsStore()
 const settingsStore = useSettingsStore()
 const { onProgress, onJobUpdated, onLog, onQueueState } = useRenderEvents()
 const CONTEXT_MENU_ALLOW_SELECTOR = '[data-context-menu]'
+const brandToggleTitle = computed(() => settingsStore.settings.theme === 'dark' ? '切换到浅色模式' : '切换到深色模式')
 
 const navItems = computed(() => [
   {
@@ -77,6 +104,14 @@ function handleGlobalContextMenu(event: MouseEvent) {
   const target = event.target as HTMLElement | null
   if (target?.closest(CONTEXT_MENU_ALLOW_SELECTOR)) return
   event.preventDefault()
+}
+
+async function handleBrandIconClick() {
+  try {
+    await settingsStore.toggleTheme()
+  } catch (error) {
+    console.error('Failed to toggle theme from brand icon:', error)
+  }
 }
 
 if (import.meta.client) {

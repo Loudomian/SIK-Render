@@ -29,7 +29,7 @@
         <div class="queue-hero-actions-stack">
           <div class="page-hero-actions queue-hero-actions">
             <UTooltip text="创建新的渲染任务" arrow :content="{ side: 'bottom', sideOffset: 8 }">
-              <UButton icon="i-lucide-plus" label="新建任务" color="success" variant="solid" @click="openAddJob" />
+              <UButton icon="i-lucide-plus" label="新建任务" color="primary" variant="solid" @click="openAddJob" />
             </UTooltip>
           </div>
           <div class="page-hero-actions queue-hero-actions queue-hero-actions-secondary">
@@ -477,7 +477,7 @@
 
           <div class="modal-actions">
             <UButton type="button" icon="i-lucide-x" label="取消" color="warning" variant="outline" @click="handleCloseAddJob" />
-            <UButton type="submit" color="neutral" variant="solid" :loading="submitting" :label="submitting ? '提交中…' : '加入渲染队列'" />
+            <UButton type="submit" color="primary" variant="solid" :loading="submitting" :label="submitting ? '提交中…' : '加入渲染队列'" />
           </div>
         </form>
       </template>

@@ -5,7 +5,7 @@
 
 .light,
 :root:not(.dark) {
-  --ui-primary: #c1352e;
+  --ui-primary: #ea726d;
   --ui-bg: #f7f7f5;
   --ui-bg-muted: #fcfcf9;
   --ui-bg-elevated: rgba(255, 255, 252, 0.92);
@@ -18,19 +18,34 @@
   --ui-text-toned: #4f4f49;
   --ui-text: #2f2f2b;
   --ui-text-highlighted: #161714;
+  --ui-sidebar-bg: rgba(249, 237, 235, 0.96);
+  --ui-sidebar-border: #e4c8c2;
+  --ui-sidebar-hover: color-mix(in srgb, var(--ui-primary) 7%, var(--ui-sidebar-bg));
+  --ui-sidebar-active: color-mix(in srgb, var(--ui-primary) 14%, var(--ui-sidebar-bg));
+  --ui-scrollbar-track: color-mix(in srgb, #efe8e4 88%, transparent);
+  --ui-scrollbar-thumb: color-mix(in srgb, var(--ui-primary) 34%, #b7aaa2);
+  --ui-scrollbar-thumb-hover: color-mix(in srgb, var(--ui-primary) 48%, #a18f86);
 }
 
 .dark {
-  --ui-bg: #0f1110;
-  --ui-bg-muted: #141716;
-  --ui-bg-elevated: rgba(22, 25, 24, 0.92);
-  --ui-bg-accented: #202422;
-  --ui-border: #232825;
-  --ui-border-muted: #2b322e;
-  --ui-border-accented: #39413c;
-  --ui-text-dimmed: #6f746f;
-  --ui-text-muted: #989d97;
-  --ui-text-toned: #c5c9c5;
-  --ui-text: #e8ebe7;
-  --ui-text-highlighted: #fbfcfa;
+  --ui-primary: #8b9ee1;
+  --ui-bg: #21283b;
+  --ui-bg-muted: #293149;
+  --ui-bg-elevated: rgba(41, 49, 73, 0.92);
+  --ui-bg-accented: #313b57;
+  --ui-border: #3f4a6a;
+  --ui-border-muted: #4a5679;
+  --ui-border-accented: #5b6990;
+  --ui-text-dimmed: #8f99bc;
+  --ui-text-muted: #b4bcda;
+  --ui-text-toned: #d0d7ee;
+  --ui-text: #eef1fb;
+  --ui-text-highlighted: #ffffff;
+  --ui-sidebar-bg: rgba(43, 53, 78, 0.98);
+  --ui-sidebar-border: #526081;
+  --ui-sidebar-hover: color-mix(in srgb, white 8%, var(--ui-sidebar-bg));
+  --ui-sidebar-active: color-mix(in srgb, #5a6994 42%, var(--ui-sidebar-bg));
+  --ui-scrollbar-track: color-mix(in srgb, #242d43 90%, transparent);
+  --ui-scrollbar-thumb: color-mix(in srgb, var(--ui-primary) 44%, #53607d);
+  --ui-scrollbar-thumb-hover: color-mix(in srgb, var(--ui-primary) 60%, #64739a);
 }

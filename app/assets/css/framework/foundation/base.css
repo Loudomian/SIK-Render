@@ -6,6 +6,11 @@ html, body, #__nuxt {
   min-height: 100%;
 }
 
+html {
+  scrollbar-width: thin;
+  scrollbar-color: var(--ui-scrollbar-thumb) var(--ui-scrollbar-track);
+}
+
 body {
   margin: 0;
   color: var(--ui-text);
@@ -14,6 +19,32 @@ body {
     radial-gradient(circle at 78% 12%, color-mix(in srgb, var(--ui-primary) 4%, transparent), transparent 20%),
     var(--ui-bg);
   font-family: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-track {
+  background: var(--ui-scrollbar-track);
+  border-radius: 999px;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: var(--ui-scrollbar-thumb);
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background-clip: padding-box;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--ui-scrollbar-thumb-hover);
+  background-clip: padding-box;
+}
+
+*::-webkit-scrollbar-corner {
+  background: transparent;
 }
 
 a {

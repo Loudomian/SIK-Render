@@ -9,8 +9,8 @@
   top: 0;
   height: 100vh;
   padding: 1rem;
-  border-right: 1px solid var(--ui-border-muted);
-  background: color-mix(in srgb, var(--ui-bg-elevated) 94%, transparent);
+  border-right: 1px solid var(--ui-sidebar-border);
+  background: var(--ui-sidebar-bg);
   backdrop-filter: blur(22px);
 }
 
@@ -39,7 +39,7 @@
     position: static;
     height: auto;
     border-right: none;
-    border-bottom: 1px solid var(--ui-border-muted);
+    border-bottom: 1px solid var(--ui-sidebar-border);
   }
 }
 

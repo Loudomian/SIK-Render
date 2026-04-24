@@ -16,11 +16,11 @@
 
 .app-nav :where(a:hover) {
   border-color: color-mix(in srgb, var(--ui-border-accented) 85%, transparent);
-  background: color-mix(in srgb, var(--ui-bg-muted) 98%, transparent);
+  background: var(--ui-sidebar-hover);
 }
 
 .app-nav :where(a[aria-current="page"]),
 .app-nav :where(a.router-link-active) {
   border-color: color-mix(in srgb, var(--ui-primary) 22%, var(--ui-border-accented));
-  background: color-mix(in srgb, var(--ui-primary) 8%, var(--ui-bg-elevated));
+  background: var(--ui-sidebar-active);
 }

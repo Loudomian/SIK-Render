@@ -1,6 +1,9 @@
+import { readFileSync } from 'node:fs'
+
 // https://nuxt.com/docs/api/configuration/nuxt-config
 const buildDir = process.env.NUXT_BUILD_DIR || '.nuxt-dev'
 const viteCacheDir = process.env.VITE_CACHE_DIR || `.vite-cache/${buildDir.replace(/[\\/]/g, '-')}`
+const packageVersion = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')).version
 
 export default defineNuxtConfig({
   ssr: false, // Tauri requires SPA mode
@@ -66,6 +69,12 @@ export default defineNuxtConfig({
 
   typescript: {
     strict: true,
+  },
+
+  runtimeConfig: {
+    public: {
+      appVersion: packageVersion,
+    },
   },
 
   compatibilityDate: '2025-01-01',

@@ -113,6 +113,19 @@ export const useSettingsStore = defineStore('settings', () => {
     await saveSettings(settings.value)
   }
 
+  async function setTheme(theme: AppSettings['theme']) {
+    if (settings.value.theme === theme) return
+    settings.value.theme = theme
+    await saveSettings(settings.value)
+  }
+
+  async function toggleTheme() {
+    const nextTheme: AppSettings['theme'] = settings.value.theme === 'dark' ? 'light' : 'dark'
+    settings.value.theme = nextTheme
+    await saveSettings(settings.value)
+    return nextTheme
+  }
+
   async function save() {
     await saveSettings(settings.value)
   }
@@ -127,6 +140,8 @@ export const useSettingsStore = defineStore('settings', () => {
     clearFfmpeg,
     removeBlenderVersion,
     setDefaultBlender,
+    setTheme,
+    toggleTheme,
     save,
   }
 })
