@@ -5,6 +5,14 @@ export interface ParsedLogLine {
 
 const LOG_TIMESTAMP_PATTERN = /^\[([0-9]{4}-[0-9]{2}-[0-9]{2} [0-9:.]+)\]\s?(.*)$/s
 
+function formatLogTimestamp(value: string) {
+  const match = value.match(/^[0-9]{4}-([0-9]{2})-([0-9]{2}) ([0-9]{2}):([0-9]{2}):([0-9]{2})/)
+  if (!match) return value
+
+  const [, month, day, hour, minute, second] = match
+  return `${month}-${day} ${hour}:${minute}:${second}`
+}
+
 export function parseLogLine(line: string | null | undefined): ParsedLogLine {
   const normalized = line ?? ''
   const match = normalized.match(LOG_TIMESTAMP_PATTERN)
@@ -16,7 +24,7 @@ export function parseLogLine(line: string | null | undefined): ParsedLogLine {
   }
 
   return {
-    timestamp: match[1] ?? null,
+    timestamp: match[1] ? formatLogTimestamp(match[1]) : null,
     content: match[2] ?? '',
   }
 }

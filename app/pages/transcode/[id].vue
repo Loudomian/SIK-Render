@@ -1,40 +1,39 @@
 <template>
   <div v-if="job" class="detail-page">
     <section class="page-hero detail-hero">
-        <div class="page-hero-copy detail-title">
+      <div class="page-hero-copy detail-title">
+        <div class="detail-heading-stack">
+          <div class="detail-heading-line">
+            <UBadge :label="statusLabel(job.status)" :color="statusColor(job.status)" variant="subtle" />
+            <UBadge :label="`#${job.jobNumber}`" color="neutral" variant="subtle" />
+            <UBadge :label="job.sourceType === 'blender_job' ? '来自 Blender Job' : '来自文件夹'" color="neutral" variant="subtle" />
+          </div>
           <div class="detail-title-row">
-            <div class="detail-heading-stack">
-              <div class="detail-heading-line">
-                <UBadge :label="statusLabel(job.status)" :color="statusColor(job.status)" variant="subtle" />
-                <UBadge :label="`#${job.jobNumber}`" color="neutral" variant="subtle" />
-                <UBadge :label="job.sourceType === 'blender_job' ? '来自 Blender Job' : '来自文件夹'" color="neutral" variant="subtle" />
-              </div>
-              <UBreadcrumb
-                as="h1"
-                :items="[
-                  { label: '转码队列', to: '/transcode' },
-                  { label: job.name },
-                ]"
-                :ui="{
-                  root: 'detail-breadcrumb',
-                  list: 'detail-breadcrumb-list',
-                  item: 'detail-breadcrumb-item',
-                  link: 'detail-breadcrumb-link',
-                  linkLabel: 'detail-breadcrumb-label',
-                  separator: 'detail-breadcrumb-separator-wrap',
-                  separatorIcon: 'detail-breadcrumb-separator',
-                }"
-              >
-                <template #separator>
-                  <span class="detail-breadcrumb-separator" aria-hidden="true">&gt;</span>
-                </template>
-                <template #item-label="{ item, active }">
-                  <span :class="active ? 'detail-breadcrumb-current' : 'detail-breadcrumb-ancestor'">
-                    {{ item.label }}
-                  </span>
-                </template>
-              </UBreadcrumb>
-            </div>
+            <UBreadcrumb
+              as="h1"
+              :items="[
+                { label: '转码队列', to: '/transcode' },
+                { label: job.name },
+              ]"
+              :ui="{
+                root: 'detail-breadcrumb',
+                list: 'detail-breadcrumb-list',
+                item: 'detail-breadcrumb-item',
+                link: 'detail-breadcrumb-link',
+                linkLabel: 'detail-breadcrumb-label',
+                separator: 'detail-breadcrumb-separator-wrap',
+                separatorIcon: 'detail-breadcrumb-separator',
+              }"
+            >
+              <template #separator>
+                <span class="detail-breadcrumb-separator" aria-hidden="true">&gt;</span>
+              </template>
+              <template #item-label="{ item, active }">
+                <span :class="active ? 'detail-breadcrumb-current' : 'detail-breadcrumb-ancestor'">
+                  {{ item.label }}
+                </span>
+              </template>
+            </UBreadcrumb>
             <div class="detail-header-actions">
               <UButton
                 v-if="job.status === 'running'"
@@ -44,6 +43,15 @@
                 variant="outline"
                 size="md"
                 @click="handleCancel"
+              />
+              <UButton
+                v-if="job.status !== 'running' && job.sourceBlenderJobId"
+                :to="`/jobs/${job.sourceBlenderJobId}`"
+                icon="i-lucide-arrow-right"
+                label="查看源任务"
+                color="neutral"
+                variant="outline"
+                size="md"
               />
               <UButton
                 v-if="job.status !== 'running'"
@@ -57,6 +65,7 @@
             </div>
           </div>
         </div>
+      </div>
     </section>
 
     <section class="detail-content">
@@ -98,41 +107,6 @@
                   />
                 </UTooltip>
               </div>
-            </div>
-          </section>
-
-          <section class="detail-info-item">
-            <h3 class="detail-info-label">来源渲染任务</h3>
-            <div class="surface-panel path-row detail-path-row">
-              <template v-if="sourceJob">
-                <span class="path-text" :title="`#${sourceJob.jobNumber} ${sourceJob.name}`">#{{ sourceJob.jobNumber }} {{ sourceJob.name }}</span>
-                <UTooltip text="前往渲染任务" :content="{ side: 'top', sideOffset: 6 }">
-                  <UButton
-                    :to="`/jobs/${sourceJob.id}`"
-                    icon="i-lucide-arrow-right"
-                    color="neutral"
-                    variant="ghost"
-                    size="xs"
-                    square
-                  />
-                </UTooltip>
-              </template>
-              <template v-else-if="job.sourceBlenderJobId">
-                <span class="path-text" :title="job.sourceBlenderJobId">{{ job.sourceBlenderJobId }}</span>
-                <UTooltip text="前往渲染任务" :content="{ side: 'top', sideOffset: 6 }">
-                  <UButton
-                    :to="`/jobs/${job.sourceBlenderJobId}`"
-                    icon="i-lucide-arrow-right"
-                    color="neutral"
-                    variant="ghost"
-                    size="xs"
-                    square
-                  />
-                </UTooltip>
-              </template>
-              <template v-else>
-                <span class="path-text">—</span>
-              </template>
             </div>
           </section>
         </div>
@@ -199,13 +173,12 @@
           <div class="log-header">
             <h2 class="detail-card-title log-title">转码日志</h2>
             <div class="log-header-actions">
-              <UBadge :label="`${logLines.length} 行`" color="neutral" variant="subtle" />
               <UButton
                 :label="showAllLogs ? '最新日志' : '全部日志'"
                 :icon="showAllLogs ? 'i-lucide-clock' : 'i-lucide-layers'"
                 color="neutral"
                 variant="subtle"
-                size="md"
+                size="sm"
                 :loading="logsLoading"
                 @click="toggleLogScope"
               />
@@ -214,7 +187,7 @@
                 label="复制"
                 color="neutral"
                 variant="subtle"
-                size="md"
+                size="sm"
                 @click="copyLogs"
               />
               <UButton
@@ -223,7 +196,7 @@
                 label="输出目录"
                 color="neutral"
                 variant="subtle"
-                size="md"
+                size="sm"
                 @click="openPath(job.outputPath)"
               />
             </div>
@@ -272,17 +245,11 @@ const route = useRoute()
 const router = useRouter()
 const toast = useToast()
 const transcodeStore = useTranscodeStore()
-const jobsStore = useJobsStore()
 const { openPath, getFfmpegJobLogs } = useTauri()
 const { onTranscodeProgress, onTranscodeLog, onFfmpegJobUpdated } = useRenderEvents()
 
 const jobId = computed(() => String(route.params.id ?? ''))
 const job = computed(() => transcodeStore.getFfmpegJobById(jobId.value))
-const sourceJob = computed(() => {
-  const currentJob = job.value
-  if (!currentJob?.sourceBlenderJobId) return null
-  return jobsStore.jobs.find(entry => entry.id === currentJob.sourceBlenderJobId) ?? null
-})
 const totalFrames = computed(() => {
   const current = job.value
   return current ? current.frameEnd - current.frameStart + 1 : 0
@@ -420,10 +387,7 @@ watch(
 )
 
 onMounted(async () => {
-  await Promise.all([
-    transcodeStore.fetchFfmpegJobs(),
-    jobsStore.jobs.length ? Promise.resolve() : jobsStore.fetchJobs(),
-  ])
+  await transcodeStore.fetchFfmpegJobs()
   if (!job.value) {
     try {
       await transcodeStore.fetchFfmpegJob(jobId.value)

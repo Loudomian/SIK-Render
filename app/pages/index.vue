@@ -23,26 +23,30 @@
               variant="subtle"
             />
           </div>
-          <h1>渲染队列</h1>
-          <p class="page-note">管理本地 Blender 渲染任务。</p>
-        </div>
-        <div class="queue-hero-actions-stack">
-          <div class="page-hero-actions queue-hero-actions">
-            <UTooltip text="创建新的渲染任务" arrow :content="{ side: 'bottom', sideOffset: 8 }">
-              <UButton icon="i-lucide-plus" label="新建任务" color="primary" variant="solid" @click="openAddJob" />
-            </UTooltip>
-          </div>
-          <div class="page-hero-actions queue-hero-actions queue-hero-actions-secondary">
-            <UTooltip :text="queueToggleTooltip" arrow :content="{ side: 'bottom', sideOffset: 8 }">
-              <UButton
-                :icon="queueToggleButton.icon"
-                :label="queueToggleButton.label"
-                :color="queueToggleButton.color"
-                variant="outline"
-                :disabled="queueToggleDisabled"
-                @click="handleQueueToggle"
-              />
-            </UTooltip>
+          <div class="queue-heading-row">
+            <div class="queue-heading-copy">
+              <h1>渲染队列</h1>
+              <p class="page-note">管理本地 Blender 渲染任务。</p>
+            </div>
+            <div class="queue-hero-actions-stack">
+              <div class="page-hero-actions queue-hero-actions queue-hero-actions-secondary">
+                <UTooltip :text="queueToggleTooltip" arrow :content="{ side: 'bottom', sideOffset: 8 }">
+                  <UButton
+                    :icon="queueToggleButton.icon"
+                    :label="queueToggleButton.label"
+                    :color="queueToggleButton.color"
+                    variant="outline"
+                    :disabled="queueToggleDisabled"
+                    @click="handleQueueToggle"
+                  />
+                </UTooltip>
+              </div>
+              <div class="page-hero-actions queue-hero-actions">
+                <UTooltip text="创建新的渲染任务" arrow :content="{ side: 'bottom', sideOffset: 8 }">
+                  <UButton icon="i-lucide-plus" label="新建任务" color="primary" variant="solid" @click="openAddJob" />
+                </UTooltip>
+              </div>
+            </div>
           </div>
         </div>
       </section>

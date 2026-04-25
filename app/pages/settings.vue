@@ -71,9 +71,10 @@
               <h3 class="settings-card-title">Blender 渲染参数</h3>
               <p class="hint-text">读取工程超时与崩溃自动重试。</p>
             </div>
-            <div class="settings-card-actions">
-              <UButton icon="i-lucide-sliders" label="编辑" color="neutral" variant="outline" size="sm" @click="blenderModalOpen = true" />
-            </div>
+          </div>
+
+          <div class="settings-card-actions">
+            <UButton icon="i-lucide-sliders" label="编辑" color="neutral" variant="outline" size="sm" @click="blenderModalOpen = true" />
           </div>
         </UCard>
 
@@ -83,9 +84,10 @@
               <h3 class="settings-card-title">Blender 输出参数</h3>
               <p class="hint-text">PNG 与 OpenEXR 默认输出格式。</p>
             </div>
-            <div class="settings-card-actions">
-              <UButton icon="i-lucide-image-up" label="编辑" color="neutral" variant="outline" size="sm" @click="blenderOutputModalOpen = true" />
-            </div>
+          </div>
+
+          <div class="settings-card-actions">
+            <UButton icon="i-lucide-image-up" label="编辑" color="neutral" variant="outline" size="sm" @click="blenderOutputModalOpen = true" />
           </div>
         </UCard>
 
@@ -95,9 +97,10 @@
               <h3 class="settings-card-title">FFmpeg 转码参数</h3>
               <p class="hint-text">默认质量、预设与并发数。</p>
             </div>
-            <div class="settings-card-actions">
-              <UButton icon="i-lucide-sliders" label="编辑" color="neutral" variant="outline" size="sm" @click="ffmpegModalOpen = true" />
-            </div>
+          </div>
+
+          <div class="settings-card-actions">
+            <UButton icon="i-lucide-sliders" label="编辑" color="neutral" variant="outline" size="sm" @click="ffmpegModalOpen = true" />
           </div>
         </UCard>
 
@@ -144,24 +147,22 @@
         <h2 class="settings-section-title">关于</h2>
       </div>
 
-      <UCard variant="subtle" class="settings-card" :ui="{ body: 'settings-card-body' }">
-        <div class="settings-form-stack">
-          <section class="surface-panel settings-field-panel">
-            <div class="settings-field-copy">
-              <p class="settings-field-title">当前版本</p>
-            </div>
-            <p class="settings-version-value">v{{ appVersion }}</p>
-          </section>
+      <div class="settings-form-stack">
+        <section class="surface-panel settings-field-panel">
+          <div class="settings-field-copy">
+            <p class="settings-field-title">版权信息</p>
+            <p class="settings-brand-line">SIKFILM · 灌灌小狗</p>
+            <p class="hint-text">Made with ❤️ by Loudomian and 空气小怪.</p>
+          </div>
+        </section>
 
-          <section class="surface-panel settings-field-panel">
-            <div class="settings-field-copy">
-              <p class="settings-field-title">版权信息</p>
-              <p class="settings-brand-line">SIKFILM · 灌灌小狗</p>
-              <p class="hint-text">Made with ❤️ by Loudomian and 空气小怪.</p>
-            </div>
-          </section>
-        </div>
-      </UCard>
+        <section class="surface-panel settings-field-panel">
+          <div class="settings-field-copy">
+            <p class="settings-field-title">当前版本</p>
+          </div>
+          <p class="settings-version-value">v{{ appVersion }}</p>
+        </section>
+      </div>
     </section>
 
     <BlenderPathSettingsModal v-model:open="blenderPathModalOpen" />

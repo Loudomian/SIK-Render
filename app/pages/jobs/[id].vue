@@ -1,120 +1,120 @@
 <template>
   <div v-if="job" class="detail-page">
     <section class="page-hero detail-hero">
-        <div class="page-hero-copy detail-title">
-          <UContextMenu
-            :items="buildJobContextMenuItems(job)"
-            :ui="{ content: 'detail-context-menu-content' }"
-          >
-            <div class="detail-context-menu-target" data-context-menu>
-              <div class="detail-heading-stack">
-                <div class="detail-heading-line">
-                  <UBadge
-                    :label="STATUS_LABEL[job.status] ?? job.status"
-                    :color="statusBadgeColor"
-                    variant="subtle"
-                  />
-                  <UBadge v-if="orderBadgeLabel" :label="orderBadgeLabel" color="neutral" variant="subtle" />
-                  <UBadge
-                    v-if="job.crashCount > 0"
-                    :label="`崩溃 ${job.crashCount} 次`"
-                    color="warning"
-                    variant="subtle"
-                  />
-                </div>
-                <div class="detail-title-row">
-                  <UBreadcrumb
-                    as="h1"
-                    :items="detailBreadcrumbItems"
-                    :ui="{
-                      root: 'detail-breadcrumb',
-                      list: 'detail-breadcrumb-list',
-                      item: 'detail-breadcrumb-item',
-                      link: 'detail-breadcrumb-link',
-                      linkLabel: 'detail-breadcrumb-label',
-                      separator: 'detail-breadcrumb-separator-wrap',
-                      separatorIcon: 'detail-breadcrumb-separator',
-                    }"
-                  >
-                    <template #separator>
-                      <span class="detail-breadcrumb-separator" aria-hidden="true">&gt;</span>
-                    </template>
-                    <template #item-label="{ item, active }">
-                      <span :class="active ? 'detail-breadcrumb-current' : 'detail-breadcrumb-ancestor'">
-                        {{ item.label }}
-                      </span>
-                    </template>
-                  </UBreadcrumb>
-                  <div class="detail-header-actions">
-                    <UFieldGroup size="md" class="detail-action-fieldgroup">
-                      <UButton
-                        :icon="transcodePrimaryAction.icon"
-                        :label="transcodePrimaryAction.label"
-                        :color="transcodePrimaryAction.color"
-                        variant="subtle"
-                        size="md"
-                        :loading="transcodePrimaryAction.loading"
-                        :disabled="transcodePrimaryAction.disabled"
-                        @click="handlePrimaryTranscodeAction"
-                      />
-                      <UDropdownMenu
-                        :items="transcodeActionItems"
-                        arrow
-                        :content="{ side: 'bottom', align: 'end', sideOffset: 8 }"
-                      >
-                        <UButton
-                          icon="i-lucide-chevron-down"
-                          color="neutral"
-                          variant="outline"
-                          size="md"
-                          square
-                        />
-                        <template #auto-transcode-trailing>
-                          <USwitch
-                            :model-value="autoTranscodeEnabled"
-                            color="neutral"
-                            :disabled="updatingAutoTranscode || !transcodeSupported"
-                            @pointerdown.stop
-                            @click.stop
-                            @update:model-value="handleAutoTranscodeSwitchUpdate"
-                          />
-                        </template>
-                      </UDropdownMenu>
-                    </UFieldGroup>
-                    <UButton
-                      v-if="job.status === 'failed' || job.status === 'cancelled' || job.status === 'interrupted' || job.status === 'done'"
-                      icon="i-lucide-rotate-ccw"
-                      :label="job.status === 'cancelled' || job.status === 'interrupted' ? '继续' : '重试'"
-                      :color="job.status === 'cancelled' || job.status === 'interrupted' ? 'warning' : 'neutral'"
-                      variant="outline"
-                      size="md"
-                      @click="handleRetry"
-                    />
-                    <UButton
-                      v-if="job.status === 'running' || job.status === 'pending'"
-                      icon="i-lucide-x"
-                      label="取消"
-                      color="warning"
-                      variant="outline"
-                      size="md"
-                      @click="jobsStore.stopJob(job.id)"
-                    />
-                    <UButton
-                      v-if="job.status === 'done' || job.status === 'failed' || job.status === 'cancelled' || job.status === 'interrupted'"
-                      icon="i-lucide-trash-2"
-                      label="删除"
-                      color="error"
-                      variant="outline"
-                      size="md"
-                      @click="showDeleteConfirm = true"
-                    />
-                  </div>
-                </div>
-                <p v-if="job.note" class="page-note detail-note">{{ job.note }}</p>
+      <div class="page-hero-copy detail-title">
+        <UContextMenu
+          :items="buildJobContextMenuItems(job)"
+          :ui="{ content: 'detail-context-menu-content' }"
+        >
+          <div class="detail-context-menu-target" data-context-menu>
+            <div class="detail-heading-stack">
+              <div class="detail-heading-line">
+                <UBadge
+                  :label="STATUS_LABEL[job.status] ?? job.status"
+                  :color="statusBadgeColor"
+                  variant="subtle"
+                />
+                <UBadge v-if="orderBadgeLabel" :label="orderBadgeLabel" color="neutral" variant="subtle" />
+                <UBadge
+                  v-if="job.crashCount > 0"
+                  :label="`崩溃 ${job.crashCount} 次`"
+                  color="warning"
+                  variant="subtle"
+                />
               </div>
+              <div class="detail-title-row">
+                <UBreadcrumb
+                  as="h1"
+                  :items="detailBreadcrumbItems"
+                  :ui="{
+                    root: 'detail-breadcrumb',
+                    list: 'detail-breadcrumb-list',
+                    item: 'detail-breadcrumb-item',
+                    link: 'detail-breadcrumb-link',
+                    linkLabel: 'detail-breadcrumb-label',
+                    separator: 'detail-breadcrumb-separator-wrap',
+                    separatorIcon: 'detail-breadcrumb-separator',
+                  }"
+                >
+                  <template #separator>
+                    <span class="detail-breadcrumb-separator" aria-hidden="true">&gt;</span>
+                  </template>
+                  <template #item-label="{ item, active }">
+                    <span :class="active ? 'detail-breadcrumb-current' : 'detail-breadcrumb-ancestor'">
+                      {{ item.label }}
+                    </span>
+                  </template>
+                </UBreadcrumb>
+                <div class="detail-header-actions">
+                  <UFieldGroup size="md" class="detail-action-fieldgroup">
+                    <UButton
+                      :icon="transcodePrimaryAction.icon"
+                      :label="transcodePrimaryAction.label"
+                      :color="transcodePrimaryAction.color"
+                      variant="subtle"
+                      size="md"
+                      :loading="transcodePrimaryAction.loading"
+                      :disabled="transcodePrimaryAction.disabled"
+                      @click="handlePrimaryTranscodeAction"
+                    />
+                    <UDropdownMenu
+                      :items="transcodeActionItems"
+                      arrow
+                      :content="{ side: 'bottom', align: 'end', sideOffset: 8 }"
+                    >
+                      <UButton
+                        icon="i-lucide-chevron-down"
+                        color="neutral"
+                        variant="outline"
+                        size="md"
+                        square
+                      />
+                      <template #auto-transcode-trailing>
+                        <USwitch
+                          :model-value="autoTranscodeEnabled"
+                          color="neutral"
+                          :disabled="updatingAutoTranscode || !transcodeSupported"
+                          @pointerdown.stop
+                          @click.stop
+                          @update:model-value="handleAutoTranscodeSwitchUpdate"
+                        />
+                      </template>
+                    </UDropdownMenu>
+                  </UFieldGroup>
+                  <UButton
+                    v-if="job.status === 'failed' || job.status === 'cancelled' || job.status === 'interrupted' || job.status === 'done'"
+                    icon="i-lucide-rotate-ccw"
+                    :label="job.status === 'cancelled' || job.status === 'interrupted' ? '继续' : '重新渲染'"
+                    :color="job.status === 'cancelled' || job.status === 'interrupted' ? 'warning' : 'neutral'"
+                    variant="outline"
+                    size="md"
+                    @click="handleRetry"
+                  />
+                  <UButton
+                    v-if="job.status === 'running' || job.status === 'pending'"
+                    icon="i-lucide-x"
+                    label="取消"
+                    color="warning"
+                    variant="outline"
+                    size="md"
+                    @click="jobsStore.stopJob(job.id)"
+                  />
+                  <UButton
+                    v-if="job.status === 'done' || job.status === 'failed' || job.status === 'cancelled' || job.status === 'interrupted'"
+                    icon="i-lucide-trash-2"
+                    label="删除"
+                    color="error"
+                    variant="outline"
+                    size="md"
+                    @click="showDeleteConfirm = true"
+                  />
+                </div>
+              </div>
+              <p v-if="job.note" class="page-note detail-note">{{ job.note }}</p>
             </div>
-          </UContextMenu>
-        </div>
+          </div>
+        </UContextMenu>
+      </div>
     </section>
 
     <UModal
@@ -282,16 +282,6 @@
     </UModal>
 
     <section class="detail-content">
-      <RenderProgress
-        v-if="job.status === 'running'"
-        class="detail-render-progress"
-        :frame="job.currentFrame ?? 0"
-        :total-frames="job.totalFrames ?? (job.frameEnd - job.frameStart + 1)"
-        :warming-up="jobsStore.isJobWarmingUp(job.id)"
-        :time-elapsed="job.timeElapsed ?? undefined"
-        :remaining-secs="job.remainingSecs"
-      />
-
       <div class="detail-grid">
         <UCard variant="subtle" :ui="{ root: 'detail-section detail-full', body: 'detail-card-body' }">
         <h2 class="detail-card-title">文件路径</h2>
@@ -352,6 +342,21 @@
             <p class="stat-value">{{ duration }}</p>
           </div>
         </div>
+        <template v-if="job.status === 'running'">
+          <div class="stat-row">
+            <div class="stat-item detail-progress-stat">
+              <p class="stat-label">渲染进度</p>
+              <RenderProgress
+                class="detail-render-progress"
+                :frame="job.currentFrame ?? 0"
+                :total-frames="job.totalFrames ?? (job.frameEnd - job.frameStart + 1)"
+                :warming-up="jobsStore.isJobWarmingUp(job.id)"
+                :time-elapsed="job.timeElapsed ?? undefined"
+                :remaining-secs="job.remainingSecs"
+              />
+            </div>
+          </div>
+        </template>
         </UCard>
 
         <UCard variant="subtle" :ui="{ root: 'detail-section detail-full preview-card', body: 'detail-card-body' }">
@@ -377,6 +382,44 @@
         </div>
         </UCard>
 
+        <UCard variant="subtle" :ui="{ root: 'detail-section detail-full log-section', body: 'detail-card-body' }">
+          <div class="log-header">
+            <h2 class="detail-card-title log-title">输出日志</h2>
+            <div class="log-header-actions">
+              <UButton
+                :label="showAllLogs ? '最新日志' : '全部日志'"
+                :icon="showAllLogs ? 'i-lucide-clock' : 'i-lucide-layers'"
+                color="neutral"
+                variant="subtle"
+                size="sm"
+                :loading="logsLoading"
+                @click="toggleLogScope"
+              />
+              <UButton
+                v-if="logSummary?.directory"
+                icon="i-lucide-folder-open"
+                label="打开日志目录"
+                color="neutral"
+                variant="subtle"
+                size="sm"
+                @click="openPath(logSummary.directory)"
+              />
+            </div>
+          </div>
+          <div class="log-surface">
+            <div class="log-panel" ref="logEl" @scroll="onLogScroll">
+              <span v-if="logLines.length === 0" class="log-empty">
+                {{ job.status === 'pending' ? '等待开始…' : '暂无输出内容。' }}
+              </span>
+              <div v-for="(entry, i) in displayJobLogs" :key="i" class="log-line">
+                <div class="log-line-inner" :class="{ 'log-line-inner-no-timestamp': !entry.timestamp }">
+                  <span v-if="entry.timestamp" class="log-line-timestamp">{{ entry.timestamp }}</span>
+                  <span class="log-line-text">{{ entry.content || '\u00A0' }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </UCard>
       </div>
 
       <div v-if="warnings.length" class="detail-warnings">
@@ -392,38 +435,6 @@
       </div>
 
       <p v-if="retryActionError" class="form-error">{{ retryActionError }}</p>
-
-      <UCard variant="subtle" :ui="{ root: 'detail-section log-section', body: 'detail-card-body' }">
-        <div class="log-header">
-          <h2 class="detail-card-title log-title">输出日志</h2>
-          <div class="log-header-actions">
-            <UBadge :label="`当前 ${jobLogs.length} 行`" color="neutral" variant="subtle" />
-            <UBadge :label="`Blender ${logSummary?.blenderCount ?? 0} 份`" color="neutral" variant="subtle" />
-            <UButton
-              v-if="logSummary?.directory"
-              icon="i-lucide-folder-open"
-              label="打开日志目录"
-              color="neutral"
-              variant="subtle"
-              size="md"
-              @click="openPath(logSummary.directory)"
-            />
-          </div>
-        </div>
-        <div class="log-surface">
-          <div class="log-panel" ref="logEl" @scroll="onLogScroll">
-            <span v-if="jobLogs.length === 0" class="log-empty">
-              {{ job.status === 'pending' ? '等待开始…' : '暂无输出内容。' }}
-            </span>
-            <div v-for="(entry, i) in displayJobLogs" :key="i" class="log-line">
-              <div class="log-line-inner" :class="{ 'log-line-inner-no-timestamp': !entry.timestamp }">
-                <span v-if="entry.timestamp" class="log-line-timestamp">{{ entry.timestamp }}</span>
-                <span class="log-line-text">{{ entry.content || '\u00A0' }}</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </UCard>
     </section>
 
     <UModal v-model:open="lightboxOpen" :close="false" :ui="{ content: 'preview-lightbox' }">
@@ -450,19 +461,27 @@ import { parseLogLine } from '~/utils/log-line'
 
 const route = useRoute()
 const router = useRouter()
+const toast = useToast()
 const jobsStore = useJobsStore()
 const transcodeStore = useTranscodeStore()
 
 const settingsStore = useSettingsStore()
 
-const { openPath, inspectRenderedFrames, getLastRenderedFrame, getJobLogSummary, updateJobPreviewDimensions } = useTauri()
+const { openPath, inspectRenderedFrames, getLastRenderedFrame, getJobLogSummary, getJobLogs, updateJobPreviewDimensions } = useTauri()
 const { onProgress, onJobUpdated, onLog, onFfmpegJobUpdated } = useRenderEvents()
 const STATUS_LABEL = JOB_STATUS_LABEL
 
 const jobId = computed(() => route.params.id as string)
 const job = computed(() => jobsStore.jobs.find((j) => j.id === jobId.value))
 const jobLogs = computed(() => jobsStore.getJobLogs(jobId.value))
-const displayJobLogs = computed(() => jobLogs.value.map(line => parseLogLine(line)))
+const showAllLogs = ref(false)
+const logsLoading = ref(false)
+const allLogsLoaded = ref(false)
+const allLogLines = ref<string[]>([])
+const logLines = computed(() =>
+  showAllLogs.value ? allLogLines.value : jobLogs.value,
+)
+const displayJobLogs = computed(() => logLines.value.map(line => parseLogLine(line)))
 const relatedFfmpegJobs = computed(() => transcodeStore.getRelatedJobs(jobId.value))
 const primaryTranscodeJob = computed(() =>
   relatedFfmpegJobs.value.find(entry => entry.status === 'running')
@@ -766,13 +785,34 @@ const logEl = ref<HTMLDivElement | null>(null)
 const pinToBottom = ref(true)
 
 watch(
-  () => jobLogs.value.length,
+  () => logLines.value.length,
   async () => {
     if (!pinToBottom.value) return
     await nextTick()
     if (logEl.value) logEl.value.scrollTop = logEl.value.scrollHeight
   },
 )
+
+async function toggleLogScope() {
+  const nextShowAll = !showAllLogs.value
+  showAllLogs.value = nextShowAll
+  if (!nextShowAll || allLogsLoaded.value) return
+
+  logsLoading.value = true
+  try {
+    allLogLines.value = await getJobLogs(jobId.value)
+    allLogsLoaded.value = true
+  } catch (error) {
+    showAllLogs.value = false
+    toast.add({
+      title: '读取全部日志失败',
+      description: error instanceof Error ? error.message : String(error),
+      color: 'error',
+    })
+  } finally {
+    logsLoading.value = false
+  }
+}
 
 function scheduleLogSummaryRefresh(delay = 180) {
   if (logSummaryTimer) clearTimeout(logSummaryTimer)
@@ -839,6 +879,8 @@ onMounted(async () => {
   }))
   detailUnlisteners.push(await onLog((event) => {
     jobsStore.applyLog(event)
+    if (event.jobId !== jobId.value || !allLogsLoaded.value) return
+    allLogLines.value = [...allLogLines.value, event.line]
   }))
   detailUnlisteners.push(await onFfmpegJobUpdated((event) => {
     transcodeStore.applyFfmpegJobUpdate(event)

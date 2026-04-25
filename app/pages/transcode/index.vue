@@ -18,17 +18,23 @@
           <div class="queue-title-row">
             <UBadge label="FFmpeg Queue" color="neutral" variant="subtle" class="page-eyebrow" />
           </div>
-          <h1>转码队列</h1>
-          <p class="page-note">集中查看所有转码任务的状态、结果与日志。</p>
-        </div>
-        <div class="page-hero-actions queue-hero-actions">
-          <UButton
-            icon="i-lucide-plus"
-            label="新建任务"
-            color="primary"
-            variant="solid"
-            @click="openCreateModal"
-          />
+          <div class="queue-heading-row">
+            <div class="queue-heading-copy">
+              <h1>转码队列</h1>
+              <p class="page-note">集中查看所有转码任务的状态、结果与日志。</p>
+            </div>
+            <div class="queue-hero-actions-stack">
+              <div class="page-hero-actions queue-hero-actions">
+                <UButton
+                  icon="i-lucide-plus"
+                  label="新建任务"
+                  color="primary"
+                  variant="solid"
+                  @click="openCreateModal"
+                />
+              </div>
+            </div>
+          </div>
         </div>
       </section>
 
