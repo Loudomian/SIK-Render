@@ -278,6 +278,7 @@ fn compute_resume_frame(job: &RenderJob) -> i32 {
 }
 
 pub async fn run_job(app: AppHandle, state: AppState, job: RenderJob) -> Result<JobStatus> {
+    let render_settings = state.cached_settings().unwrap_or_default();
     let max_crash_retries = state
         .cached_settings()
         .map(|s| s.max_crash_retries.min(10))
@@ -369,7 +370,7 @@ pub async fn run_job(app: AppHandle, state: AppState, job: RenderJob) -> Result<
             );
         }
 
-        let mut child = match spawn_blender(&job, actual_start) {
+        let mut child = match spawn_blender(&job, actual_start, &render_settings) {
             Ok(c) => c,
             Err(e) => break Err(e),
         };
@@ -453,7 +454,6 @@ pub async fn run_job(app: AppHandle, state: AppState, job: RenderJob) -> Result<
         let app_stderr = app.clone();
         let job_id_stderr = job.id.clone();
         let state_stderr = state.clone();
-        let mut stderr_last_frame = actual_start.max(job_frame_start) as u32;
         let stderr_task = tokio::spawn(async move {
             let mut lines = BufReader::new(stderr).lines();
             while let Ok(Some(line)) = lines.next_line().await {
@@ -462,21 +462,13 @@ pub async fn run_job(app: AppHandle, state: AppState, job: RenderJob) -> Result<
                     "render-log",
                     RenderLogEvent { job_id: job_id_stderr.clone(), line: rendered_line.clone() },
                 );
-                if let Some(frame) = parser::parse_frame(&line) {
-                    stderr_last_frame = frame;
-                }
                 if let Some(p) = parser::parse_time_progress(&line) {
-                    let new_this_run = stderr_last_frame
-                        .saturating_sub(actual_start.max(1) as u32)
-                        .saturating_add(1);
-                    let rel = (already_done + new_this_run).min(total_frames);
-                    let abs_frame = (job_frame_start + rel as i32 - 1).clamp(job_frame_start, job_frame_end);
                     persist_job_progress(
                         &state_stderr,
                         &job_id_stderr,
                         None,
                         total_frames,
-                        Some(abs_frame),
+                        None,
                         Some(p.time_elapsed),
                         p.remaining_secs,
                     )
@@ -570,13 +562,12 @@ pub async fn run_job(app: AppHandle, state: AppState, job: RenderJob) -> Result<
                     .saturating_sub(actual_start.max(1) as u32)
                     .saturating_add(1);
                 let rel = (already_done + new_this_run).min(total_frames);
-                let abs_frame = (job_frame_start + rel as i32 - 1).clamp(job_frame_start, job_frame_end);
                 persist_job_progress(
                     &state,
                     &job.id,
                     None,
                     total_frames,
-                    Some(abs_frame),
+                    None,
                     Some(p.time_elapsed),
                     p.remaining_secs,
                 )
@@ -702,8 +693,12 @@ pub async fn run_job(app: AppHandle, state: AppState, job: RenderJob) -> Result<
     job_result
 }
 
-fn spawn_blender(job: &RenderJob, frame_start_actual: i32) -> Result<Child> {
-    let mut command = crate::blender::command::render_command(job, frame_start_actual)
+fn spawn_blender(
+    job: &RenderJob,
+    frame_start_actual: i32,
+    settings: &crate::commands::settings::AppSettings,
+) -> Result<Child> {
+    let mut command = crate::blender::command::render_command(job, frame_start_actual, settings)
         .into_tokio_command();
     command
         .current_dir(

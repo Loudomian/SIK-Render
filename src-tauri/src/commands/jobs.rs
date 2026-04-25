@@ -13,6 +13,11 @@ pub struct AddJobPayload {
     pub name: String,
     pub note: Option<String>,
     pub auto_transcode_mp4: bool,
+    pub transcode_name_override: Option<String>,
+    pub transcode_fps_override: Option<f32>,
+    pub transcode_output_path_override: Option<String>,
+    pub transcode_crf_override: Option<u32>,
+    pub transcode_preset_override: Option<String>,
     pub fps: Option<f32>,
     pub blend_file: String,
     pub blender_executable: String,
@@ -174,6 +179,16 @@ fn normalize_optional_positive_f32(value: Option<f32>, field_name: &str) -> Resu
     }
 }
 
+fn normalize_optional_preset(value: Option<String>) -> Option<String> {
+    value
+        .map(|preset| crate::commands::transcode::normalize_preset(preset.trim()))
+        .filter(|preset| !preset.is_empty())
+}
+
+fn output_format_disables_transcode(format: &str) -> bool {
+    format.eq_ignore_ascii_case("OPEN_EXR") || format.eq_ignore_ascii_case("EXR")
+}
+
 #[tauri::command]
 pub async fn list_jobs(state: State<'_, AppState>) -> Result<Vec<RenderJob>, String> {
     fetch_jobs(&state.pool).await.map_err(|error| error.to_string())
@@ -311,7 +326,15 @@ pub async fn add_job(
         payload.priority,
     );
     job.note = normalize_optional_text(payload.note);
-    job.auto_transcode_mp4 = payload.auto_transcode_mp4;
+    let transcode_allowed = !output_format_disables_transcode(&job.output_format);
+    job.auto_transcode_mp4 = transcode_allowed && payload.auto_transcode_mp4;
+    job.transcode_name_override = normalize_optional_text(payload.transcode_name_override);
+    job.transcode_fps_override =
+        normalize_optional_positive_f32(payload.transcode_fps_override, "transcode_fps_override")?;
+    job.transcode_output_path_override = normalize_optional_text(payload.transcode_output_path_override)
+        .map(PathBuf::from);
+    job.transcode_crf_override = payload.transcode_crf_override.map(|value| value.min(51) as i32);
+    job.transcode_preset_override = normalize_optional_preset(payload.transcode_preset_override);
     job.fps = payload.fps.filter(|value| *value > 0.0);
     job.preview_width = payload.preview_width;
     job.preview_height = payload.preview_height;
@@ -460,13 +483,18 @@ pub async fn update_job_transcode_settings(
     state: State<'_, AppState>,
     app: tauri::AppHandle,
 ) -> Result<RenderJob, String> {
+    let output_format = sqlx::query_scalar::<_, String>("SELECT output_format FROM jobs WHERE id = ?")
+        .bind(&payload.id)
+        .fetch_optional(&state.pool)
+        .await
+        .map_err(|error| error.to_string())?
+        .ok_or_else(|| format!("job {} was not found", payload.id))?;
+    let auto_transcode_mp4 =
+        payload.auto_transcode_mp4 && !output_format_disables_transcode(&output_format);
     let transcode_name_override = normalize_optional_text(payload.transcode_name_override);
     let transcode_output_path_override =
         normalize_optional_text(payload.transcode_output_path_override);
-    let transcode_preset_override = payload
-        .transcode_preset_override
-        .map(|value| crate::commands::transcode::normalize_preset(value.trim()))
-        .filter(|value| !value.is_empty());
+    let transcode_preset_override = normalize_optional_preset(payload.transcode_preset_override);
     let transcode_fps_override =
         normalize_optional_positive_f32(payload.transcode_fps_override, "transcode_fps_override")?;
     let transcode_crf_override = payload
@@ -483,7 +511,7 @@ pub async fn update_job_transcode_settings(
              transcode_preset_override = ?
          WHERE id = ?",
     )
-        .bind(payload.auto_transcode_mp4)
+        .bind(auto_transcode_mp4)
         .bind(transcode_name_override)
         .bind(transcode_fps_override)
         .bind(transcode_output_path_override)

@@ -1,6 +1,8 @@
 import { defineStore } from 'pinia'
 import type { AddJobPayload, JobUpdatedEvent, RenderJob, RenderLogEvent, RenderProgressEvent } from '~/types'
 
+const MAX_LOG_LINES = 5000
+
 export const useJobsStore = defineStore('jobs', () => {
   const jobs = ref<RenderJob[]>([])
   const logs = ref<Record<string, string[]>>({})
@@ -182,9 +184,8 @@ export const useJobsStore = defineStore('jobs', () => {
   }
 
   function applyLog(event: RenderLogEvent) {
-    const existing = logs.value[event.jobId] ?? []
-    existing.push(event.line)
-    logs.value[event.jobId] = existing
+    const existing = [...(logs.value[event.jobId] ?? []), event.line]
+    logs.value[event.jobId] = existing.slice(-MAX_LOG_LINES)
     if (/\bFra:\d+/.test(event.line) || /\bSaved:\s/i.test(event.line)) {
       renderStarted.value[event.jobId] = true
     }
@@ -198,7 +199,7 @@ export const useJobsStore = defineStore('jobs', () => {
     if (logs.value[id]?.length) return
     const lines = await fetchJobLogs(id)
     if (lines.length) {
-      logs.value[id] = lines
+      logs.value[id] = lines.slice(-MAX_LOG_LINES)
       if (lines.some(line => /\bFra:\d+/.test(line) || /\bSaved:\s/i.test(line))) {
         renderStarted.value[id] = true
       }

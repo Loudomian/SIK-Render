@@ -152,7 +152,7 @@ if (import.meta.client) {
 }
 
 onMounted(async () => {
-  systemThemeMedia.addEventListener('change', handleSystemThemeChange)
+  systemThemeMedia?.addEventListener('change', handleSystemThemeChange)
   window.addEventListener('contextmenu', handleGlobalContextMenu, true)
   await Promise.all([
     jobsStore.fetchJobs(),
