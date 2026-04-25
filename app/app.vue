@@ -18,7 +18,7 @@
                   height="52"
                   alt=""
                   class="logo-icon logo-icon-light"
-                  :class="{ 'is-active': settingsStore.settings.theme !== 'dark' }"
+                  :class="{ 'is-active': resolvedTheme !== 'dark' }"
                 />
                 <img
                   :src="appIconDarkUrl"
@@ -26,7 +26,7 @@
                   height="52"
                   alt=""
                   class="logo-icon logo-icon-dark"
-                  :class="{ 'is-active': settingsStore.settings.theme === 'dark' }"
+                  :class="{ 'is-active': resolvedTheme === 'dark' }"
                 />
               </span>
             </button>
@@ -72,7 +72,6 @@ const jobsStore = useJobsStore()
 const settingsStore = useSettingsStore()
 const { onProgress, onJobUpdated, onLog, onQueueState } = useRenderEvents()
 const CONTEXT_MENU_ALLOW_SELECTOR = '[data-context-menu]'
-const brandToggleTitle = computed(() => settingsStore.settings.theme === 'dark' ? '切换到浅色模式' : '切换到深色模式')
 
 const navItems = computed(() => [
   {
@@ -99,6 +98,31 @@ const navItems = computed(() => [
 ])
 
 const unlisteners: Array<() => void> = []
+let systemThemeMedia: MediaQueryList | null = null
+const systemPrefersDark = ref(false)
+
+function resolveTheme(theme: 'dark' | 'light' | 'system') {
+  if (theme === 'system') {
+    return systemPrefersDark.value ? 'dark' : 'light'
+  }
+  return theme
+}
+
+const resolvedTheme = computed(() => resolveTheme(settingsStore.settings.theme))
+const brandToggleTitle = computed(() => resolvedTheme.value === 'dark' ? '切换到浅色模式' : '切换到深色模式')
+
+function applyThemeClass(theme: 'dark' | 'light' | 'system') {
+  const resolved = resolveTheme(theme)
+  const root = document.documentElement
+  root.classList.toggle('dark', resolved === 'dark')
+  root.classList.toggle('light', resolved !== 'dark')
+}
+
+function handleSystemThemeChange() {
+  systemPrefersDark.value = systemThemeMedia?.matches ?? false
+  if (settingsStore.settings.theme !== 'system') return
+  applyThemeClass('system')
+}
 
 function handleGlobalContextMenu(event: MouseEvent) {
   const target = event.target as HTMLElement | null
@@ -115,18 +139,20 @@ async function handleBrandIconClick() {
 }
 
 if (import.meta.client) {
+  systemThemeMedia = window.matchMedia('(prefers-color-scheme: dark)')
+  systemPrefersDark.value = systemThemeMedia.matches
+
   watch(
     () => settingsStore.settings.theme,
     (theme) => {
-      const root = document.documentElement
-      root.classList.toggle('dark', theme === 'dark')
-      root.classList.toggle('light', theme !== 'dark')
+      applyThemeClass(theme)
     },
     { immediate: true },
   )
 }
 
 onMounted(async () => {
+  systemThemeMedia.addEventListener('change', handleSystemThemeChange)
   window.addEventListener('contextmenu', handleGlobalContextMenu, true)
   await Promise.all([
     jobsStore.fetchJobs(),
@@ -140,6 +166,8 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
+  systemThemeMedia?.removeEventListener('change', handleSystemThemeChange)
+  systemThemeMedia = null
   window.removeEventListener('contextmenu', handleGlobalContextMenu, true)
   for (const unlisten of unlisteners) {
     unlisten()

@@ -1,3 +1,4 @@
+use crate::commands::settings::AppSettings;
 use crate::queue::job::RenderJob;
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
@@ -66,10 +67,55 @@ impl BlenderCliCommand {
     }
 }
 
-pub fn render_command(job: &RenderJob, frame_start_actual: i32) -> BlenderCliCommand {
+fn build_render_settings_script(job: &RenderJob, settings: &AppSettings) -> String {
+    let mut lines = vec![
+        "import bpy".to_string(),
+        "scene = bpy.context.scene".to_string(),
+        "r = scene.render".to_string(),
+        "image = r.image_settings".to_string(),
+        "r.use_file_extension = True".to_string(),
+    ];
+
+    match job.output_format.as_str() {
+        "OPEN_EXR" | "EXR" => {
+            lines.extend([
+                "image.file_format = 'OPEN_EXR'".to_string(),
+                format!("image.color_mode = '{}'", settings.exr_color_mode),
+                format!("image.color_depth = '{}'", settings.exr_color_depth),
+                format!("image.exr_codec = '{}'", settings.exr_codec),
+            ]);
+
+            if matches!(settings.exr_codec.as_str(), "DWAA" | "DWAB") {
+                lines.push(format!("image.quality = {}", settings.exr_quality));
+            }
+        }
+        "PNG" => {
+            lines.extend([
+                "image.file_format = 'PNG'".to_string(),
+                format!("image.color_mode = '{}'", settings.png_color_mode),
+                format!("image.color_depth = '{}'", settings.png_color_depth),
+                format!("image.compression = {}", settings.png_compression),
+            ]);
+        }
+        _ => {
+            lines.push(format!("image.file_format = '{}'", job.output_format));
+        }
+    }
+
+    lines.join("; ")
+}
+
+pub fn render_command(
+    job: &RenderJob,
+    frame_start_actual: i32,
+    settings: &AppSettings,
+) -> BlenderCliCommand {
+    let render_settings_script = build_render_settings_script(job, settings);
     BlenderCliCommand::new(&job.blender_executable)
         .arg_before("--background")
         .blend_file(&job.blend_file)
+        .arg("--python-expr")
+        .arg(render_settings_script)
         .args([
             "--render-output".into(),
             job.output_path.as_os_str().to_os_string(),
