@@ -42,6 +42,11 @@ export interface AddJobPayload {
   name: string
   note?: string | null
   auto_transcode_mp4: boolean
+  transcode_name_override?: string | null
+  transcode_fps_override?: number | null
+  transcode_output_path_override?: string | null
+  transcode_crf_override?: number | null
+  transcode_preset_override?: string | null
   fps?: number | null
   blend_file: string
   blender_executable: string
@@ -210,7 +215,14 @@ export interface AppSettings {
   transcodeCrf: number
   transcodePreset: string
   ffmpegMaxConcurrent: number
-  theme: 'dark' | 'light'
+  pngColorMode: 'BW' | 'RGB' | 'RGBA'
+  pngColorDepth: number
+  pngCompression: number
+  exrColorMode: 'BW' | 'RGB' | 'RGBA'
+  exrColorDepth: number
+  exrCodec: 'NONE' | 'ZIP' | 'PIZ' | 'DWAA' | 'DWAB' | 'ZIPS' | 'RLE' | 'PXR24' | 'B44' | 'B44A'
+  exrQuality: number
+  theme: 'dark' | 'light' | 'system'
   extraBlenderPaths: string[]
   excludedBlenderPaths: string[]
   maxCrashRetries: number

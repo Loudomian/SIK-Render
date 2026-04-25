@@ -15,6 +15,20 @@ pub struct AppSettings {
     pub transcode_preset: String,
     #[serde(default = "default_ffmpeg_max_concurrent")]
     pub ffmpeg_max_concurrent: u32,
+    #[serde(default = "default_png_color_mode")]
+    pub png_color_mode: String,
+    #[serde(default = "default_png_color_depth")]
+    pub png_color_depth: u32,
+    #[serde(default = "default_png_compression")]
+    pub png_compression: u32,
+    #[serde(default = "default_exr_color_mode")]
+    pub exr_color_mode: String,
+    #[serde(default = "default_exr_color_depth")]
+    pub exr_color_depth: u32,
+    #[serde(default = "default_exr_codec")]
+    pub exr_codec: String,
+    #[serde(default = "default_exr_quality")]
+    pub exr_quality: u32,
     pub theme: String,
     #[serde(default)]
     pub extra_blender_paths: Vec<String>,
@@ -33,6 +47,13 @@ impl Default for AppSettings {
             transcode_crf: default_transcode_crf(),
             transcode_preset: default_transcode_preset(),
             ffmpeg_max_concurrent: default_ffmpeg_max_concurrent(),
+            png_color_mode: default_png_color_mode(),
+            png_color_depth: default_png_color_depth(),
+            png_compression: default_png_compression(),
+            exr_color_mode: default_exr_color_mode(),
+            exr_color_depth: default_exr_color_depth(),
+            exr_codec: default_exr_codec(),
+            exr_quality: default_exr_quality(),
             theme: "dark".into(),
             extra_blender_paths: Vec::new(),
             excluded_blender_paths: Vec::new(),
@@ -49,6 +70,8 @@ struct SettingsFile {
     ui: UiSettings,
     #[serde(default)]
     blender: BlenderSettings,
+    #[serde(default)]
+    blender_output: BlenderOutputSettings,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -67,6 +90,24 @@ struct ToolsSettings {
     ffmpeg_max_concurrent: u32,
     #[serde(default = "default_max_crash_retries")]
     max_crash_retries: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+struct BlenderOutputSettings {
+    #[serde(default = "default_png_color_mode")]
+    png_color_mode: String,
+    #[serde(default = "default_png_color_depth")]
+    png_color_depth: u32,
+    #[serde(default = "default_png_compression")]
+    png_compression: u32,
+    #[serde(default = "default_exr_color_mode")]
+    exr_color_mode: String,
+    #[serde(default = "default_exr_color_depth")]
+    exr_color_depth: u32,
+    #[serde(default = "default_exr_codec")]
+    exr_codec: String,
+    #[serde(default = "default_exr_quality")]
+    exr_quality: u32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -99,7 +140,7 @@ enum SettingsFileCompat {
 }
 
 fn default_blend_inspect_timeout_seconds() -> u64 {
-    30
+    300
 }
 
 fn default_max_crash_retries() -> u32 {
@@ -122,15 +163,44 @@ fn default_theme() -> String {
     String::from("dark")
 }
 
+fn default_png_color_mode() -> String {
+    String::from("RGB")
+}
+
+fn default_png_color_depth() -> u32 {
+    8
+}
+
+fn default_png_compression() -> u32 {
+    15
+}
+
+fn default_exr_color_mode() -> String {
+    String::from("RGB")
+}
+
+fn default_exr_color_depth() -> u32 {
+    16
+}
+
+fn default_exr_codec() -> String {
+    String::from("DWAA")
+}
+
+fn default_exr_quality() -> u32 {
+    98
+}
+
 fn normalize_theme(theme: String) -> String {
     match theme.as_str() {
         "light" => String::from("light"),
+        "system" => String::from("system"),
         _ => default_theme(),
     }
 }
 
 fn normalize_blend_inspect_timeout_seconds(seconds: u64) -> u64 {
-    seconds.clamp(5, 600)
+    seconds.clamp(30, 800)
 }
 
 fn normalize_max_crash_retries(retries: u32) -> u32 {
@@ -139,6 +209,50 @@ fn normalize_max_crash_retries(retries: u32) -> u32 {
 
 fn normalize_ffmpeg_max_concurrent(value: u32) -> u32 {
     value.clamp(1, 8)
+}
+
+fn normalize_png_color_mode(mode: &str) -> String {
+    match mode {
+        "BW" | "RGB" | "RGBA" => mode.to_string(),
+        _ => default_png_color_mode(),
+    }
+}
+
+fn normalize_png_color_depth(depth: u32) -> u32 {
+    match depth {
+        8 | 16 => depth,
+        _ => default_png_color_depth(),
+    }
+}
+
+fn normalize_png_compression(value: u32) -> u32 {
+    value.min(100)
+}
+
+fn normalize_exr_color_mode(mode: &str) -> String {
+    match mode {
+        "BW" | "RGB" | "RGBA" => mode.to_string(),
+        _ => default_exr_color_mode(),
+    }
+}
+
+fn normalize_exr_color_depth(depth: u32) -> u32 {
+    match depth {
+        16 | 32 => depth,
+        _ => default_exr_color_depth(),
+    }
+}
+
+fn normalize_exr_codec(codec: &str) -> String {
+    match codec {
+        "NONE" | "ZIP" | "PIZ" | "DWAA" | "DWAB" | "ZIPS" | "RLE" | "PXR24" | "B44"
+        | "B44A" => codec.to_string(),
+        _ => default_exr_codec(),
+    }
+}
+
+fn normalize_exr_quality(value: u32) -> u32 {
+    value.min(100)
 }
 
 fn normalize_preset(preset: &str) -> String {
@@ -162,6 +276,13 @@ impl From<SettingsFile> for AppSettings {
             ffmpeg_max_concurrent: normalize_ffmpeg_max_concurrent(
                 value.tools.ffmpeg_max_concurrent,
             ),
+            png_color_mode: normalize_png_color_mode(&value.blender_output.png_color_mode),
+            png_color_depth: normalize_png_color_depth(value.blender_output.png_color_depth),
+            png_compression: normalize_png_compression(value.blender_output.png_compression),
+            exr_color_mode: normalize_exr_color_mode(&value.blender_output.exr_color_mode),
+            exr_color_depth: normalize_exr_color_depth(value.blender_output.exr_color_depth),
+            exr_codec: normalize_exr_codec(&value.blender_output.exr_codec),
+            exr_quality: normalize_exr_quality(value.blender_output.exr_quality),
             theme: normalize_theme(value.ui.theme),
             extra_blender_paths: value.blender.extra_blender_paths,
             excluded_blender_paths: value.blender.excluded_blender_paths,
@@ -190,6 +311,15 @@ impl From<AppSettings> for SettingsFile {
             blender: BlenderSettings {
                 extra_blender_paths: value.extra_blender_paths,
                 excluded_blender_paths: value.excluded_blender_paths,
+            },
+            blender_output: BlenderOutputSettings {
+                png_color_mode: normalize_png_color_mode(&value.png_color_mode),
+                png_color_depth: normalize_png_color_depth(value.png_color_depth),
+                png_compression: normalize_png_compression(value.png_compression),
+                exr_color_mode: normalize_exr_color_mode(&value.exr_color_mode),
+                exr_color_depth: normalize_exr_color_depth(value.exr_color_depth),
+                exr_codec: normalize_exr_codec(&value.exr_codec),
+                exr_quality: normalize_exr_quality(value.exr_quality),
             },
         }
     }
@@ -306,6 +436,13 @@ pub fn save_settings(app: AppHandle, settings: AppSettings) -> Result<(), String
     settings.transcode_preset = normalize_preset(&settings.transcode_preset);
     settings.ffmpeg_max_concurrent =
         normalize_ffmpeg_max_concurrent(settings.ffmpeg_max_concurrent);
+    settings.png_color_mode = normalize_png_color_mode(&settings.png_color_mode);
+    settings.png_color_depth = normalize_png_color_depth(settings.png_color_depth);
+    settings.png_compression = normalize_png_compression(settings.png_compression);
+    settings.exr_color_mode = normalize_exr_color_mode(&settings.exr_color_mode);
+    settings.exr_color_depth = normalize_exr_color_depth(settings.exr_color_depth);
+    settings.exr_codec = normalize_exr_codec(&settings.exr_codec);
+    settings.exr_quality = normalize_exr_quality(settings.exr_quality);
     settings.max_crash_retries = normalize_max_crash_retries(settings.max_crash_retries);
     let content = toml::to_string_pretty(&SettingsFile::from(settings.clone()))
         .map_err(|error| error.to_string())?;

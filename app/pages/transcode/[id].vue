@@ -149,8 +149,8 @@
             <p class="stat-value">{{ job.fps.toFixed(3) }}</p>
           </div>
           <div class="stat-item">
-            <p class="stat-label">Preset / CRF</p>
-            <p class="stat-value">{{ job.preset }} / {{ job.crf }}</p>
+            <p class="stat-label">CRF / Preset</p>
+            <p class="stat-value">{{ job.crf }} / {{ job.preset }}</p>
           </div>
           <div class="stat-item">
             <p class="stat-label">进度</p>

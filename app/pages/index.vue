@@ -33,24 +33,14 @@
             </UTooltip>
           </div>
           <div class="page-hero-actions queue-hero-actions queue-hero-actions-secondary">
-            <UTooltip text="按当前顺序启动等待中的任务" arrow :content="{ side: 'bottom', sideOffset: 8 }">
+            <UTooltip :text="queueToggleTooltip" arrow :content="{ side: 'bottom', sideOffset: 8 }">
               <UButton
-                icon="i-lucide-play"
-                label="开始任务队列"
-                color="success"
+                :icon="queueToggleButton.icon"
+                :label="queueToggleButton.label"
+                :color="queueToggleButton.color"
                 variant="outline"
-                :disabled="!jobsStore.queuePaused || (!jobsStore.pendingJobs.length && !jobsStore.pausedJobId)"
-                @click="handleStartQueue"
-              />
-            </UTooltip>
-            <UTooltip text="立即中止当前渲染任务并暂停队列，恢复时会从断点自动续跑" arrow :content="{ side: 'bottom', sideOffset: 8 }">
-              <UButton
-                icon="i-lucide-pause"
-                label="暂停任务队列"
-                color="warning"
-                variant="outline"
-                :disabled="jobsStore.queuePaused"
-                @click="handlePauseQueue"
+                :disabled="queueToggleDisabled"
+                @click="handleQueueToggle"
               />
             </UTooltip>
           </div>
@@ -288,62 +278,68 @@
       @update:open="v => { if (!v) closeAddJob() }"
     >
       <template #body>
-        <form class="job-form" @submit.prevent="submitNewJob">
-          <div class="job-form-layout">
-            <div class="job-form-main">
-              <section class="job-form-block surface-panel">
-                <div class="form-section-header">
-                  <div>
-                    <h2 class="form-section-title">项目</h2>
+        <form class="modal-stack" @submit.prevent="submitNewJob">
+          <div class="job-form-modern-stack">
+            <section class="surface-panel transcode-submit-section">
+              <div class="transcode-submit-head">
+                <div>
+                  <p class="choice-card-mode">基础项</p>
+                  <h2 class="choice-card-title">项目与输出</h2>
+                </div>
+              </div>
+
+              <div class="job-form-fields">
+                <UFormField label="任务名称" size="lg" class="job-form-field">
+                  <UTextarea v-model.trim="form.name" :rows="1" autoresize class="job-name-textarea" placeholder="Shot_010_Lighting" :ui="{ root: 'w-full' }" />
+                </UFormField>
+
+                <UFormField label="任务备注" size="lg" class="job-form-field">
+                  <UTextarea
+                    v-model="formNote"
+                    :rows="2"
+                    autoresize
+                    class="path-textarea"
+                    placeholder="例如：客户返修、补帧说明、交付要求。"
+                    :ui="{ root: 'w-full' }"
+                  />
+                </UFormField>
+
+                <UFormField label="Blend 文件" class="job-form-field">
+                  <div class="transcode-submit-path-row">
+                    <UTextarea v-model.trim="form.blend_file" :rows="1" autoresize class="w-full path-textarea path-textarea-lg" placeholder="F:\projects\scene.blend" :ui="{ root: 'w-full' }" />
+                    <UButton type="button" icon="i-lucide-folder-open" label="浏览" color="neutral" variant="outline" @click="browseBlendFile" />
                   </div>
-                </div>
+                </UFormField>
 
-                <div class="job-form-stack">
-                  <UFormField label="任务名称" size="lg" class="job-form-field">
-                    <UTextarea v-model.trim="form.name" :rows="1" autoresize class="job-name-textarea" placeholder="Shot_010_Lighting" :ui="{ root: 'w-full' }" />
-                  </UFormField>
-
-                  <UFormField label="任务备注" size="lg" class="job-form-field">
-                    <UTextarea
-                      v-model="formNote"
-                      :rows="2"
-                      autoresize
-                      class="path-textarea"
-                      placeholder="例如：客户返修、补帧说明、交付要求。"
-                      :ui="{ root: 'w-full' }"
-                    />
-                  </UFormField>
-
-                  <UFormField label="Blend 文件" size="lg" class="job-form-field">
-                    <UTextarea v-model.trim="form.blend_file" :rows="2" autoresize class="path-textarea path-textarea-lg" placeholder="F:\projects\scene.blend" :ui="{ root: 'w-full' }" />
-                  </UFormField>
-                </div>
-              </section>
-
-              <section class="job-form-block surface-panel">
-                <div class="form-section-header">
-                  <div>
-                    <h2 class="form-section-title">输出</h2>
+                <UFormField label="输出路径" class="job-form-field">
+                  <div class="transcode-submit-path-row">
+                    <UTextarea v-model.trim="form.output_path" :rows="1" autoresize class="w-full path-textarea path-textarea-xl" placeholder="E:\renders\scene\scene_######" :ui="{ root: 'w-full' }" />
+                    <UButton type="button" icon="i-lucide-folder-open" label="浏览" color="neutral" variant="outline" @click="browseRenderOutputDirectory" />
                   </div>
-                </div>
+                </UFormField>
+              </div>
+            </section>
 
-                <div class="job-form-stack">
-                  <UFormField label="输出路径" size="lg" class="job-form-field">
-                    <UTextarea v-model.trim="form.output_path" :rows="2" autoresize class="path-textarea path-textarea-xl" placeholder="E:\renders\scene\scene_######" :ui="{ root: 'w-full' }" />
-                  </UFormField>
+            <section class="surface-panel transcode-submit-section">
+              <div class="transcode-submit-head">
+                <div>
+                  <p class="choice-card-mode">渲染控制</p>
+                  <h2 class="choice-card-title">执行参数</h2>
                 </div>
-              </section>
-            </div>
+                <UButton
+                  type="button"
+                  color="neutral"
+                  variant="outline"
+                  icon="i-lucide-search"
+                  :loading="inspectingProject"
+                  :disabled="!canInspectProject"
+                  :label="inspectingProject ? '读取中…' : '读取工程参数'"
+                  @click="inspectProjectSettings(true)"
+                />
+              </div>
 
-            <aside class="job-form-sidebar surface-panel">
-              <section class="job-form-sidebar-section">
-                <div class="form-section-header">
-                  <div>
-                    <h2 class="form-section-title">渲染控制</h2>
-                  </div>
-                </div>
-
-                <div v-if="settingsStore.blenderVersions.length" class="version-stack">
+              <div v-if="settingsStore.blenderVersions.length" class="job-form-fields">
+                <UFormField label="Blender 版本" class="job-form-field">
                   <div class="chip-row version-chip-row">
                     <UButton
                       v-for="b in settingsStore.blenderVersions"
@@ -356,77 +352,104 @@
                       @click="selectBlender(b.executable)"
                     />
                   </div>
+                </UFormField>
 
-                  <div class="job-form-control-grid job-form-control-grid-render job-render-control-row">
-                    <UFormField label="格式" class="job-format-field">
-                      <USelect
-                        v-model="form.output_format"
-                        :items="outputFormatOptions"
-                        trailing-icon="i-lucide-chevron-down"
-                        class="job-format-select"
-                        :ui="{
-                          base: 'w-full pe-9',
-                          trailing: 'pointer-events-none absolute inset-y-0 end-0 flex items-center pe-3',
-                          trailingIcon: 'size-4 text-primary',
-                          item: 'relative justify-center',
-                          itemLabel: 'w-full text-center',
-                          itemTrailing: 'absolute end-2'
-                        }"
-                      >
-                        <template #default="{ modelValue }">
-                          <span class="min-w-0 flex-1 truncate opacity-0 pointer-events-none select-none" aria-hidden="true">
-                            {{ modelValue || '选择格式' }}
-                          </span>
-                          <span class="absolute inset-0 flex items-center justify-center px-6 pointer-events-none">
-                            {{ modelValue || '选择格式' }}
-                          </span>
-                        </template>
-                      </USelect>
-                    </UFormField>
-                  </div>
-                  <div class="job-form-control-grid job-form-control-grid-frames">
-                    <UFormField label="起始帧">
-                      <UInputNumber v-model="form.frame_start" :min="1" :ui="{ root: 'w-full' }" />
-                    </UFormField>
-                    <UFormField label="结束帧">
-                      <UInputNumber v-model="form.frame_end" :min="1" :ui="{ root: 'w-full' }" />
-                    </UFormField>
-                  </div>
-                  <UFormField label="渲染后自动转 MP4">
-                    <div class="form-inline-toggle surface-panel">
-                      <UToggle v-model="form.auto_transcode_mp4" />
-                      <span class="hint-text">渲染完成后自动调用 FFmpeg 将序列帧合并为 MP4，需要先在设置中配置好 FFmpeg。</span>
-                    </div>
+                <div class="job-form-modern-grid">
+                  <UFormField label="格式" class="job-format-field">
+                    <USelect
+                      v-model="form.output_format"
+                      :items="outputFormatOptions"
+                      trailing-icon="i-lucide-chevron-down"
+                      class="job-format-select"
+                      :ui="{
+                        base: 'w-full pe-9',
+                        trailing: 'pointer-events-none absolute inset-y-0 end-0 flex items-center pe-3',
+                        trailingIcon: 'size-4 text-primary',
+                        item: 'relative justify-center',
+                        itemLabel: 'w-full text-center',
+                        itemTrailing: 'absolute end-2'
+                      }"
+                    >
+                      <template #default="{ modelValue }">
+                        <span class="min-w-0 flex-1 truncate opacity-0 pointer-events-none select-none" aria-hidden="true">
+                          {{ modelValue || '选择格式' }}
+                        </span>
+                        <span class="absolute inset-0 flex items-center justify-center px-6 pointer-events-none">
+                          {{ modelValue || '选择格式' }}
+                        </span>
+                      </template>
+                    </USelect>
+                  </UFormField>
+
+                  <UFormField label="起始帧">
+                    <UInputNumber v-model="form.frame_start" :min="1" :ui="{ root: 'w-full' }" />
+                  </UFormField>
+
+                  <UFormField label="结束帧">
+                    <UInputNumber v-model="form.frame_end" :min="1" :ui="{ root: 'w-full' }" />
                   </UFormField>
                 </div>
-                <p v-else class="hint-text">
-                  未检测到 Blender，请前往
-                  <UButton type="button" color="neutral" variant="link" size="sm" label="设置" @click="goToSettings" />
-                  添加。
-                </p>
 
-                <div class="form-inline-actions">
-                  <UButton
-                    type="button"
-                    color="neutral"
-                    variant="outline"
-                    size="sm"
-                    icon="i-lucide-search"
-                    :loading="inspectingProject"
-                    :disabled="!canInspectProject"
-                    :label="inspectingProject ? '读取中…' : '读取工程参数'"
-                    @click="inspectProjectSettings(true)"
-                  />
-                </div>
-              </section>
-
-              <section class="job-form-sidebar-section">
-                <div class="form-section-header">
-                  <div>
-                    <h2 class="form-section-title">工程参数</h2>
+                <UFormField label="输出参数">
+                  <div class="job-form-transcode-panel surface-panel">
+                    <div class="job-form-transcode-toggle-row">
+                      <div class="job-form-transcode-copy">
+                        <p class="job-form-transcode-title">{{ outputSettingsTitle }}</p>
+                        <p class="hint-text">{{ outputSettingsSummary }}</p>
+                      </div>
+                      <UButton
+                        type="button"
+                        icon="i-lucide-image-up"
+                        label="输出设置"
+                        color="neutral"
+                        variant="outline"
+                        @click="addJobOutputSettingsOpen = true"
+                      />
+                    </div>
                   </div>
-                </div>
+                </UFormField>
 
+                <UFormField label="渲染后转码">
+                  <div class="job-form-transcode-panel surface-panel">
+                    <div class="job-form-transcode-toggle-row">
+                      <div class="job-form-transcode-copy">
+                        <p class="job-form-transcode-title">自动提交到转码队列</p>
+                        <p class="hint-text">
+                          {{ isExrOutput ? 'OpenEXR 序列暂不支持 FFmpeg 转码，已自动禁用。' : '开启后会在渲染完成时自动提交转码。' }}
+                        </p>
+                      </div>
+                      <USwitch v-model="form.auto_transcode_mp4" color="primary" :disabled="isExrOutput" />
+                    </div>
+                    <div v-if="form.auto_transcode_mp4 && !isExrOutput" class="job-form-transcode-actions">
+                      <p class="job-form-transcode-summary">{{ addJobTranscodeSummary }}</p>
+                      <UButton
+                        type="button"
+                        icon="i-lucide-sliders-horizontal"
+                        label="转码设置"
+                        color="neutral"
+                        variant="outline"
+                        @click="addJobTranscodeSettingsOpen = true"
+                      />
+                    </div>
+                  </div>
+                </UFormField>
+              </div>
+              <p v-else class="hint-text">
+                未检测到 Blender，请前往
+                <UButton type="button" color="neutral" variant="link" size="sm" label="设置" @click="goToSettings" />
+                添加。
+              </p>
+            </section>
+
+            <section class="surface-panel transcode-submit-section">
+              <div class="transcode-submit-head">
+                <div>
+                  <p class="choice-card-mode">检查结果</p>
+                  <h2 class="choice-card-title">工程参数</h2>
+                </div>
+              </div>
+
+              <div class="job-form-fields">
                 <UAlert v-if="projectSettingsMessage" color="neutral" variant="subtle" :description="projectSettingsMessage" />
 
                 <div v-if="projectSettings" class="job-form-stats">
@@ -449,39 +472,69 @@
                 </div>
                 <div v-else class="job-form-empty">
                   <UIcon name="i-lucide-scan-search" class="job-form-empty-icon" />
-                  <p>点击"读取工程参数"后，这里会显示 Blender 工程内的渲染信息。</p>
+                  <p>点击“读取工程参数”后，这里会显示 Blender 工程内的渲染信息。</p>
                 </div>
-              </section>
+              </div>
+            </section>
 
-              <section v-if="notices.length" class="job-form-sidebar-section">
-                <div class="form-section-header">
-                  <div>
-                    <h2 class="form-section-title">提示</h2>
-                  </div>
+            <section v-if="notices.length" class="surface-panel transcode-submit-section">
+              <div class="transcode-submit-head">
+                <div>
+                  <p class="choice-card-mode">辅助信息</p>
+                  <h2 class="choice-card-title">提示</h2>
                 </div>
+              </div>
 
-                <div class="notices-area notices-stack">
-                  <UAlert
-                    v-for="(n, i) in notices"
-                    :key="i"
-                    :color="n.type === 'warn' ? 'warning' : 'neutral'"
-                    variant="subtle"
-                    :description="n.text"
-                  />
-                </div>
-              </section>
-            </aside>
+              <div class="notices-area notices-stack">
+                <UAlert
+                  v-for="(n, i) in notices"
+                  :key="i"
+                  :color="n.type === 'warn' ? 'warning' : 'neutral'"
+                  variant="subtle"
+                  :description="n.text"
+                />
+              </div>
+            </section>
           </div>
 
           <UAlert v-if="formError" color="error" variant="subtle" :description="formError" />
 
-          <div class="modal-actions">
-            <UButton type="button" icon="i-lucide-x" label="取消" color="warning" variant="outline" @click="handleCloseAddJob" />
-            <UButton type="submit" color="primary" variant="solid" :loading="submitting" :label="submitting ? '提交中…' : '加入渲染队列'" />
+          <div class="modal-actions settings-modal-actions">
+            <div class="settings-modal-actions-start" />
+            <div class="settings-modal-actions-end">
+              <UButton type="button" icon="i-lucide-x" label="取消" color="neutral" variant="outline" @click="handleCloseAddJob" />
+              <UButton
+                type="submit"
+                icon="i-lucide-plus"
+                color="primary"
+                variant="solid"
+                :loading="submitting"
+                :label="submitting ? '提交中…' : '加入渲染队列'"
+              />
+            </div>
           </div>
         </form>
       </template>
     </UModal>
+
+    <TranscodeSubmitModal
+      v-if="addJobTranscodeSettingsOpen"
+      :open="addJobTranscodeSettingsOpen"
+      mode="settings"
+      :initial-config="addJobEffectiveTranscodeConfig"
+      :base-config="addJobBaseTranscodeConfig"
+      :folder-name="form.name || inferJobName(form.blend_file) || 'render'"
+      :blender-job-name="form.name || inferJobName(form.blend_file) || 'render'"
+      :blender-job-fps="projectSettings?.fps ?? null"
+      :blender-job-output-path="form.output_path"
+      @save-settings="handleAddJobTranscodeSettingsSave"
+      @close="addJobTranscodeSettingsOpen = false"
+      @update:open="addJobTranscodeSettingsOpen = $event"
+    />
+
+    <BlenderOutputSettingsModal
+      v-model:open="addJobOutputSettingsOpen"
+    />
 
     <UModal
       :open="showAddJobConfirm"
@@ -556,10 +609,12 @@
 </template>
 
 <script setup lang="ts">
+import { open } from '@tauri-apps/plugin-dialog'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import type { TabsItem } from '@nuxt/ui'
 import { useRouter } from 'vue-router'
-import type { AddJobPayload, BlendProjectSettings, RenderJob, RenderedFramesStatus } from '~/types'
+import type { AddJobPayload, BlendProjectSettings, RenderJob, RenderJobTranscodeConfig, RenderedFramesStatus } from '~/types'
+import { buildTranscodeOutputPath, normalizeTranscodeDirectory, sanitizeTranscodeStemPart, splitTranscodeOutputPath } from '~/composables/useTranscodeConfig'
 
 const router = useRouter()
 const jobsStore = useJobsStore()
@@ -707,11 +762,33 @@ async function handlePauseQueue() {
   }
 }
 
+function handleQueueToggle() {
+  return jobsStore.queuePaused ? handleStartQueue() : handlePauseQueue()
+}
+
 const showInitializeTools = computed(() => {
   const hasBlender = Boolean(settingsStore.settings.defaultBlender || settingsStore.blenderVersions[0]?.executable)
   const hasFfmpeg = Boolean(settingsStore.settings.ffmpegExecutable)
   return !(hasBlender && hasFfmpeg)
 })
+
+const queueToggleDisabled = computed(() =>
+  jobsStore.queuePaused
+    ? (!jobsStore.pendingJobs.length && !jobsStore.pausedJobId)
+    : false,
+)
+
+const queueToggleButton = computed(() => ({
+  icon: jobsStore.queuePaused ? 'i-lucide-play' : 'i-lucide-pause',
+  label: jobsStore.queuePaused ? '开始任务队列' : '暂停任务队列',
+  color: jobsStore.queuePaused ? 'success' as const : 'warning' as const,
+}))
+
+const queueToggleTooltip = computed(() =>
+  jobsStore.queuePaused
+    ? '按当前顺序启动等待中的任务'
+    : '立即中止当前渲染任务并暂停队列，恢复时会从断点自动续跑',
+)
 
 const { validateBlendFile, inspectBlendFile, inspectRenderedFrames, inspectToolchain } = useTauri()
 
@@ -915,6 +992,7 @@ onMounted(async () => {
 
 const showAddJob = ref(false)
 const showAddJobConfirm = ref(false)
+const addJobTranscodeSettingsOpen = ref(false)
 const metadataDialogOpen = ref(false)
 const metadataJob = ref<RenderJob | null>(null)
 const submitting = ref(false)
@@ -939,13 +1017,13 @@ function displayEngine(engine: string) {
   return ENGINE_NAMES[engine] ?? engine
 }
 
-const SEQUENCE_FORMATS = ['PNG', 'JPEG', 'OPEN_EXR']
-const outputFormatOptions = ['PNG', 'JPEG', 'OPEN_EXR']
+const SEQUENCE_FORMATS = ['PNG', 'OPEN_EXR']
+const outputFormatOptions = ['PNG', 'OPEN_EXR']
 const queueTabItems = computed<TabsItem[]>(() => [
-  { label: '总任务', value: 'all', badge: { label: String(jobsStore.jobs.length), color: 'neutral' as const, variant: 'subtle' as const }, icon: 'i-lucide-layers', class: 'queue-tab-tone-all', ui: { trigger: 'queue-tab-tone-all' } },
-  { label: '排队任务', value: 'queue', badge: { label: String(jobsStore.queueJobs.length), color: 'info' as const, variant: 'subtle' as const }, icon: 'i-lucide-loader-circle', class: 'queue-tab-tone-queue', ui: { trigger: 'queue-tab-tone-queue' } },
-  { label: '已完成任务', value: 'done', badge: { label: String(jobsStore.doneJobs.length), color: 'success' as const, variant: 'subtle' as const }, icon: 'i-lucide-circle-check-big', class: 'queue-tab-tone-done', ui: { trigger: 'queue-tab-tone-done' } },
-  { label: '已中止任务', value: 'error', badge: { label: String(jobsStore.errorJobs.length), color: 'warning' as const, variant: 'subtle' as const }, icon: 'i-lucide-triangle-alert', class: 'queue-tab-tone-error', ui: { trigger: 'queue-tab-tone-error' } },
+  { label: '全部', value: 'all', badge: { label: String(jobsStore.jobs.length), color: 'neutral' as const, variant: 'subtle' as const }, icon: 'i-lucide-layers', class: 'queue-tab-tone-all', ui: { trigger: 'queue-tab-tone-all' } },
+  { label: '排队中', value: 'queue', badge: { label: String(jobsStore.queueJobs.length), color: 'info' as const, variant: 'subtle' as const }, icon: 'i-lucide-loader-circle', class: 'queue-tab-tone-queue', ui: { trigger: 'queue-tab-tone-queue' } },
+  { label: '已完成', value: 'done', badge: { label: String(jobsStore.doneJobs.length), color: 'success' as const, variant: 'subtle' as const }, icon: 'i-lucide-circle-check-big', class: 'queue-tab-tone-done', ui: { trigger: 'queue-tab-tone-done' } },
+  { label: '已中止', value: 'error', badge: { label: String(jobsStore.errorJobs.length), color: 'warning' as const, variant: 'subtle' as const }, icon: 'i-lucide-triangle-alert', class: 'queue-tab-tone-error', ui: { trigger: 'queue-tab-tone-error' } },
 ])
 const filteredJobs = computed(() => {
   switch (activeQueueTab.value) {
@@ -962,7 +1040,7 @@ const filteredJobs = computed(() => {
 const emptyTabTitle = computed(() => {
   switch (activeQueueTab.value) {
     case 'queue':
-      return '当前没有排队任务'
+      return '当前没有排队中任务'
     case 'done':
       return '当前没有已完成任务'
     case 'error':
@@ -1129,10 +1207,64 @@ function autoFillOutputPath(blendPath: string) {
   form.output_path = `${dir}\\renders\\${name}_######`
 }
 
+function buildOutputPatternForDirectory(directory: string) {
+  const normalizedDirectory = directory.replace(/[\\/]+$/, '')
+  if (!normalizedDirectory) return ''
+
+  const currentPattern = form.output_path.split(/[/\\]/).pop() || ''
+  const defaultName = (form.name || inferJobName(form.blend_file) || 'render').replace(/[<>:"/\\|?*]/g, '_')
+  const outputPattern = currentPattern.includes('#') ? currentPattern : `${defaultName}_######`
+  const separator = normalizedDirectory.includes('\\') && !normalizedDirectory.includes('/') ? '\\' : '/'
+  return `${normalizedDirectory}${separator}${outputPattern}`
+}
+
+async function browseBlendFile() {
+  const selected = await open({
+    multiple: false,
+    directory: false,
+    title: '选择 Blend 文件',
+    defaultPath: form.blend_file || undefined,
+    filters: [{ name: 'Blender Project', extensions: ['blend'] }],
+  })
+
+  if (typeof selected !== 'string' || !selected) return
+
+  const previousBlendFile = form.blend_file
+  form.blend_file = selected
+
+  if (!form.name || (previousBlendFile && form.name === inferJobName(previousBlendFile))) {
+    form.name = inferJobName(selected)
+  }
+
+  if (!form.output_path) {
+    autoFillOutputPath(selected)
+  }
+}
+
+async function browseRenderOutputDirectory() {
+  const defaultDirectory = form.output_path
+    ? form.output_path.replace(/[/\\][^/\\]*$/, '')
+    : undefined
+  const selected = await open({
+    directory: true,
+    multiple: false,
+    title: '选择输出目录',
+    defaultPath: defaultDirectory,
+  })
+
+  if (typeof selected !== 'string' || !selected) return
+  form.output_path = buildOutputPatternForDirectory(selected)
+}
+
 const form = reactive<AddJobPayload>({
   name: '',
   note: '',
   auto_transcode_mp4: false,
+  transcode_name_override: null,
+  transcode_fps_override: null,
+  transcode_output_path_override: null,
+  transcode_crf_override: null,
+  transcode_preset_override: null,
   blend_file: '',
   blender_executable: '',
   output_path: '',
@@ -1142,6 +1274,7 @@ const form = reactive<AddJobPayload>({
   resume_from_existing: true,
   priority: 0,
 })
+const addJobOutputSettingsOpen = ref(false)
 
 const formNote = computed({
   get: () => form.note ?? '',
@@ -1154,6 +1287,11 @@ function resetForm() {
   form.name = ''
   form.note = ''
   form.auto_transcode_mp4 = false
+  form.transcode_name_override = null
+  form.transcode_fps_override = null
+  form.transcode_output_path_override = null
+  form.transcode_crf_override = null
+  form.transcode_preset_override = null
   form.blend_file = ''
   form.blender_executable = settingsStore.settings.defaultBlender || settingsStore.blenderVersions[0]?.executable || ''
   form.output_path = ''
@@ -1167,6 +1305,7 @@ function resetForm() {
   projectSettingsMessage.value = ''
   outputFrameStatus.value = null
   addJobFrameStatus.value = null
+  addJobTranscodeSettingsOpen.value = false
 }
 
 async function ensureSettingsLoaded() {
@@ -1238,6 +1377,76 @@ function inferJobName(path: string) {
 function selectBlender(executable: string) {
   form.blender_executable = executable
 }
+
+function deriveAddJobSequenceDirectory(outputPath: string) {
+  const normalized = outputPath.replace(/\\/g, '/')
+  const slashIndex = normalized.lastIndexOf('/')
+  if (normalized.includes('#')) {
+    return slashIndex >= 0 ? outputPath.slice(0, slashIndex) : outputPath
+  }
+  return slashIndex >= 0 ? outputPath.slice(0, slashIndex) : outputPath
+}
+
+const addJobBaseTranscodeConfig = computed<RenderJobTranscodeConfig>(() => {
+  const renderName = form.name.trim() || inferJobName(form.blend_file) || 'render'
+  const outputDir = normalizeTranscodeDirectory(deriveAddJobSequenceDirectory(form.output_path))
+  const outputPath = buildTranscodeOutputPath(outputDir, sanitizeTranscodeStemPart(renderName))
+  const split = splitTranscodeOutputPath(outputPath)
+
+  return {
+    name: renderName,
+    fps: Math.max(1, Math.round(projectSettings.value?.fps && projectSettings.value.fps > 0 ? projectSettings.value.fps : 30)),
+    outputPath,
+    outputDir: split.outputDir,
+    outputStem: split.outputStem,
+    crf: settingsStore.settings.transcodeCrf,
+    preset: settingsStore.settings.transcodePreset,
+  }
+})
+
+const addJobEffectiveTranscodeConfig = computed<RenderJobTranscodeConfig>(() => {
+  const base = addJobBaseTranscodeConfig.value
+  const outputPath = form.transcode_output_path_override || base.outputPath
+  const split = splitTranscodeOutputPath(outputPath)
+
+  return {
+    name: form.transcode_name_override || base.name,
+    fps: Math.max(1, Math.round(form.transcode_fps_override && form.transcode_fps_override > 0 ? form.transcode_fps_override : base.fps)),
+    outputPath,
+    outputDir: split.outputDir,
+    outputStem: split.outputStem,
+    crf: form.transcode_crf_override ?? base.crf,
+    preset: form.transcode_preset_override || base.preset,
+  }
+})
+
+const addJobTranscodeSummary = computed(() => {
+  const config = addJobEffectiveTranscodeConfig.value
+  return `${config.outputStem}.mp4 · ${config.fps} FPS · CRF ${config.crf} · ${config.preset}`
+})
+
+const outputSettingsTitle = computed(() => '图像序列输出设置')
+
+const outputSettingsSummary = computed(() => {
+  if (form.output_format === 'OPEN_EXR') {
+    return [
+      'OpenEXR',
+      settingsStore.settings.exrColorMode,
+      `${settingsStore.settings.exrColorDepth}-bit`,
+      settingsStore.settings.exrCodec,
+      `质量 ${settingsStore.settings.exrQuality}%`,
+    ].join(' · ')
+  }
+
+  return [
+    'PNG',
+    settingsStore.settings.pngColorMode,
+    `${settingsStore.settings.pngColorDepth}-bit`,
+    `压缩 ${settingsStore.settings.pngCompression}`,
+  ].join(' · ')
+})
+
+const isExrOutput = computed(() => form.output_format === 'OPEN_EXR')
 
 const canInspectProject = computed(() => {
   return Boolean(form.blender_executable && form.blend_file && form.blend_file.toLowerCase().endsWith('.blend'))
@@ -1316,11 +1525,28 @@ watch(
   },
 )
 
+watch(
+  () => form.output_format,
+  (value) => {
+    if (value !== 'OPEN_EXR') return
+    form.auto_transcode_mp4 = false
+    addJobTranscodeSettingsOpen.value = false
+  },
+  { immediate: true },
+)
+
 function buildJobPayload(resumeFromExisting: boolean): AddJobPayload {
   const seededFrameStatus = resumeFromExisting ? addJobFrameStatus.value : null
   const totalFrames = form.frame_end - form.frame_start + 1
+  const autoTranscodeEnabled = form.auto_transcode_mp4 && !isExrOutput.value
   return {
     ...form,
+    auto_transcode_mp4: autoTranscodeEnabled,
+    transcode_name_override: autoTranscodeEnabled ? form.transcode_name_override : null,
+    transcode_fps_override: autoTranscodeEnabled ? form.transcode_fps_override : null,
+    transcode_output_path_override: autoTranscodeEnabled ? form.transcode_output_path_override : null,
+    transcode_crf_override: autoTranscodeEnabled ? form.transcode_crf_override : null,
+    transcode_preset_override: autoTranscodeEnabled ? form.transcode_preset_override : null,
     name: form.name || inferJobName(form.blend_file) || 'Untitled Render Job',
     fps: projectSettings.value?.fps ?? null,
     preview_width: projectSettings.value?.resolutionX ?? null,
@@ -1330,6 +1556,21 @@ function buildJobPayload(resumeFromExisting: boolean): AddJobPayload {
     initial_total_frames: seededFrameStatus ? totalFrames : null,
     initial_last_rendered_frame: seededFrameStatus?.lastFrame ?? null,
   }
+}
+
+function handleAddJobTranscodeSettingsSave(payload: {
+  transcode_name_override: string | null
+  transcode_fps_override: number | null
+  transcode_output_path_override: string | null
+  transcode_crf_override: number | null
+  transcode_preset_override: string | null
+}) {
+  form.transcode_name_override = payload.transcode_name_override
+  form.transcode_fps_override = payload.transcode_fps_override
+  form.transcode_output_path_override = payload.transcode_output_path_override
+  form.transcode_crf_override = payload.transcode_crf_override
+  form.transcode_preset_override = payload.transcode_preset_override
+  addJobTranscodeSettingsOpen.value = false
 }
 
 async function submitNewJob() {

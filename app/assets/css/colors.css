@@ -5,47 +5,47 @@
 
 .light,
 :root:not(.dark) {
-  --ui-primary: #ea726d;
-  --ui-bg: #f7f7f5;
-  --ui-bg-muted: #fcfcf9;
-  --ui-bg-elevated: rgba(255, 255, 252, 0.92);
-  --ui-bg-accented: #ecece6;
-  --ui-border: #e7e5dd;
-  --ui-border-muted: #ece9e1;
-  --ui-border-accented: #d6d2c7;
-  --ui-text-dimmed: #9a988f;
-  --ui-text-muted: #727169;
-  --ui-text-toned: #4f4f49;
-  --ui-text: #2f2f2b;
-  --ui-text-highlighted: #161714;
-  --ui-sidebar-bg: rgba(249, 237, 235, 0.96);
-  --ui-sidebar-border: #e4c8c2;
+  --ui-primary: #b73b35;
+  --ui-bg: #f6f7f8;
+  --ui-bg-muted: #fbfcfd;
+  --ui-bg-elevated: rgba(255, 255, 255, 0.92);
+  --ui-bg-accented: #eef1f4;
+  --ui-border: #dde2e8;
+  --ui-border-muted: #e7ebf0;
+  --ui-border-accented: #cfd6df;
+  --ui-text-dimmed: #8b9098;
+  --ui-text-muted: #666c75;
+  --ui-text-toned: #444a53;
+  --ui-text: #252a31;
+  --ui-text-highlighted: #14181d;
+  --ui-sidebar-bg: rgba(246, 225, 223, 0.98);
+  --ui-sidebar-border: #debbb6;
   --ui-sidebar-hover: color-mix(in srgb, var(--ui-primary) 7%, var(--ui-sidebar-bg));
   --ui-sidebar-active: color-mix(in srgb, var(--ui-primary) 14%, var(--ui-sidebar-bg));
-  --ui-scrollbar-track: color-mix(in srgb, #efe8e4 88%, transparent);
-  --ui-scrollbar-thumb: color-mix(in srgb, var(--ui-primary) 34%, #b7aaa2);
-  --ui-scrollbar-thumb-hover: color-mix(in srgb, var(--ui-primary) 48%, #a18f86);
+  --ui-scrollbar-track: color-mix(in srgb, #eef2f5 88%, transparent);
+  --ui-scrollbar-thumb: color-mix(in srgb, var(--ui-primary) 34%, #b4bbc4);
+  --ui-scrollbar-thumb-hover: color-mix(in srgb, var(--ui-primary) 48%, #9ea7b2);
 }
 
 .dark {
-  --ui-primary: #8b9ee1;
-  --ui-bg: #21283b;
-  --ui-bg-muted: #293149;
-  --ui-bg-elevated: rgba(41, 49, 73, 0.92);
-  --ui-bg-accented: #313b57;
-  --ui-border: #3f4a6a;
-  --ui-border-muted: #4a5679;
-  --ui-border-accented: #5b6990;
-  --ui-text-dimmed: #8f99bc;
-  --ui-text-muted: #b4bcda;
-  --ui-text-toned: #d0d7ee;
-  --ui-text: #eef1fb;
+  --ui-primary: #7890d4;
+  --ui-bg: #141821;
+  --ui-bg-muted: #1b2130;
+  --ui-bg-elevated: rgba(27, 33, 48, 0.92);
+  --ui-bg-accented: #243049;
+  --ui-border: #2f3a55;
+  --ui-border-muted: #394663;
+  --ui-border-accented: #4b5d82;
+  --ui-text-dimmed: #7d89ab;
+  --ui-text-muted: #acb7d3;
+  --ui-text-toned: #d1d9ef;
+  --ui-text: #eef2ff;
   --ui-text-highlighted: #ffffff;
-  --ui-sidebar-bg: rgba(43, 53, 78, 0.98);
-  --ui-sidebar-border: #526081;
+  --ui-sidebar-bg: rgba(35, 45, 68, 0.98);
+  --ui-sidebar-border: #445271;
   --ui-sidebar-hover: color-mix(in srgb, white 8%, var(--ui-sidebar-bg));
-  --ui-sidebar-active: color-mix(in srgb, #5a6994 42%, var(--ui-sidebar-bg));
-  --ui-scrollbar-track: color-mix(in srgb, #242d43 90%, transparent);
-  --ui-scrollbar-thumb: color-mix(in srgb, var(--ui-primary) 44%, #53607d);
-  --ui-scrollbar-thumb-hover: color-mix(in srgb, var(--ui-primary) 60%, #64739a);
+  --ui-sidebar-active: color-mix(in srgb, #516796 42%, var(--ui-sidebar-bg));
+  --ui-scrollbar-track: color-mix(in srgb, #1a2131 90%, transparent);
+  --ui-scrollbar-thumb: color-mix(in srgb, var(--ui-primary) 42%, #47536f);
+  --ui-scrollbar-thumb-hover: color-mix(in srgb, var(--ui-primary) 58%, #566585);
 }

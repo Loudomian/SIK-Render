@@ -4,147 +4,148 @@
       <div class="page-hero-copy">
         <UBadge label="Settings" color="neutral" variant="subtle" class="page-eyebrow" />
         <h1>设置</h1>
-        <p class="page-note">集中管理 Blender、FFmpeg 与界面偏好。</p>
+        <p class="page-note">按路径和参数分组管理工具配置，所有细项都通过弹窗调整。</p>
       </div>
     </section>
 
     <section class="settings-section">
       <div class="settings-section-heading">
-        <h2 class="settings-section-title">Blender 渲染</h2>
-        <p class="hint-text">管理 Blender 版本与渲染相关默认行为。</p>
+        <h2 class="settings-section-title">路径管理</h2>
+        <p class="hint-text">集中管理 Blender 与 FFmpeg 的可执行文件和默认版本。</p>
       </div>
 
       <UCard variant="subtle" class="settings-card" :ui="{ body: 'settings-card-body' }">
         <div class="settings-card-header">
           <div>
-            <h3 class="settings-card-title">Blender 版本</h3>
-          </div>
-          <div class="settings-card-actions">
-            <UButton icon="i-lucide-plus" label="添加…" color="neutral" variant="outline" size="sm" @click="browseBlender" />
+            <h3 class="settings-card-title">工具路径</h3>
           </div>
         </div>
 
-        <UAlert v-if="blenderError" color="error" variant="subtle" :description="blenderError" class="surface-alert" />
+        <div class="settings-path-grid">
+          <section class="surface-panel settings-path-panel">
+            <div class="settings-path-copy">
+              <p class="settings-field-title">
+                Blender
+                <span v-if="blenderVersionItems.length" class="settings-inline-versions">
+                  <template v-for="(item, index) in blenderVersionItems" :key="item.executable">
+                    <span class="job-meta-divider settings-inline-separator" v-if="index > 0" aria-hidden="true" />
+                    <span
+                      class="settings-inline-version"
+                      :class="{ 'settings-inline-version-muted': !item.isDefault }"
+                    >
+                      {{ item.version }}
+                    </span>
+                  </template>
+                </span>
+              </p>
+              <p class="hint-text">{{ blenderPathNote }}</p>
+            </div>
+            <div class="settings-card-actions">
+              <UButton icon="i-lucide-folder-open" label="管理路径" color="neutral" variant="outline" size="sm" @click="blenderPathModalOpen = true" />
+            </div>
+          </section>
 
-        <ul v-if="settingsStore.blenderVersions.length" class="settings-blender-list">
-          <li v-for="b in settingsStore.blenderVersions" :key="b.executable" class="surface-panel blender-version-item">
-            <div class="blender-version-info">
-              <div class="blender-version-name">
-                Blender {{ b.version }}
-              </div>
-              <div class="blender-version-path" :title="b.executable">{{ b.executable }}</div>
+          <section class="surface-panel settings-path-panel">
+            <div class="settings-path-copy">
+              <p class="settings-field-title">FFmpeg</p>
+              <p class="hint-text">{{ ffmpegPathNote }}</p>
             </div>
-            <div class="blender-version-actions">
-              <UButton
-                icon="i-lucide-check"
-                color="success"
-                :variant="settingsStore.settings.defaultBlender === b.executable ? 'subtle' : 'outline'"
-                size="xs"
-                :label="settingsStore.settings.defaultBlender === b.executable ? '默认' : '设为默认'"
-                @click="setDefaultBlender(b.executable)"
-              />
-              <UTooltip text="移除此版本" :content="{ side: 'left', sideOffset: 6 }">
-                <UButton icon="i-lucide-x" color="error" variant="outline" size="xs" square @click="removeBlenderVersion(b.executable)" />
-              </UTooltip>
+            <div class="settings-card-actions">
+              <UButton icon="i-lucide-folder-open" label="管理路径" color="neutral" variant="outline" size="sm" @click="ffmpegPathModalOpen = true" />
             </div>
-          </li>
-        </ul>
-        <p v-else class="hint-text">还没有 Blender 路径，点击右上角“添加”手动指定。</p>
+          </section>
+        </div>
       </UCard>
+    </section>
+
+    <section class="settings-section">
+      <div class="settings-section-heading">
+        <h2 class="settings-section-title">参数管理</h2>
+        <p class="hint-text">按功能查看当前摘要，需要修改时进入对应弹窗。</p>
+      </div>
 
       <div class="settings-grid-2">
         <UCard variant="subtle" class="settings-card" :ui="{ body: 'settings-card-body' }">
           <div class="settings-card-header">
             <div>
               <h3 class="settings-card-title">Blender 渲染参数</h3>
+              <p class="hint-text">读取工程超时与崩溃自动重试。</p>
             </div>
             <div class="settings-card-actions">
               <UButton icon="i-lucide-sliders" label="编辑" color="neutral" variant="outline" size="sm" @click="blenderModalOpen = true" />
             </div>
           </div>
-
-          <section class="surface-panel settings-summary-panel">
-            <div class="settings-field-copy">
-              <p class="settings-field-title">当前摘要</p>
-              <p class="settings-summary-text">{{ blenderSettingsSummary }}</p>
-            </div>
-          </section>
         </UCard>
-      </div>
-    </section>
 
-    <section class="settings-section">
-      <div class="settings-section-heading">
-        <h2 class="settings-section-title">FFmpeg 转码</h2>
-        <p class="hint-text">管理 FFmpeg 路径与默认转码参数。</p>
-      </div>
-
-      <UCard variant="subtle" class="settings-card" :ui="{ body: 'settings-card-body' }">
-        <div class="settings-card-header">
-          <div>
-            <h3 class="settings-card-title">FFmpeg</h3>
-          </div>
-          <div class="settings-card-actions">
-            <UButton icon="i-lucide-folder-open" label="选择…" color="neutral" variant="outline" size="sm" @click="browseFfmpeg" />
-          </div>
-        </div>
-
-        <UAlert v-if="ffmpegError" color="error" variant="subtle" :description="ffmpegError" class="surface-alert" />
-
-        <div v-if="settingsStore.settings.ffmpegExecutable" class="surface-panel ffmpeg-config-item">
-          <div class="blender-version-info">
-            <div class="blender-version-name">FFmpeg</div>
-            <div class="blender-version-path" :title="settingsStore.settings.ffmpegExecutable">
-              {{ settingsStore.settings.ffmpegExecutable }}
+        <UCard variant="subtle" class="settings-card" :ui="{ body: 'settings-card-body' }">
+          <div class="settings-card-header">
+            <div>
+              <h3 class="settings-card-title">Blender 输出参数</h3>
+              <p class="hint-text">PNG 与 OpenEXR 默认输出格式。</p>
+            </div>
+            <div class="settings-card-actions">
+              <UButton icon="i-lucide-image-up" label="编辑" color="neutral" variant="outline" size="sm" @click="blenderOutputModalOpen = true" />
             </div>
           </div>
-          <div class="blender-version-actions">
-            <UBadge label="已指定" color="success" variant="subtle" />
-            <UTooltip text="移除 FFmpeg" :content="{ side: 'left', sideOffset: 6 }">
-              <UButton icon="i-lucide-x" color="error" variant="outline" size="xs" square @click="clearFfmpeg" />
-            </UTooltip>
-          </div>
-        </div>
-        <p v-else class="hint-text">未指定 FFmpeg，点击右上角“选择”手动指定可执行文件。</p>
-      </UCard>
+        </UCard>
 
-      <div class="settings-grid-2">
         <UCard variant="subtle" class="settings-card" :ui="{ body: 'settings-card-body' }">
           <div class="settings-card-header">
             <div>
               <h3 class="settings-card-title">FFmpeg 转码参数</h3>
+              <p class="hint-text">默认质量、预设与并发数。</p>
             </div>
             <div class="settings-card-actions">
               <UButton icon="i-lucide-sliders" label="编辑" color="neutral" variant="outline" size="sm" @click="ffmpegModalOpen = true" />
             </div>
           </div>
+        </UCard>
 
-          <section class="surface-panel settings-summary-panel">
-            <div class="settings-field-copy">
-              <p class="settings-field-title">当前摘要</p>
-              <p class="settings-summary-text">{{ ffmpegSettingsSummary }}</p>
+        <UCard variant="subtle" class="settings-card" :ui="{ body: 'settings-card-body' }">
+          <div class="settings-card-header">
+            <div>
+              <h3 class="settings-card-title">界面与外观</h3>
+              <p class="hint-text">直接切换浅色、深色或跟随系统。</p>
             </div>
-          </section>
+          </div>
+
+          <div class="settings-theme-switcher">
+            <UButton
+              icon="i-lucide-sun-medium"
+              label="浅色"
+              :color="settingsStore.settings.theme === 'light' ? 'primary' : 'neutral'"
+              :variant="settingsStore.settings.theme === 'light' ? 'solid' : 'outline'"
+              size="sm"
+              @click="setTheme('light')"
+            />
+            <UButton
+              icon="i-lucide-moon-star"
+              label="深色"
+              :color="settingsStore.settings.theme === 'dark' ? 'primary' : 'neutral'"
+              :variant="settingsStore.settings.theme === 'dark' ? 'solid' : 'outline'"
+              size="sm"
+              @click="setTheme('dark')"
+            />
+            <UButton
+              icon="i-lucide-computer"
+              label="系统"
+              :color="settingsStore.settings.theme === 'system' ? 'primary' : 'neutral'"
+              :variant="settingsStore.settings.theme === 'system' ? 'solid' : 'outline'"
+              size="sm"
+              @click="setTheme('system')"
+            />
+          </div>
         </UCard>
       </div>
     </section>
 
     <section class="settings-section">
       <div class="settings-section-heading">
-        <h2 class="settings-section-title">外观与关于</h2>
+        <h2 class="settings-section-title">关于</h2>
       </div>
 
       <UCard variant="subtle" class="settings-card" :ui="{ body: 'settings-card-body' }">
         <div class="settings-form-stack">
-          <section class="surface-panel settings-field-panel">
-            <div class="settings-field-copy">
-              <p class="settings-field-title">界面主题</p>
-            </div>
-            <UFormField>
-              <ColorModeSelect v-model="settingsStore.settings.theme" />
-            </UFormField>
-          </section>
-
           <section class="surface-panel settings-field-panel">
             <div class="settings-field-copy">
               <p class="settings-field-title">当前版本</p>
@@ -163,7 +164,10 @@
       </UCard>
     </section>
 
+    <BlenderPathSettingsModal v-model:open="blenderPathModalOpen" />
+    <FfmpegPathSettingsModal v-model:open="ffmpegPathModalOpen" />
     <BlenderSettingsModal v-model:open="blenderModalOpen" />
+    <BlenderOutputSettingsModal v-model:open="blenderOutputModalOpen" />
     <FfmpegSettingsModal v-model:open="ffmpegModalOpen" />
   </div>
 </template>
@@ -173,90 +177,41 @@ import { getVersion } from '@tauri-apps/api/app'
 
 const settingsStore = useSettingsStore()
 const runtimeConfig = useRuntimeConfig()
-const blenderError = ref('')
-const ffmpegError = ref('')
+const blenderPathModalOpen = ref(false)
+const ffmpegPathModalOpen = ref(false)
 const blenderModalOpen = ref(false)
+const blenderOutputModalOpen = ref(false)
 const ffmpegModalOpen = ref(false)
-const settingsReady = ref(false)
 const appVersion = ref(String(runtimeConfig.public.appVersion ?? '0.0.0'))
-let autoSaveTimer: ReturnType<typeof setTimeout> | null = null
 
-const blenderSettingsSummary = computed(() =>
-  `超时 ${settingsStore.settings.blendInspectTimeoutSeconds}s · 崩溃重试 ${settingsStore.settings.maxCrashRetries} 次`,
+const blenderVersionItems = computed(() => {
+  const defaultPath = settingsStore.settings.defaultBlender
+  return settingsStore.blenderVersions.map(item => ({
+    executable: item.executable,
+    version: item.version,
+    isDefault: item.executable === defaultPath,
+  }))
+})
+
+const blenderPathNote = computed(() => {
+  if (!settingsStore.blenderVersions.length) return '当前没有可用的 Blender 可执行文件。'
+  return settingsStore.settings.defaultBlender || '尚未设置默认 Blender 版本。'
+})
+
+const ffmpegPathNote = computed(() =>
+  settingsStore.settings.ffmpegExecutable || '配置后才可以提交和执行转码任务。',
 )
 
-const ffmpegSettingsSummary = computed(() =>
-  `CRF ${settingsStore.settings.transcodeCrf} · ${settingsStore.settings.transcodePreset} · 并发 ${settingsStore.settings.ffmpegMaxConcurrent}`,
-)
-
-async function browseBlender() {
-  blenderError.value = ''
-  try {
-    await settingsStore.browseAndAddBlender()
-  } catch (error) {
-    blenderError.value = error instanceof Error ? error.message : String(error)
-  }
+async function setTheme(theme: 'dark' | 'light' | 'system') {
+  await settingsStore.setTheme(theme)
 }
-
-async function setDefaultBlender(executable: string) {
-  blenderError.value = ''
-  try {
-    await settingsStore.setDefaultBlender(executable)
-  } catch (error) {
-    blenderError.value = error instanceof Error ? error.message : String(error)
-  }
-}
-
-async function removeBlenderVersion(executable: string) {
-  blenderError.value = ''
-  try {
-    await settingsStore.removeBlenderVersion(executable)
-  } catch (error) {
-    blenderError.value = error instanceof Error ? error.message : String(error)
-  }
-}
-
-async function browseFfmpeg() {
-  ffmpegError.value = ''
-  try {
-    await settingsStore.browseAndSetFfmpeg()
-  } catch (error) {
-    ffmpegError.value = error instanceof Error ? error.message : String(error)
-  }
-}
-
-async function clearFfmpeg() {
-  ffmpegError.value = ''
-  try {
-    await settingsStore.clearFfmpeg()
-  } catch (error) {
-    ffmpegError.value = error instanceof Error ? error.message : String(error)
-  }
-}
-
-watch(
-  () => settingsStore.settings.theme,
-  () => {
-    if (!settingsReady.value) return
-    if (autoSaveTimer) clearTimeout(autoSaveTimer)
-    autoSaveTimer = setTimeout(() => {
-      void settingsStore.save()
-    }, 240)
-  },
-)
 
 onMounted(async () => {
   await settingsStore.load()
-  settingsReady.value = true
-
   try {
     appVersion.value = await getVersion()
   } catch {
     // Browser dev mode falls back to the package version from runtime config.
   }
-})
-
-onUnmounted(() => {
-  if (autoSaveTimer) clearTimeout(autoSaveTimer)
 })
 </script>

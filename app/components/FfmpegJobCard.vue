@@ -11,7 +11,12 @@
           <div class="job-title-stack">
             <div class="job-head-badges">
               <UBadge :label="statusLabel" :color="statusColor" variant="subtle" />
-              <UBadge :label="`#${job.jobNumber}`" color="neutral" variant="subtle" />
+              <UBadge
+                v-if="orderBadgeLabel"
+                :label="orderBadgeLabel"
+                color="neutral"
+                variant="subtle"
+              />
               <UBadge
                 :label="job.sourceType === 'blender_job' ? '来自 Blender Job' : '来自文件夹'"
                 color="neutral"
@@ -38,8 +43,8 @@
             </span>
             <span class="job-meta-divider" aria-hidden="true" />
             <span class="job-meta-item">
-              <span class="job-meta-label">Preset / CRF</span>
-              <strong>{{ job.preset }} / {{ job.crf }}</strong>
+              <span class="job-meta-label">CRF / Preset</span>
+              <strong>{{ job.crf }} / {{ job.preset }}</strong>
             </span>
             <template v-if="job.outputSizeBytes">
               <span class="job-meta-divider" aria-hidden="true" />
@@ -116,10 +121,18 @@ defineEmits<{
 }>()
 
 const { openPath } = useTauri()
+const transcodeStore = useTranscodeStore()
 
 const statusLabel = computed(() => FFMPEG_STATUS_LABEL[props.job.status])
 const statusColor = computed(() => FFMPEG_STATUS_COLOR[props.job.status])
 const totalFrames = computed(() => props.job.frameEnd - props.job.frameStart + 1)
+const queueOrder = computed(() => {
+  if (props.job.status === 'running' || props.job.status === 'done') return null
+  const queue = transcodeStore.ffmpegJobs.filter(job => job.status !== 'running' && job.status !== 'done')
+  const index = queue.findIndex(job => job.id === props.job.id)
+  return index === -1 ? null : index + 1
+})
+const orderBadgeLabel = computed(() => queueOrder.value != null ? `顺序 ${queueOrder.value}` : null)
 
 function formatBytes(value: number | null) {
   if (!value || value <= 0) return '—'

@@ -11,7 +11,7 @@
 </template>
 
 <script setup lang="ts">
-type ThemeMode = 'dark' | 'light'
+type ThemeMode = 'dark' | 'light' | 'system'
 
 const props = defineProps<{
   modelValue: ThemeMode
@@ -24,6 +24,7 @@ const emit = defineEmits<{
 const items: Array<{ label: string, value: ThemeMode, icon: string }> = [
   { label: '深色', value: 'dark', icon: 'i-lucide-moon-star' },
   { label: '浅色', value: 'light', icon: 'i-lucide-sun-medium' },
+  { label: '系统', value: 'system', icon: 'i-lucide-computer' },
 ]
 
 const selectedItem = computed(() => {

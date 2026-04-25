@@ -9,6 +9,59 @@
     <template #body>
       <div class="modal-stack">
         <div class="transcode-submit-stack">
+          <section v-if="showManualFolderSourceSection" class="surface-panel transcode-submit-section">
+            <div class="transcode-submit-head">
+              <div>
+                <p class="choice-card-mode">输入项</p>
+                <h2 class="choice-card-title">序列帧来源</h2>
+              </div>
+            </div>
+
+            <div class="transcode-submit-fields">
+              <UFormField label="序列帧目录">
+                <div class="transcode-submit-path-row">
+                  <UTextarea
+                    v-model.trim="selectedSourceFolder"
+                    :rows="1"
+                    autoresize
+                    :disabled="saving || sourceLoading"
+                    class="w-full path-textarea"
+                    placeholder="C:\\Renders\\shot_001"
+                  />
+                  <UButton
+                    icon="i-lucide-folder-open"
+                    label="选择"
+                    color="neutral"
+                    variant="outline"
+                    :disabled="saving || sourceLoading"
+                    :loading="sourceLoading"
+                    @click="browseSourceFolder"
+                  />
+                </div>
+              </UFormField>
+
+              <UFormField v-if="sourceItems.length > 1" label="序列选择">
+                <USelect
+                  v-model="selectedSourceInputPath"
+                  :items="sourceItems"
+                  value-key="value"
+                  label-key="label"
+                  :disabled="saving || sourceLoading"
+                  trailing-icon="i-lucide-chevron-down"
+                />
+              </UFormField>
+
+              <UAlert
+                v-if="selectedSourceOption"
+                color="neutral"
+                variant="subtle"
+                :title="`${selectedSourceOption.name} · ${selectedSourceOption.frameStart}–${selectedSourceOption.frameEnd}`"
+                :description="`输入序列：${selectedSourceOption.inputPath}`"
+              />
+              <p v-else class="hint-text">先选择一个包含序列帧的目录，再继续配置输出参数。</p>
+            </div>
+          </section>
+
           <section class="surface-panel transcode-submit-section">
             <div class="transcode-submit-head">
               <div>
@@ -19,34 +72,24 @@
 
             <div class="transcode-submit-fields">
               <UFormField label="任务名">
-                <UInput
+                <UTextarea
                   v-model.trim="form.name"
+                  :rows="1"
+                  autoresize
                   :disabled="saving"
                   class="w-full"
                   placeholder="shot_001"
                 />
               </UFormField>
 
-              <UFormField label="输出 FPS">
-                <UInputNumber
-                  v-model="form.fps"
-                  :min="1"
-                  :max="240"
-                  :step="1"
-                  :disabled="saving"
-                  orientation="horizontal"
-                  decrement-icon="i-lucide-minus"
-                  increment-icon="i-lucide-plus"
-                  :ui="{ root: 'w-32' }"
-                />
-              </UFormField>
-
               <UFormField label="输出目录">
                 <div class="transcode-submit-path-row">
-                  <UInput
+                  <UTextarea
                     v-model.trim="form.outputDir"
+                    :rows="1"
+                    autoresize
                     :disabled="saving"
-                    class="w-full"
+                    class="w-full path-textarea"
                     placeholder="C:\\Renders\\shot_001"
                   />
                   <UButton
@@ -62,8 +105,10 @@
 
               <UFormField label="输出文件名">
                 <div class="transcode-submit-filename-row">
-                  <UInput
+                  <UTextarea
                     v-model.trim="form.outputStem"
+                    :rows="1"
+                    autoresize
                     :disabled="saving"
                     class="w-full"
                     placeholder="shot_001"
@@ -80,17 +125,23 @@
                 <p class="choice-card-mode">高级项</p>
                 <h2 class="choice-card-title">编码参数</h2>
               </div>
-              <UButton
-                :icon="showAdvanced ? 'i-lucide-chevron-up' : 'i-lucide-chevron-down'"
-                :label="showAdvanced ? '收起' : '展开'"
-                color="neutral"
-                variant="ghost"
-                size="sm"
-                @click="showAdvanced = !showAdvanced"
-              />
             </div>
 
-            <div v-if="showAdvanced" class="transcode-submit-fields">
+            <div class="transcode-submit-inline-grid">
+              <UFormField label="输出 FPS">
+                <UInputNumber
+                  v-model="form.fps"
+                  :min="1"
+                  :max="240"
+                  :step="1"
+                  :disabled="saving"
+                  orientation="horizontal"
+                  decrement-icon="i-lucide-minus"
+                  increment-icon="i-lucide-plus"
+                  :ui="{ root: 'w-full' }"
+                />
+              </UFormField>
+
               <UFormField label="CRF">
                 <UInputNumber
                   v-model="form.crf"
@@ -101,7 +152,7 @@
                   orientation="horizontal"
                   decrement-icon="i-lucide-minus"
                   increment-icon="i-lucide-plus"
-                  :ui="{ root: 'w-32' }"
+                  :ui="{ root: 'w-full' }"
                 />
               </UFormField>
 
@@ -111,7 +162,7 @@
                   :items="presetOptions"
                   :disabled="saving"
                   trailing-icon="i-lucide-chevron-down"
-                  :ui="{ base: 'w-40' }"
+                  :ui="{ base: 'w-full' }"
                 />
               </UFormField>
             </div>
@@ -121,32 +172,35 @@
         <p v-if="errorMessage" class="form-error">{{ errorMessage }}</p>
 
         <div class="modal-actions settings-modal-actions">
-          <UButton
-            v-if="mode === 'settings'"
-            icon="i-lucide-rotate-ccw"
-            label="恢复默认"
-            color="neutral"
-            variant="ghost"
-            :disabled="saving"
-            @click="resetToBaseConfig"
-          />
-          <div class="settings-modal-spacer" />
-          <UButton
-            icon="i-lucide-x"
-            label="取消"
-            color="neutral"
-            variant="outline"
-            :disabled="saving"
-            @click="emit('close')"
-          />
-          <UButton
-            :icon="mode === 'settings' ? 'i-lucide-save' : 'i-lucide-clapperboard'"
-            :label="mode === 'settings' ? '保存' : '提交'"
-            color="primary"
-            variant="solid"
-            :loading="saving"
-            @click="submit"
-          />
+          <div class="settings-modal-actions-start">
+            <UButton
+              v-if="mode === 'settings'"
+              icon="i-lucide-rotate-ccw"
+              label="恢复默认"
+              color="neutral"
+              variant="ghost"
+              :disabled="saving"
+              @click="resetToBaseConfig"
+            />
+          </div>
+          <div class="settings-modal-actions-end">
+            <UButton
+              icon="i-lucide-x"
+              label="取消"
+              color="neutral"
+              variant="outline"
+              :disabled="saving"
+              @click="emit('close')"
+            />
+            <UButton
+              :icon="mode === 'settings' ? 'i-lucide-save' : 'i-lucide-clapperboard'"
+              :label="mode === 'settings' ? '保存' : '提交'"
+              color="primary"
+              variant="solid"
+              :loading="saving"
+              @click="submit"
+            />
+          </div>
         </div>
       </div>
     </template>
@@ -155,7 +209,7 @@
 
 <script setup lang="ts">
 import { open as openDialog } from '@tauri-apps/plugin-dialog'
-import type { AddFfmpegJobPayload, RenderJobTranscodeConfig } from '~/types'
+import type { AddFfmpegJobPayload, FolderFrameGroup, RenderJobTranscodeConfig } from '~/types'
 import {
   TRANSCODE_PRESET_OPTIONS,
   buildTranscodeOutputPath,
@@ -196,10 +250,24 @@ const emit = defineEmits<{
 }>()
 
 const settingsStore = useSettingsStore()
+const { scanFolderFrameGroups } = useTauri()
 
 const mode = computed(() => props.mode ?? 'submit')
-const modalTitle = computed(() => mode.value === 'settings' ? '转码设置' : '提交转码')
+const modalTitle = computed(() => {
+  if (mode.value === 'settings') return '转码设置'
+  return props.blenderJobId ? '提交转码' : '新建转码任务'
+})
 const presetOptions: string[] = [...TRANSCODE_PRESET_OPTIONS]
+
+type SourceItem = {
+  label: string
+  value: string
+  folderPath: string
+  inputPath: string
+  frameStart: number
+  frameEnd: number
+  name: string
+}
 
 const form = reactive({
   name: '',
@@ -210,10 +278,55 @@ const form = reactive({
   preset: 'medium',
 })
 const saving = ref(false)
-const showAdvanced = ref(false)
 const errorMessage = ref('')
+const sourceLoading = ref(false)
+const selectedSourceFolder = ref('')
+const sourceItems = ref<SourceItem[]>([])
+const selectedSourceInputPath = ref('')
+
+const showManualFolderSourceSection = computed(() =>
+  mode.value === 'submit' && !props.blenderJobId && !props.folderInputPath && !props.folderPath,
+)
+
+const selectedSourceOption = computed(() =>
+  sourceItems.value.find(item => item.value === selectedSourceInputPath.value) ?? null,
+)
+
+function buildSourceItems(folderPath: string, groups: FolderFrameGroup[]): SourceItem[] {
+  return groups.map(group => ({
+    label: `${group.name} · ${group.frameStart}–${group.frameEnd}`,
+    value: group.inputPath,
+    folderPath,
+    inputPath: group.inputPath,
+    frameStart: group.frameStart,
+    frameEnd: group.frameEnd,
+    name: group.name,
+  }))
+}
+
+function buildSingleSourceItem(): SourceItem | null {
+  if (!props.folderInputPath && !props.folderPath) return null
+  return {
+    label: `${props.folderName ?? 'render'} · ${props.folderFrameStart ?? 1}–${props.folderFrameEnd ?? 1}`,
+    value: props.folderInputPath ?? props.folderPath ?? '',
+    folderPath: props.folderPath ?? '',
+    inputPath: props.folderInputPath ?? props.folderPath ?? '',
+    frameStart: props.folderFrameStart ?? 1,
+    frameEnd: props.folderFrameEnd ?? 1,
+    name: props.folderName ?? 'render',
+  }
+}
+
+function currentFolderSource() {
+  return selectedSourceOption.value ?? buildSingleSourceItem()
+}
 
 function deriveOutputDirectory() {
+  const folderSource = currentFolderSource()
+  if (folderSource) {
+    return normalizeTranscodeDirectory(folderSource.folderPath || folderSource.inputPath)
+  }
+
   if (props.blenderJobOutputPath) {
     const normalized = props.blenderJobOutputPath.replace(/\\/g, '/')
     if (normalized.includes('#')) {
@@ -226,7 +339,8 @@ function deriveOutputDirectory() {
 }
 
 function buildDerivedConfig(): RenderJobTranscodeConfig {
-  const name = sanitizeTranscodeStemPart(props.folderName ?? props.blenderJobName)
+  const folderSource = currentFolderSource()
+  const name = sanitizeTranscodeStemPart(folderSource?.name ?? props.blenderJobName)
   const outputPath = buildTranscodeOutputPath(deriveOutputDirectory(), name)
   const { outputDir, outputStem } = splitTranscodeOutputPath(outputPath)
 
@@ -251,8 +365,11 @@ function applyConfig(config: RenderJobTranscodeConfig) {
 }
 
 function syncForm() {
+  const singleSourceItem = buildSingleSourceItem()
+  selectedSourceFolder.value = singleSourceItem?.folderPath ?? ''
+  sourceItems.value = singleSourceItem ? [singleSourceItem] : []
+  selectedSourceInputPath.value = singleSourceItem?.value ?? ''
   applyConfig(props.initialConfig ?? buildDerivedConfig())
-  showAdvanced.value = mode.value === 'settings'
   errorMessage.value = ''
 }
 
@@ -290,6 +407,47 @@ function handleOpenChange(value: boolean) {
   }
 }
 
+async function loadSourceFolder(folderPath: string) {
+  sourceLoading.value = true
+  errorMessage.value = ''
+
+  try {
+    const result = await scanFolderFrameGroups(folderPath)
+    selectedSourceFolder.value = folderPath
+
+    if (result.groups.length === 0) {
+      sourceItems.value = []
+      selectedSourceInputPath.value = ''
+      applyConfig(buildDerivedConfig())
+      errorMessage.value = '这个目录里没有检测到可转码的序列帧。'
+      return
+    }
+
+    sourceItems.value = buildSourceItems(folderPath, result.groups)
+    selectedSourceInputPath.value = sourceItems.value[0]?.value ?? ''
+    applyConfig(buildDerivedConfig())
+  } catch (error) {
+    sourceItems.value = []
+    selectedSourceInputPath.value = ''
+    errorMessage.value = error instanceof Error ? error.message : String(error)
+  } finally {
+    sourceLoading.value = false
+  }
+}
+
+async function browseSourceFolder() {
+  if (saving.value || sourceLoading.value) return
+  const selected = await openDialog({
+    directory: true,
+    multiple: false,
+    title: '选择序列帧目录',
+    defaultPath: selectedSourceFolder.value || undefined,
+  })
+  if (typeof selected === 'string' && selected) {
+    await loadSourceFolder(selected)
+  }
+}
+
 async function browseOutputDirectory() {
   if (saving.value) return
   const selected = await openDialog({
@@ -323,6 +481,15 @@ function currentConfig(): RenderJobTranscodeConfig {
   }
 }
 
+watch(
+  () => selectedSourceInputPath.value,
+  (value, previousValue) => {
+    if (!showManualFolderSourceSection.value || !value || value === previousValue) return
+    applyConfig(buildDerivedConfig())
+    errorMessage.value = ''
+  },
+)
+
 async function submit() {
   if (saving.value) return
 
@@ -330,6 +497,7 @@ async function submit() {
   const outputDir = form.outputDir.trim()
   const outputStem = form.outputStem.trim()
   const fps = Number(form.fps)
+  const folderSource = currentFolderSource()
 
   if (!name) {
     errorMessage.value = '任务名不能为空。'
@@ -345,6 +513,10 @@ async function submit() {
   }
   if (!Number.isFinite(fps) || fps <= 0) {
     errorMessage.value = '输出 FPS 必须大于 0。'
+    return
+  }
+  if (!props.blenderJobId && !folderSource) {
+    errorMessage.value = '请先选择序列帧目录。'
     return
   }
 
@@ -371,9 +543,9 @@ async function submit() {
       name,
       source_type: props.blenderJobId ? 'blender_job' : 'folder',
       source_blender_job_id: props.blenderJobId ?? null,
-      input_path: props.folderInputPath ?? props.folderPath ?? props.blenderJobOutputPath ?? '',
-      frame_start: props.folderFrameStart ?? props.blenderJobFrameStart ?? 1,
-      frame_end: props.folderFrameEnd ?? props.blenderJobFrameEnd ?? 1,
+      input_path: folderSource?.inputPath ?? props.blenderJobOutputPath ?? '',
+      frame_start: folderSource?.frameStart ?? props.blenderJobFrameStart ?? 1,
+      frame_end: folderSource?.frameEnd ?? props.blenderJobFrameEnd ?? 1,
       fps,
       output_path: config.outputPath,
       crf: config.crf,

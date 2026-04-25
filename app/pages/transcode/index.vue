@@ -17,20 +17,17 @@
         <div class="page-hero-copy">
           <div class="queue-title-row">
             <UBadge label="FFmpeg Queue" color="neutral" variant="subtle" class="page-eyebrow" />
-            <UBadge :label="`默认 CRF ${settingsStore.settings.transcodeCrf}`" color="neutral" variant="subtle" />
-            <UBadge :label="`Preset ${settingsStore.settings.transcodePreset}`" color="neutral" variant="subtle" />
-            <UBadge :label="`并发 ${settingsStore.settings.ffmpegMaxConcurrent}`" color="neutral" variant="subtle" />
           </div>
           <h1>转码队列</h1>
-          <p class="page-note">FFmpeg Job 持久化到数据库，渲染后的自动转码和手动提交都会汇总到这里。</p>
+          <p class="page-note">集中查看所有转码任务的状态、结果与日志。</p>
         </div>
         <div class="page-hero-actions queue-hero-actions">
           <UButton
-            icon="i-lucide-folder-open"
-            label="选择文件夹"
-            color="neutral"
-            variant="outline"
-            @click="browseFolder"
+            icon="i-lucide-plus"
+            label="新建任务"
+            color="primary"
+            variant="solid"
+            @click="openCreateModal"
           />
         </div>
       </section>
@@ -66,7 +63,7 @@
           <UIcon name="i-lucide-clapperboard" />
         </div>
         <div class="empty-state-title">还没有 FFmpeg Job</div>
-        <div class="empty-state-note">拖拽序列帧文件夹到窗口，或点击“选择文件夹”创建转码任务。</div>
+        <div class="empty-state-note">拖拽序列帧文件夹到窗口，或点击“新建任务”手动创建转码任务。</div>
       </UCard>
 
       <UCard
@@ -128,13 +125,13 @@
     </UModal>
 
     <TranscodeSubmitModal
-      v-if="transcodeModalOpen && activePendingFolder"
+      v-if="transcodeModalOpen"
       :open="transcodeModalOpen"
-      :folder-path="activePendingFolder.path"
-      :folder-input-path="activePendingFolder.inputPath"
-      :folder-frame-start="activePendingFolder.frameStart"
-      :folder-frame-end="activePendingFolder.frameEnd"
-      :folder-name="activePendingFolder.name"
+      :folder-path="activePendingFolder?.path"
+      :folder-input-path="activePendingFolder?.inputPath"
+      :folder-frame-start="activePendingFolder?.frameStart"
+      :folder-frame-end="activePendingFolder?.frameEnd"
+      :folder-name="activePendingFolder?.name"
       @submit="handleModalSubmit"
       @close="closePendingFolderModal"
       @update:open="transcodeModalOpen = $event"
@@ -143,7 +140,6 @@
 </template>
 
 <script setup lang="ts">
-import { open } from '@tauri-apps/plugin-dialog'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import type { TabsItem } from '@nuxt/ui'
 import type { AddFfmpegJobPayload, FfmpegJob } from '~/types'
@@ -197,7 +193,7 @@ const filteredJobs = computed(() => {
 const emptyTabTitle = computed(() => {
   switch (activeTab.value) {
     case 'queue':
-      return '当前没有待转码任务'
+      return '当前没有排队中任务'
     case 'done':
       return '当前没有已完成任务'
     case 'error':
@@ -240,7 +236,7 @@ const tabItems = computed<TabsItem[]>(() => [
     ui: { trigger: 'queue-tab-tone-all' },
   },
   {
-    label: '待转码',
+    label: '排队中',
     value: 'queue',
     badge: { label: String(queueJobs.value.length), color: 'info' as const, variant: 'subtle' as const },
     icon: 'i-lucide-loader-circle',
@@ -306,13 +302,22 @@ async function addFolderToQueue(folderPath: string) {
   }
 }
 
+function openCreateModal() {
+  pendingFolderQueue.value = []
+  transcodeModalOpen.value = true
+}
+
 function advancePendingFolderQueue() {
   pendingFolderQueue.value = pendingFolderQueue.value.slice(1)
   transcodeModalOpen.value = pendingFolderQueue.value.length > 0
 }
 
 function closePendingFolderModal() {
-  advancePendingFolderQueue()
+  if (pendingFolderQueue.value.length > 0) {
+    advancePendingFolderQueue()
+  } else {
+    transcodeModalOpen.value = false
+  }
 }
 
 async function handleModalSubmit(payload: AddFfmpegJobPayload) {
@@ -323,29 +328,17 @@ async function handleModalSubmit(payload: AddFfmpegJobPayload) {
       description: `#${job.jobNumber} ${job.name}`,
       color: 'success',
     })
-    advancePendingFolderQueue()
+    if (pendingFolderQueue.value.length > 0) {
+      advancePendingFolderQueue()
+    } else {
+      transcodeModalOpen.value = false
+    }
   } catch (error) {
     toast.add({
       title: '创建 FFmpeg Job 失败',
       description: error instanceof Error ? error.message : String(error),
       color: 'error',
     })
-  }
-}
-
-async function browseFolder() {
-  const selected = await open({
-    directory: true,
-    multiple: true,
-    title: '选择序列帧文件夹',
-  })
-  if (!selected) return
-
-  const paths = Array.isArray(selected) ? selected : [selected]
-  for (const path of paths) {
-    if (typeof path === 'string') {
-      await addFolderToQueue(path)
-    }
   }
 }
 

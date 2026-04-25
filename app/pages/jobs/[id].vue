@@ -73,7 +73,7 @@
                           <USwitch
                             :model-value="autoTranscodeEnabled"
                             color="neutral"
-                            :disabled="updatingAutoTranscode"
+                            :disabled="updatingAutoTranscode || !transcodeSupported"
                             @pointerdown.stop
                             @click.stop
                             @update:model-value="handleAutoTranscodeSwitchUpdate"
@@ -284,7 +284,7 @@
     <section class="detail-content">
       <RenderProgress
         v-if="job.status === 'running'"
-        class="detail-progress"
+        class="detail-render-progress"
         :frame="job.currentFrame ?? 0"
         :total-frames="job.totalFrames ?? (job.frameEnd - job.frameStart + 1)"
         :warming-up="jobsStore.isJobWarmingUp(job.id)"
@@ -456,7 +456,7 @@ const transcodeStore = useTranscodeStore()
 const settingsStore = useSettingsStore()
 
 const { openPath, inspectRenderedFrames, getLastRenderedFrame, getJobLogSummary, updateJobPreviewDimensions } = useTauri()
-const { onFfmpegJobUpdated } = useRenderEvents()
+const { onProgress, onJobUpdated, onLog, onFfmpegJobUpdated } = useRenderEvents()
 const STATUS_LABEL = JOB_STATUS_LABEL
 
 const jobId = computed(() => route.params.id as string)
@@ -503,7 +503,11 @@ const effectiveTranscodeConfig = computed<RenderJobTranscodeConfig | null>(() =>
   if (!job.value) return null
   return resolveEffectiveRenderJobTranscodeConfig(job.value, settingsStore.settings)
 })
-const autoTranscodeEnabled = computed(() => Boolean(job.value?.autoTranscodeMp4))
+const transcodeSupported = computed(() => {
+  const format = job.value?.outputFormat
+  return Boolean(job.value) && format !== 'OPEN_EXR' && format !== 'EXR'
+})
+const autoTranscodeEnabled = computed(() => transcodeSupported.value && Boolean(job.value?.autoTranscodeMp4))
 const transcodePrimaryAction = computed(() => {
   const currentJob = job.value
   const currentTranscodeJob = primaryTranscodeJob.value
@@ -518,6 +522,16 @@ const transcodePrimaryAction = computed(() => {
   }
 
   if (!currentTranscodeJob) {
+    if (!transcodeSupported.value) {
+      return {
+        label: 'EXR 禁用转码',
+        icon: 'i-lucide-ban',
+        color: 'neutral' as const,
+        loading: false,
+        disabled: true,
+      }
+    }
+
     return {
       label: '提交转码',
       icon: 'i-lucide-film',
@@ -561,7 +575,7 @@ function buildJobContextMenuItems(currentJob: RenderJob) {
 
 const updatingAutoTranscode = ref(false)
 const logSummary = ref<JobLogSummary | null>(null)
-const transcodeUnlisteners: Array<() => void> = []
+const detailUnlisteners: Array<() => void> = []
 let logSummaryTimer: ReturnType<typeof setTimeout> | null = null
 
 const LOG_WARNINGS: Array<{ pattern: RegExp; message: string }> = [
@@ -580,7 +594,7 @@ const transcodeActionItems = computed<DropdownMenuItem[][]>(() => {
       label: '渲染完成后自动转码',
       icon: 'i-lucide-clapperboard',
       loading: updatingAutoTranscode.value,
-      disabled: updatingAutoTranscode.value,
+      disabled: updatingAutoTranscode.value || !transcodeSupported.value,
       onSelect: (event: Event) => {
         event.preventDefault()
         void handleAutoTranscodeToggle(!autoTranscodeEnabled.value)
@@ -590,7 +604,7 @@ const transcodeActionItems = computed<DropdownMenuItem[][]>(() => {
     {
       label: '转码设置',
       icon: 'i-lucide-sliders',
-      disabled: !job.value,
+      disabled: !job.value || !transcodeSupported.value,
       onSelect: () => {
         transcodeSettingsModalOpen.value = true
       },
@@ -598,7 +612,7 @@ const transcodeActionItems = computed<DropdownMenuItem[][]>(() => {
     {
       label: '立即提交转码',
       icon: 'i-lucide-film',
-      disabled: job.value?.status === 'running',
+      disabled: job.value?.status === 'running' || !transcodeSupported.value,
       onSelect: () => {
         void submitTranscodeForJob()
       },
@@ -817,7 +831,16 @@ onMounted(async () => {
     jobsStore.fetchJobs(),
     transcodeStore.fetchFfmpegJobs(),
   ])
-  transcodeUnlisteners.push(await onFfmpegJobUpdated((event) => {
+  detailUnlisteners.push(await onProgress((event) => {
+    jobsStore.applyProgress(event)
+  }))
+  detailUnlisteners.push(await onJobUpdated((event) => {
+    jobsStore.applyJobUpdate(event)
+  }))
+  detailUnlisteners.push(await onLog((event) => {
+    jobsStore.applyLog(event)
+  }))
+  detailUnlisteners.push(await onFfmpegJobUpdated((event) => {
     transcodeStore.applyFfmpegJobUpdate(event)
   }))
   await Promise.all([
@@ -828,7 +851,7 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
-  for (const unlisten of transcodeUnlisteners) {
+  for (const unlisten of detailUnlisteners) {
     unlisten()
   }
   if (logSummaryTimer) clearTimeout(logSummaryTimer)
@@ -850,6 +873,7 @@ let retryCustomInspectToken = 0
 async function handleAutoTranscodeToggle(value: boolean) {
   const currentJob = job.value
   if (!currentJob || updatingAutoTranscode.value) return
+  if (currentJob.outputFormat === 'OPEN_EXR' || currentJob.outputFormat === 'EXR') return
 
   updatingAutoTranscode.value = true
   try {
@@ -914,7 +938,7 @@ function closeRetryConfirm() {
 
 async function submitTranscodeForJob() {
   const currentJob = job.value
-  if (!currentJob || currentJob.status === 'running') return
+  if (!currentJob || currentJob.status === 'running' || currentJob.outputFormat === 'OPEN_EXR' || currentJob.outputFormat === 'EXR') return
   retryActionError.value = ''
   transcodeModalOpen.value = true
 }

@@ -45,7 +45,7 @@
           <UButton
             icon="i-lucide-save"
             label="保存"
-            color="neutral"
+            color="primary"
             variant="solid"
             :loading="saving"
             @click="saveMetadata"

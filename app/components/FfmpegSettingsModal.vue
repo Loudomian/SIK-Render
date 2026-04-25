@@ -69,23 +69,34 @@
         <p v-if="errorMessage" class="form-error">{{ errorMessage }}</p>
 
         <div class="modal-actions settings-modal-actions">
-          <div class="settings-modal-spacer" />
-          <UButton
-            icon="i-lucide-x"
-            label="取消"
-            color="neutral"
-            variant="outline"
-            :disabled="saving"
-            @click="emit('update:open', false)"
-          />
-          <UButton
-            icon="i-lucide-save"
-            label="保存"
-            color="primary"
-            variant="solid"
-            :loading="saving"
-            @click="saveSettingsDraft"
-          />
+          <div class="settings-modal-actions-start">
+            <UButton
+              icon="i-lucide-rotate-ccw"
+              label="恢复默认"
+              color="neutral"
+              variant="ghost"
+              :disabled="saving"
+              @click="resetToDefaults"
+            />
+          </div>
+          <div class="settings-modal-actions-end">
+            <UButton
+              icon="i-lucide-x"
+              label="取消"
+              color="neutral"
+              variant="outline"
+              :disabled="saving"
+              @click="emit('update:open', false)"
+            />
+            <UButton
+              icon="i-lucide-save"
+              label="保存"
+              color="primary"
+              variant="solid"
+              :loading="saving"
+              @click="saveSettingsDraft"
+            />
+          </div>
         </div>
       </div>
     </template>
@@ -102,6 +113,11 @@ const emit = defineEmits<{
 }>()
 
 const settingsStore = useSettingsStore()
+const defaultFfmpegSettings = {
+  transcodeCrf: 18,
+  transcodePreset: 'medium',
+  ffmpegMaxConcurrent: 2,
+}
 
 const transcodePresetOptions = [
   'ultrafast',
@@ -116,9 +132,9 @@ const transcodePresetOptions = [
 ]
 
 const draft = reactive({
-  transcodeCrf: 18,
-  transcodePreset: 'medium',
-  ffmpegMaxConcurrent: 2,
+  transcodeCrf: defaultFfmpegSettings.transcodeCrf,
+  transcodePreset: defaultFfmpegSettings.transcodePreset,
+  ffmpegMaxConcurrent: defaultFfmpegSettings.ffmpegMaxConcurrent,
 })
 const saving = ref(false)
 const errorMessage = ref('')
@@ -146,6 +162,13 @@ watch(
 
 function handleOpenChange(value: boolean) {
   emit('update:open', value)
+}
+
+function resetToDefaults() {
+  draft.transcodeCrf = defaultFfmpegSettings.transcodeCrf
+  draft.transcodePreset = defaultFfmpegSettings.transcodePreset
+  draft.ffmpegMaxConcurrent = defaultFfmpegSettings.ffmpegMaxConcurrent
+  errorMessage.value = ''
 }
 
 async function saveSettingsDraft() {

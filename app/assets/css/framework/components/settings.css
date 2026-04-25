@@ -32,6 +32,10 @@
   margin-bottom: 1rem;
 }
 
+.settings-compact-header {
+  margin-bottom: 0;
+}
+
 .settings-card-actions {
   display: flex;
   flex-wrap: wrap;
@@ -42,6 +46,25 @@
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 1rem;
+}
+
+.settings-path-grid {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.settings-path-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.95rem 1rem;
+}
+
+.settings-path-copy {
+  display: grid;
+  gap: 0.28rem;
+  min-width: 0;
 }
 
 .settings-form-stack {
@@ -68,6 +91,25 @@
   line-height: 1.35;
 }
 
+.settings-inline-versions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.settings-inline-separator {
+  margin: 0 0.5rem;
+}
+
+.settings-inline-version {
+  color: inherit;
+  font: inherit;
+}
+
+.settings-inline-version-muted {
+  color: var(--ui-text-dimmed);
+}
+
 .settings-field-note {
   margin: 0;
   color: var(--ui-text-muted);
@@ -85,6 +127,32 @@
   font-size: 0.92rem;
   font-weight: 600;
   line-height: 1.5;
+}
+
+.settings-version-inline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 0.55rem;
+}
+
+.settings-version-token {
+  display: inline-flex;
+  align-items: center;
+  color: var(--ui-text-muted);
+  font-size: 0.88rem;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.settings-version-token-default {
+  color: var(--ui-text);
+}
+
+.settings-theme-switcher {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  margin-top: 0.85rem;
 }
 
 .settings-brand-line {
@@ -111,6 +179,10 @@
   margin: 1rem 0 0;
   padding: 0;
   list-style: none;
+}
+
+.settings-blender-list-compact {
+  margin-top: 0.2rem;
 }
 
 .blender-version-item {
@@ -164,13 +236,29 @@
 }
 
 .settings-modal-actions {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
 }
 
-.settings-modal-spacer {
-  min-height: 1px;
+.settings-modal-actions-start,
+.settings-modal-actions-end {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.settings-modal-actions-start {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.settings-modal-actions-end {
+  justify-content: flex-end;
+  margin-left: auto;
 }
 
 @media (max-width: 900px) {
@@ -183,6 +271,10 @@
   .settings-card-header {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .settings-path-panel {
+    grid-template-columns: 1fr;
   }
 
   .blender-version-item {
@@ -198,6 +290,17 @@
   }
 
   .settings-modal-actions {
-    grid-template-columns: 1fr;
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .settings-modal-actions-start,
+  .settings-modal-actions-end {
+    width: 100%;
+    justify-content: stretch;
+  }
+
+  .settings-modal-actions-end {
+    margin-left: 0;
   }
 }

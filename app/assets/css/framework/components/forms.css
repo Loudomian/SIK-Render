@@ -3,6 +3,23 @@
   gap: 1.25rem;
 }
 
+.job-form-modern-stack {
+  display: grid;
+  gap: 1rem;
+}
+
+.job-form-fields {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.job-form-modern-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr) minmax(0, 1fr);
+  gap: 0.85rem;
+  align-items: end;
+}
+
 .job-form-layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -140,6 +157,49 @@
   border-radius: 0.7rem;
 }
 
+.job-form-transcode-panel {
+  display: grid;
+  gap: 0.85rem;
+  padding: 0.85rem 0.95rem;
+  border-radius: 0.8rem;
+}
+
+.job-form-transcode-toggle-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.9rem;
+}
+
+.job-form-transcode-copy {
+  display: grid;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.job-form-transcode-title {
+  margin: 0;
+  color: var(--ui-text);
+  font-size: 0.94rem;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.job-form-transcode-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding-top: 0.1rem;
+}
+
+.job-form-transcode-summary {
+  margin: 0;
+  color: var(--ui-text-muted);
+  font-size: 0.83rem;
+  line-height: 1.55;
+}
+
 .version-chip-row {
   align-content: flex-start;
   min-width: 0;
@@ -252,6 +312,7 @@
 }
 
 @media (max-width: 900px) {
+  .job-form-modern-grid,
   .job-form-layout,
   .job-form-control-grid,
   .job-form-stats,
@@ -269,5 +330,11 @@
 
   .form-inline-actions {
     align-items: stretch;
+  }
+
+  .job-form-transcode-toggle-row,
+  .job-form-transcode-actions {
+    align-items: stretch;
+    flex-direction: column;
   }
 }
