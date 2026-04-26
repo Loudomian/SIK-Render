@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core'
-import type { AddFfmpegJobPayload, AddJobPayload, AppSettings, BlenderInstall, BlendProjectSettings, FfmpegJob, FolderFrameGroup, FolderFramesInspection, JobLogSummary, QueueState, RenderJob, RenderedFramesStatus, ToolchainStatus } from '~/types'
+import type { AddFfmpegJobPayload, AddJobPayload, AppSettings, BlenderInstall, BlendProjectSettings, FfmpegJob, FolderFrameGroup, FolderFramesInspection, JobLogSummary, OutputPathTemplatePreview, PathTemplateKind, QueueState, RenderJob, RenderedFramesStatus, ToolchainStatus } from '~/types'
 
 // Typed wrappers around Tauri IPC commands
 
@@ -94,6 +94,16 @@ const tauriApi = {
 
   inspectBlendFile: (blenderExecutable: string, path: string) =>
     invoke<BlendProjectSettings>('inspect_blend_file', { blenderExecutable, path }),
+
+  previewOutputPathTemplate: (payload: {
+    kind: PathTemplateKind
+    template: string
+    blend_file?: string | null
+    source_path?: string | null
+    frame_start: number
+    frame_end: number
+  }) =>
+    invoke<OutputPathTemplatePreview>('preview_output_path_template', { payload }),
 
   getJobLogs: (jobId: string) =>
     invoke<string[]>('get_job_logs', { jobId }),

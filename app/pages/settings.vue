@@ -107,6 +107,19 @@
         <UCard variant="subtle" class="settings-card" :ui="{ body: 'settings-card-body' }">
           <div class="settings-card-header">
             <div>
+              <h3 class="settings-card-title">输出路径模板</h3>
+              <p class="hint-text">{{ outputTemplateSummary }}</p>
+            </div>
+          </div>
+
+          <div class="settings-card-actions">
+            <UButton icon="i-lucide-braces" label="编辑" color="neutral" variant="outline" size="sm" @click="outputPathTemplateModalOpen = true" />
+          </div>
+        </UCard>
+
+        <UCard variant="subtle" class="settings-card" :ui="{ body: 'settings-card-body' }">
+          <div class="settings-card-header">
+            <div>
               <h3 class="settings-card-title">界面与外观</h3>
               <p class="hint-text">直接切换浅色、深色或跟随系统。</p>
             </div>
@@ -170,6 +183,7 @@
     <BlenderSettingsModal v-model:open="blenderModalOpen" />
     <BlenderOutputSettingsModal v-model:open="blenderOutputModalOpen" />
     <FfmpegSettingsModal v-model:open="ffmpegModalOpen" />
+    <OutputPathTemplateSettingsModal v-model:open="outputPathTemplateModalOpen" />
   </div>
 </template>
 
@@ -183,6 +197,7 @@ const ffmpegPathModalOpen = ref(false)
 const blenderModalOpen = ref(false)
 const blenderOutputModalOpen = ref(false)
 const ffmpegModalOpen = ref(false)
+const outputPathTemplateModalOpen = ref(false)
 const appVersion = ref(String(runtimeConfig.public.appVersion ?? '0.0.0'))
 
 const blenderVersionItems = computed(() => {
@@ -202,6 +217,8 @@ const blenderPathNote = computed(() => {
 const ffmpegPathNote = computed(() =>
   settingsStore.settings.ffmpegExecutable || '配置后才可以提交和执行转码任务。',
 )
+
+const outputTemplateSummary = computed(() => '集中管理渲染序列、Blender 转码和独立转码的默认输出模板。')
 
 async function setTheme(theme: 'dark' | 'light' | 'system') {
   await settingsStore.setTheme(theme)

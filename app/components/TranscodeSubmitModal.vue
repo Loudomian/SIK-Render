@@ -26,7 +26,7 @@
                     autoresize
                     :disabled="saving || sourceLoading"
                     class="w-full path-textarea"
-                    placeholder="C:\\Renders\\shot_001"
+                    placeholder="F:\项目\潜行瞬鲨1-250"
                   />
                   <UButton
                     icon="i-lucide-folder-open"
@@ -78,7 +78,7 @@
                   autoresize
                   :disabled="saving"
                   class="w-full"
-                  placeholder="shot_001"
+                  placeholder="潜行瞬鲨_1-250_转码"
                 />
               </UFormField>
 
@@ -90,7 +90,7 @@
                     autoresize
                     :disabled="saving"
                     class="w-full path-textarea"
-                    placeholder="C:\\Renders\\shot_001"
+                    placeholder="F:\项目\转码"
                   />
                   <UButton
                     icon="i-lucide-folder-open"
@@ -111,7 +111,7 @@
                     autoresize
                     :disabled="saving"
                     class="w-full"
-                    placeholder="shot_001"
+                    placeholder="潜行瞬鲨_1-250"
                   />
                   <span class="transcode-submit-suffix">.mp4</span>
                 </div>
@@ -209,7 +209,7 @@
 
 <script setup lang="ts">
 import { open as openDialog } from '@tauri-apps/plugin-dialog'
-import type { AddFfmpegJobPayload, FolderFrameGroup, RenderJobTranscodeConfig } from '~/types'
+import type { AddFfmpegJobPayload, FolderFrameGroup, OutputPathTemplatePreview, PathTemplateKind, RenderJobTranscodeConfig } from '~/types'
 import {
   TRANSCODE_PRESET_OPTIONS,
   buildTranscodeOutputPath,
@@ -228,6 +228,7 @@ const props = defineProps<{
   folderFrameStart?: number
   folderFrameEnd?: number
   folderName?: string
+  blenderJobBlendFile?: string
   blenderJobId?: string
   blenderJobName?: string
   blenderJobFps?: number | null
@@ -250,7 +251,7 @@ const emit = defineEmits<{
 }>()
 
 const settingsStore = useSettingsStore()
-const { scanFolderFrameGroups } = useTauri()
+const { previewOutputPathTemplate, scanFolderFrameGroups } = useTauri()
 
 const mode = computed(() => props.mode ?? 'submit')
 const modalTitle = computed(() => {
@@ -283,6 +284,9 @@ const sourceLoading = ref(false)
 const selectedSourceFolder = ref('')
 const sourceItems = ref<SourceItem[]>([])
 const selectedSourceInputPath = ref('')
+const outputPathPreview = ref<OutputPathTemplatePreview | null>(null)
+const resolvedDefaultOutputPath = ref('')
+let outputPathPreviewTimer: ReturnType<typeof setTimeout> | null = null
 
 const showManualFolderSourceSection = computed(() =>
   mode.value === 'submit' && !props.blenderJobId && !props.folderInputPath && !props.folderPath,
@@ -291,6 +295,12 @@ const showManualFolderSourceSection = computed(() =>
 const selectedSourceOption = computed(() =>
   sourceItems.value.find(item => item.value === selectedSourceInputPath.value) ?? null,
 )
+const templateKind = computed<PathTemplateKind>(() =>
+  props.blenderJobId ? 'blender-ffmpeg' : 'standalone-ffmpeg',
+)
+const currentFrameStart = computed(() => currentFolderSource()?.frameStart ?? props.blenderJobFrameStart ?? 1)
+const currentFrameEnd = computed(() => currentFolderSource()?.frameEnd ?? props.blenderJobFrameEnd ?? 1)
+const hasTemplateErrors = computed(() => Boolean(outputPathPreview.value?.errors.length))
 
 function buildSourceItems(folderPath: string, groups: FolderFrameGroup[]): SourceItem[] {
   return groups.map(group => ({
@@ -329,7 +339,7 @@ function deriveOutputDirectory() {
 
   if (props.blenderJobOutputPath) {
     const normalized = props.blenderJobOutputPath.replace(/\\/g, '/')
-    if (normalized.includes('#')) {
+    if (normalized.includes('#') || normalized.includes('{frame}')) {
       return normalized.slice(0, normalized.lastIndexOf('/'))
     }
     return normalizeTranscodeDirectory(props.blenderJobOutputPath)
@@ -338,10 +348,31 @@ function deriveOutputDirectory() {
   return normalizeTranscodeDirectory(props.folderPath)
 }
 
+async function refreshResolvedDefaultOutputPath() {
+  const template = props.blenderJobId
+    ? settingsStore.settings.blenderTranscodeOutputPathTemplate
+    : settingsStore.settings.standaloneTranscodeOutputPathTemplate
+
+  try {
+    const preview = await previewOutputPathTemplate({
+      kind: templateKind.value,
+      template,
+      blend_file: props.blenderJobBlendFile ?? null,
+      source_path: currentFolderSource()?.folderPath ?? props.folderPath ?? null,
+      frame_start: currentFrameStart.value,
+      frame_end: currentFrameEnd.value,
+    })
+    resolvedDefaultOutputPath.value = preview.resolvedPath || ''
+  } catch {
+    resolvedDefaultOutputPath.value = ''
+  }
+}
+
 function buildDerivedConfig(): RenderJobTranscodeConfig {
   const folderSource = currentFolderSource()
   const name = sanitizeTranscodeStemPart(folderSource?.name ?? props.blenderJobName)
-  const outputPath = buildTranscodeOutputPath(deriveOutputDirectory(), name)
+  const fallbackOutputPath = buildTranscodeOutputPath(deriveOutputDirectory(), name)
+  const outputPath = resolvedDefaultOutputPath.value || fallbackOutputPath
   const { outputDir, outputStem } = splitTranscodeOutputPath(outputPath)
 
   return {
@@ -364,11 +395,12 @@ function applyConfig(config: RenderJobTranscodeConfig) {
   form.preset = config.preset
 }
 
-function syncForm() {
+async function syncForm() {
   const singleSourceItem = buildSingleSourceItem()
   selectedSourceFolder.value = singleSourceItem?.folderPath ?? ''
   sourceItems.value = singleSourceItem ? [singleSourceItem] : []
   selectedSourceInputPath.value = singleSourceItem?.value ?? ''
+  await refreshResolvedDefaultOutputPath()
   applyConfig(props.initialConfig ?? buildDerivedConfig())
   errorMessage.value = ''
 }
@@ -395,7 +427,7 @@ watch(
   ] as const,
   ([open]) => {
     if (!open) return
-    syncForm()
+    void syncForm()
   },
   { immediate: true },
 )
@@ -418,6 +450,7 @@ async function loadSourceFolder(folderPath: string) {
     if (result.groups.length === 0) {
       sourceItems.value = []
       selectedSourceInputPath.value = ''
+      resolvedDefaultOutputPath.value = ''
       applyConfig(buildDerivedConfig())
       errorMessage.value = '这个目录里没有检测到可转码的序列帧。'
       return
@@ -425,10 +458,12 @@ async function loadSourceFolder(folderPath: string) {
 
     sourceItems.value = buildSourceItems(folderPath, result.groups)
     selectedSourceInputPath.value = sourceItems.value[0]?.value ?? ''
+    await refreshResolvedDefaultOutputPath()
     applyConfig(buildDerivedConfig())
   } catch (error) {
     sourceItems.value = []
     selectedSourceInputPath.value = ''
+    resolvedDefaultOutputPath.value = ''
     errorMessage.value = error instanceof Error ? error.message : String(error)
   } finally {
     sourceLoading.value = false
@@ -481,14 +516,67 @@ function currentConfig(): RenderJobTranscodeConfig {
   }
 }
 
+async function refreshOutputPathPreview() {
+  const outputPath = buildTranscodeOutputPath(form.outputDir, form.outputStem)
+  if (!outputPath.trim()) {
+    outputPathPreview.value = null
+    return
+  }
+
+  try {
+    outputPathPreview.value = await previewOutputPathTemplate({
+      kind: templateKind.value,
+      template: outputPath,
+      blend_file: props.blenderJobBlendFile ?? null,
+      source_path: currentFolderSource()?.folderPath ?? props.folderPath ?? null,
+      frame_start: currentFrameStart.value,
+      frame_end: currentFrameEnd.value,
+    })
+  } catch (error) {
+    outputPathPreview.value = {
+      resolvedPath: null,
+      errors: [error instanceof Error ? error.message : String(error)],
+      notes: [],
+    }
+  }
+}
+
 watch(
   () => selectedSourceInputPath.value,
-  (value, previousValue) => {
+  async (value, previousValue) => {
     if (!showManualFolderSourceSection.value || !value || value === previousValue) return
+    await refreshResolvedDefaultOutputPath()
     applyConfig(buildDerivedConfig())
     errorMessage.value = ''
   },
 )
+
+watch(
+  () => [
+    settingsStore.settings.blenderTranscodeOutputPathTemplate,
+    settingsStore.settings.standaloneTranscodeOutputPathTemplate,
+    form.outputDir,
+    form.outputStem,
+    selectedSourceInputPath.value,
+    selectedSourceFolder.value,
+    props.folderPath,
+    props.folderName,
+    props.blenderJobBlendFile,
+    props.blenderJobFrameStart,
+    props.blenderJobFrameEnd,
+    templateKind.value,
+  ] as const,
+  () => {
+    void refreshResolvedDefaultOutputPath()
+    if (outputPathPreviewTimer) clearTimeout(outputPathPreviewTimer)
+    outputPathPreviewTimer = setTimeout(() => void refreshOutputPathPreview(), 220)
+  },
+  { immediate: true },
+)
+
+onUnmounted(() => {
+  if (outputPathPreviewTimer) clearTimeout(outputPathPreviewTimer)
+})
 
 async function submit() {
   if (saving.value) return
@@ -509,6 +597,10 @@ async function submit() {
   }
   if (!outputStem) {
     errorMessage.value = '输出文件名不能为空。'
+    return
+  }
+  if (hasTemplateErrors.value) {
+    errorMessage.value = outputPathPreview.value?.errors[0] || '输出路径模板无效。'
     return
   }
   if (!Number.isFinite(fps) || fps <= 0) {

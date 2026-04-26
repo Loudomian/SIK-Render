@@ -1,4 +1,4 @@
-import type { AppSettings, RenderJob, RenderJobTranscodeConfig } from '~/types'
+import type { RenderJob } from '~/types'
 
 export const TRANSCODE_PRESET_OPTIONS = [
   'ultrafast',
@@ -53,7 +53,7 @@ export function splitTranscodeOutputPath(outputPath: string | null | undefined) 
 
 function deriveRenderSequenceDirectory(outputPath: string) {
   const normalized = outputPath.replace(/\\/g, '/')
-  if (normalized.includes('#')) {
+  if (normalized.includes('#') || normalized.includes('{frame}')) {
     const slashIndex = normalized.lastIndexOf('/')
     return slashIndex >= 0 ? outputPath.slice(0, slashIndex) : outputPath
   }
@@ -65,41 +65,4 @@ function deriveRenderSequenceDirectory(outputPath: string) {
 export function defaultTranscodeOutputPathForRenderJob(job: RenderJob) {
   const outputDir = normalizeTranscodeDirectory(deriveRenderSequenceDirectory(job.outputPath))
   return buildTranscodeOutputPath(outputDir, job.name)
-}
-
-export function resolveBaseRenderJobTranscodeConfig(
-  job: RenderJob,
-  settings: AppSettings,
-): RenderJobTranscodeConfig {
-  const outputPath = defaultTranscodeOutputPathForRenderJob(job)
-  const { outputDir, outputStem } = splitTranscodeOutputPath(outputPath)
-
-  return {
-    name: job.name,
-    fps: Math.max(1, Math.round(job.fps && job.fps > 0 ? job.fps : 30)),
-    outputPath,
-    outputDir,
-    outputStem,
-    crf: settings.transcodeCrf,
-    preset: settings.transcodePreset,
-  }
-}
-
-export function resolveEffectiveRenderJobTranscodeConfig(
-  job: RenderJob,
-  settings: AppSettings,
-): RenderJobTranscodeConfig {
-  const base = resolveBaseRenderJobTranscodeConfig(job, settings)
-  const outputPath = job.transcodeOutputPathOverride || base.outputPath
-  const { outputDir, outputStem } = splitTranscodeOutputPath(outputPath)
-
-  return {
-    name: job.transcodeNameOverride || base.name,
-    fps: Math.max(1, Math.round(job.transcodeFpsOverride && job.transcodeFpsOverride > 0 ? job.transcodeFpsOverride : base.fps)),
-    outputPath,
-    outputDir,
-    outputStem,
-    crf: job.transcodeCrfOverride ?? base.crf,
-    preset: job.transcodePresetOverride || base.preset,
-  }
 }

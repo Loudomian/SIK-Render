@@ -277,7 +277,6 @@
     <UModal
       :open="showAddJob"
       title="新建渲染任务"
-      :dismissible="false"
       :ui="{ content: 'job-modal-content job-form-modal' }"
       @update:open="v => { if (!v) closeAddJob() }"
     >
@@ -294,7 +293,7 @@
 
               <div class="job-form-fields">
                 <UFormField label="任务名称" size="lg" class="job-form-field">
-                  <UTextarea v-model.trim="form.name" :rows="1" autoresize class="job-name-textarea" placeholder="Shot_010_Lighting" :ui="{ root: 'w-full' }" />
+                  <UTextarea v-model.trim="form.name" :rows="1" autoresize class="job-name-textarea" placeholder="潜行瞬鲨_镜头010_终版" :ui="{ root: 'w-full' }" />
                 </UFormField>
 
                 <UFormField label="任务备注" size="lg" class="job-form-field">
@@ -303,21 +302,28 @@
                     :rows="2"
                     autoresize
                     class="path-textarea"
-                    placeholder="例如：客户返修、补帧说明、交付要求。"
+                    placeholder="例如：重渲 120-180 帧，使用 OpenEXR 输出，完成后自动转码。"
                     :ui="{ root: 'w-full' }"
                   />
                 </UFormField>
 
                 <UFormField label="Blend 文件" class="job-form-field">
                   <div class="transcode-submit-path-row">
-                    <UTextarea v-model.trim="form.blend_file" :rows="1" autoresize class="w-full path-textarea path-textarea-lg" placeholder="F:\projects\scene.blend" :ui="{ root: 'w-full' }" />
+                    <UTextarea v-model.trim="form.blend_file" :rows="1" autoresize class="w-full path-textarea path-textarea-lg" placeholder="F:\项目\潜行瞬鲨\潜行瞬鲨.blend" :ui="{ root: 'w-full' }" />
                     <UButton type="button" icon="i-lucide-folder-open" label="浏览" color="neutral" variant="outline" @click="browseBlendFile" />
                   </div>
                 </UFormField>
 
                 <UFormField label="输出路径" class="job-form-field">
                   <div class="transcode-submit-path-row">
-                    <UTextarea v-model.trim="form.output_path" :rows="1" autoresize class="w-full path-textarea path-textarea-xl" placeholder="E:\renders\scene\scene_######" :ui="{ root: 'w-full' }" />
+                    <UTextarea
+                      v-model.trim="form.output_path"
+                      :rows="1"
+                      autoresize
+                      class="w-full path-textarea path-textarea-xl"
+                      placeholder="F:\项目\潜行瞬鲨1-250\潜行瞬鲨_######"
+                      :ui="{ root: 'w-full' }"
+                    />
                     <UButton type="button" icon="i-lucide-folder-open" label="浏览" color="neutral" variant="outline" @click="browseRenderOutputDirectory" />
                   </div>
                 </UFormField>
@@ -330,16 +336,6 @@
                   <p class="choice-card-mode">渲染控制</p>
                   <h2 class="choice-card-title">执行参数</h2>
                 </div>
-                <UButton
-                  type="button"
-                  color="neutral"
-                  variant="outline"
-                  icon="i-lucide-search"
-                  :loading="inspectingProject"
-                  :disabled="!canInspectProject"
-                  :label="inspectingProject ? '读取中…' : '读取工程参数'"
-                  @click="inspectProjectSettings(true)"
-                />
               </div>
 
               <div v-if="settingsStore.blenderVersions.length" class="job-form-fields">
@@ -454,6 +450,19 @@
               </div>
 
               <div class="job-form-fields">
+                <div class="job-form-inline-actions">
+                  <UButton
+                    type="button"
+                    color="neutral"
+                    variant="outline"
+                    icon="i-lucide-search"
+                    :loading="inspectingProject"
+                    :disabled="!canInspectProject"
+                    :label="inspectingProject ? '读取中…' : '读取工程参数'"
+                    @click="inspectProjectSettings(true)"
+                  />
+                </div>
+
                 <UAlert v-if="projectSettingsMessage" color="neutral" variant="subtle" :description="projectSettingsMessage" />
 
                 <div v-if="projectSettings" class="job-form-stats">
@@ -522,13 +531,13 @@
     </UModal>
 
     <TranscodeSubmitModal
-      v-if="addJobTranscodeSettingsOpen"
       :open="addJobTranscodeSettingsOpen"
       mode="settings"
       :initial-config="addJobEffectiveTranscodeConfig"
       :base-config="addJobBaseTranscodeConfig"
       :folder-name="form.name || inferJobName(form.blend_file) || 'render'"
       :blender-job-name="form.name || inferJobName(form.blend_file) || 'render'"
+      :blender-job-blend-file="form.blend_file"
       :blender-job-fps="projectSettings?.fps ?? null"
       :blender-job-output-path="form.output_path"
       @save-settings="handleAddJobTranscodeSettingsSave"
@@ -617,7 +626,7 @@ import { open } from '@tauri-apps/plugin-dialog'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import type { TabsItem } from '@nuxt/ui'
 import { useRouter } from 'vue-router'
-import type { AddJobPayload, BlendProjectSettings, RenderJob, RenderJobTranscodeConfig, RenderedFramesStatus } from '~/types'
+import type { AddJobPayload, BlendProjectSettings, OutputPathTemplatePreview, RenderJob, RenderJobTranscodeConfig, RenderedFramesStatus } from '~/types'
 import { buildTranscodeOutputPath, normalizeTranscodeDirectory, sanitizeTranscodeStemPart, splitTranscodeOutputPath } from '~/composables/useTranscodeConfig'
 
 const router = useRouter()
@@ -794,7 +803,7 @@ const queueToggleTooltip = computed(() =>
     : '立即中止当前渲染任务并暂停队列，恢复时会从断点自动续跑',
 )
 
-const { validateBlendFile, inspectBlendFile, inspectRenderedFrames, inspectToolchain } = useTauri()
+const { validateBlendFile, inspectBlendFile, inspectRenderedFrames, inspectToolchain, previewOutputPathTemplate } = useTauri()
 
 const retryConfirmJob = ref<RenderJob | null>(null)
 const retryExistingCount = ref(0)
@@ -1007,8 +1016,11 @@ const projectSettings = ref<BlendProjectSettings | null>(null)
 const projectSettingsMessage = ref('')
 const outputFrameStatus = ref<RenderedFramesStatus | null>(null)
 const addJobFrameStatus = ref<RenderedFramesStatus | null>(null)
+const outputPathPreview = ref<OutputPathTemplatePreview | null>(null)
+const resolvedAddJobBaseTranscodeOutputPath = ref('')
 let inspectTimer: ReturnType<typeof setTimeout> | null = null
 let outputDirTimer: ReturnType<typeof setTimeout> | null = null
+let outputPathPreviewTimer: ReturnType<typeof setTimeout> | null = null
 
 
 const ENGINE_NAMES: Record<string, string> = {
@@ -1204,11 +1216,22 @@ function handleQueuePointerDown(job: RenderJob, event: PointerEvent) {
   window.addEventListener('pointercancel', handleQueuePointerCancel)
 }
 
-function autoFillOutputPath(blendPath: string) {
+async function autoFillOutputPath(blendPath: string) {
   const name = (inferJobName(blendPath) || 'render').replace(/[<>:"/\\|?*]/g, '_')
   if (!form.name) form.name = name
-  const dir = blendPath.replace(/[/\\][^/\\]*$/, '')
-  form.output_path = `${dir}\\renders\\${name}_######`
+
+  try {
+    const preview = await previewOutputPathTemplate({
+      kind: 'blender',
+      template: settingsStore.settings.renderOutputPathTemplate,
+      blend_file: blendPath,
+      frame_start: form.frame_start,
+      frame_end: form.frame_end,
+    })
+    form.output_path = preview.resolvedPath || settingsStore.settings.renderOutputPathTemplate
+  } catch {
+    form.output_path = settingsStore.settings.renderOutputPathTemplate
+  }
 }
 
 function buildOutputPatternForDirectory(directory: string) {
@@ -1217,7 +1240,9 @@ function buildOutputPatternForDirectory(directory: string) {
 
   const currentPattern = form.output_path.split(/[/\\]/).pop() || ''
   const defaultName = (form.name || inferJobName(form.blend_file) || 'render').replace(/[<>:"/\\|?*]/g, '_')
-  const outputPattern = currentPattern.includes('#') ? currentPattern : `${defaultName}_######`
+  const outputPattern = currentPattern.includes('#') || currentPattern.includes('{')
+    ? currentPattern
+    : `${defaultName}_######`
   const separator = normalizedDirectory.includes('\\') && !normalizedDirectory.includes('/') ? '\\' : '/'
   return `${normalizedDirectory}${separator}${outputPattern}`
 }
@@ -1241,7 +1266,7 @@ async function browseBlendFile() {
   }
 
   if (!form.output_path) {
-    autoFillOutputPath(selected)
+    await autoFillOutputPath(selected)
   }
 }
 
@@ -1309,6 +1334,8 @@ function resetForm() {
   projectSettingsMessage.value = ''
   outputFrameStatus.value = null
   addJobFrameStatus.value = null
+  outputPathPreview.value = null
+  resolvedAddJobBaseTranscodeOutputPath.value = ''
   addJobTranscodeSettingsOpen.value = false
 }
 
@@ -1343,7 +1370,7 @@ async function openAddJobWithFile(blendPath: string) {
   await ensureSettingsLoaded()
   resetForm()
   form.blend_file = blendPath
-  autoFillOutputPath(blendPath)
+  await autoFillOutputPath(blendPath)
   showAddJob.value = true
 }
 
@@ -1356,6 +1383,8 @@ function closeAddJob(force = false) {
   projectSettingsMessage.value = ''
   outputFrameStatus.value = null
   addJobFrameStatus.value = null
+  outputPathPreview.value = null
+  resolvedAddJobBaseTranscodeOutputPath.value = ''
 }
 
 function handleCloseAddJob() {
@@ -1385,16 +1414,37 @@ function selectBlender(executable: string) {
 function deriveAddJobSequenceDirectory(outputPath: string) {
   const normalized = outputPath.replace(/\\/g, '/')
   const slashIndex = normalized.lastIndexOf('/')
-  if (normalized.includes('#')) {
+  if (normalized.includes('#') || normalized.includes('{frame}')) {
     return slashIndex >= 0 ? outputPath.slice(0, slashIndex) : outputPath
   }
   return slashIndex >= 0 ? outputPath.slice(0, slashIndex) : outputPath
 }
 
+async function refreshAddJobBaseTranscodeOutputPath() {
+  if (!form.blend_file) {
+    resolvedAddJobBaseTranscodeOutputPath.value = ''
+    return
+  }
+
+  try {
+    const preview = await previewOutputPathTemplate({
+      kind: 'blender-ffmpeg',
+      template: settingsStore.settings.blenderTranscodeOutputPathTemplate,
+      blend_file: form.blend_file,
+      frame_start: form.frame_start,
+      frame_end: form.frame_end,
+    })
+    resolvedAddJobBaseTranscodeOutputPath.value = preview.resolvedPath || ''
+  } catch {
+    resolvedAddJobBaseTranscodeOutputPath.value = ''
+  }
+}
+
 const addJobBaseTranscodeConfig = computed<RenderJobTranscodeConfig>(() => {
   const renderName = form.name.trim() || inferJobName(form.blend_file) || 'render'
-  const outputDir = normalizeTranscodeDirectory(deriveAddJobSequenceDirectory(form.output_path))
-  const outputPath = buildTranscodeOutputPath(outputDir, sanitizeTranscodeStemPart(renderName))
+  const fallbackDir = normalizeTranscodeDirectory(deriveAddJobSequenceDirectory(form.output_path))
+  const fallbackOutputPath = buildTranscodeOutputPath(fallbackDir, sanitizeTranscodeStemPart(renderName))
+  const outputPath = resolvedAddJobBaseTranscodeOutputPath.value || fallbackOutputPath
   const split = splitTranscodeOutputPath(outputPath)
 
   return {
@@ -1451,6 +1501,7 @@ const outputSettingsSummary = computed(() => {
 })
 
 const isExrOutput = computed(() => form.output_format === 'OPEN_EXR')
+const outputPathTemplateHasErrors = computed(() => Boolean(outputPathPreview.value?.errors.length))
 
 const canInspectProject = computed(() => {
   return Boolean(form.blender_executable && form.blend_file && form.blend_file.toLowerCase().endsWith('.blend'))
@@ -1485,7 +1536,7 @@ async function inspectProjectSettings(showErrors = false) {
 
     // Always default to blend-file-adjacent renders folder; ignore project's configured output path
     if (!form.output_path && form.blend_file) {
-      autoFillOutputPath(form.blend_file)
+      await autoFillOutputPath(form.blend_file)
     }
   } catch (error) {
     projectSettings.value = null
@@ -1498,11 +1549,43 @@ async function inspectProjectSettings(showErrors = false) {
 }
 
 async function checkOutputDir() {
-  if (!form.output_path) { outputFrameStatus.value = null; return }
+  if (!outputPathPreview.value?.resolvedPath || outputPathTemplateHasErrors.value) {
+    outputFrameStatus.value = null
+    return
+  }
   try {
-    outputFrameStatus.value = await inspectRenderedFrames(form.output_path, form.output_format, form.frame_start, form.frame_end)
+    outputFrameStatus.value = await inspectRenderedFrames(
+      outputPathPreview.value.resolvedPath,
+      form.output_format,
+      form.frame_start,
+      form.frame_end,
+    )
   } catch {
     outputFrameStatus.value = null
+  }
+}
+
+async function refreshOutputPathPreview() {
+  const template = form.output_path.trim()
+  if (!template) {
+    outputPathPreview.value = null
+    return
+  }
+
+  try {
+    outputPathPreview.value = await previewOutputPathTemplate({
+      kind: 'blender',
+      template,
+      blend_file: form.blend_file || null,
+      frame_start: form.frame_start,
+      frame_end: form.frame_end,
+    })
+  } catch (error) {
+    outputPathPreview.value = {
+      resolvedPath: null,
+      errors: [error instanceof Error ? error.message : String(error)],
+      notes: [],
+    }
   }
 }
 
@@ -1512,20 +1595,33 @@ watch(
     if (newExec === oldExec && newBlend === oldBlend) return
 
     if (newBlend !== oldBlend && newBlend.toLowerCase().endsWith('.blend') && !form.output_path) {
-      autoFillOutputPath(newBlend)
+      void autoFillOutputPath(newBlend)
     }
 
     projectSettingsMessage.value = ''
     if (inspectTimer) { clearTimeout(inspectTimer); inspectTimer = null }
     projectSettings.value = null
+    void refreshAddJobBaseTranscodeOutputPath()
+    if (outputPathPreviewTimer) { clearTimeout(outputPathPreviewTimer); outputPathPreviewTimer = null }
+    outputPathPreviewTimer = setTimeout(() => void refreshOutputPathPreview(), 120)
   },
 )
 
 watch(
   [() => form.output_path, () => form.output_format, () => form.frame_start, () => form.frame_end],
   () => {
+    void refreshAddJobBaseTranscodeOutputPath()
+    if (outputPathPreviewTimer) { clearTimeout(outputPathPreviewTimer); outputPathPreviewTimer = null }
+    outputPathPreviewTimer = setTimeout(() => void refreshOutputPathPreview(), 250)
     if (outputDirTimer) { clearTimeout(outputDirTimer); outputDirTimer = null }
     outputDirTimer = setTimeout(() => void checkOutputDir(), 600)
+  },
+)
+
+watch(
+  () => settingsStore.settings.blenderTranscodeOutputPathTemplate,
+  () => {
+    void refreshAddJobBaseTranscodeOutputPath()
   },
 )
 
@@ -1585,6 +1681,10 @@ async function submitNewJob() {
     formError.value = 'Blend 文件、Blender 可执行文件和输出路径不能为空。'
     return
   }
+  if (outputPathTemplateHasErrors.value) {
+    formError.value = outputPathPreview.value?.errors[0] || '输出路径模板无效。'
+    return
+  }
 
   if (form.frame_start > form.frame_end) {
     formError.value = '起始帧不能大于结束帧。'
@@ -1595,7 +1695,12 @@ async function submitNewJob() {
 
   try {
     await validateBlendFile(form.blend_file)
-    const status = await inspectRenderedFrames(form.output_path, form.output_format, form.frame_start, form.frame_end)
+    const resolvedOutputPath = outputPathPreview.value?.resolvedPath
+    if (!resolvedOutputPath) {
+      formError.value = '当前输出路径还无法解析，请先检查模板变量。'
+      return
+    }
+    const status = await inspectRenderedFrames(resolvedOutputPath, form.output_format, form.frame_start, form.frame_end)
       .catch(() => ({ frameCount: 0, lastFrame: null, nextFrame: form.frame_start }))
     if (status.frameCount > 0) {
       addJobFrameStatus.value = status
@@ -1638,6 +1743,7 @@ onUnmounted(() => {
   window.removeEventListener('pointercancel', handleQueuePointerCancel)
   document.body.style.removeProperty('user-select')
   if (inspectTimer) clearTimeout(inspectTimer)
+  if (outputPathPreviewTimer) clearTimeout(outputPathPreviewTimer)
   if (outputDirTimer) clearTimeout(outputDirTimer)
 })
 </script>

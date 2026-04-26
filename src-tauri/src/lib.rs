@@ -2,6 +2,7 @@ mod app_paths;
 mod blender;
 mod commands;
 mod db;
+mod path_template;
 mod queue;
 mod state;
 
@@ -55,6 +56,7 @@ pub fn run() {
             commands::jobs::get_job_log_summary,
             commands::jobs::reset_job,
             commands::jobs::update_job_preview_dimensions,
+            commands::path_template::preview_output_path_template,
             commands::blender::get_blender_versions,
             commands::blender::inspect_toolchain,
             commands::blender::add_blender_by_path,

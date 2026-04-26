@@ -1,4 +1,8 @@
 use crate::commands::settings::AppSettings;
+use crate::path_template::{
+    blend_file_name_from_path, default_context, folder_name_from_source_path, resolve_output_path,
+    PathKind,
+};
 use crate::queue::ffmpeg_job::{DbFfmpegJob, FfmpegJob, FfmpegJobSourceType, FfmpegJobStatus};
 use crate::queue::job::{JobStatus, RenderJob};
 use crate::state::AppState;
@@ -942,6 +946,55 @@ pub async fn insert_ffmpeg_job(
     }
 
     let source_type = parse_source_type(&payload.source_type)?;
+    let input_path = PathBuf::from(payload.input_path.trim());
+    let resolved_output_path = match source_type {
+        FfmpegJobSourceType::BlenderJob => {
+            let source_blender_job_id = payload
+                .source_blender_job_id
+                .as_deref()
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .ok_or_else(|| String::from("source_blender_job_id is required for blender_job output templates"))?;
+            let blend_file = sqlx::query_scalar::<_, String>("SELECT blend_file FROM jobs WHERE id = ?")
+                .bind(source_blender_job_id)
+                .fetch_optional(&state.pool)
+                .await
+                .map_err(|error| error.to_string())?
+                .ok_or_else(|| format!("blender job {source_blender_job_id} was not found"))?;
+            let blend_file = PathBuf::from(blend_file);
+            resolve_output_path(
+                payload.output_path.trim(),
+                &default_context(
+                    PathKind::BlenderFfmpeg,
+                    blend_file.parent().map(|value| value.to_path_buf()),
+                    blend_file_name_from_path(&blend_file),
+                    None,
+                    payload.frame_start,
+                    payload.frame_end,
+                ),
+            )
+            .map_err(|error| error.to_string())?
+        }
+        FfmpegJobSourceType::Folder => resolve_output_path(
+            payload.output_path.trim(),
+            &default_context(
+                PathKind::StandaloneFfmpeg,
+                Some(
+                    if input_path.is_dir() {
+                        input_path.clone()
+                    } else {
+                        input_path.parent().unwrap_or(&input_path).to_path_buf()
+                    },
+                ),
+                None,
+                folder_name_from_source_path(&input_path),
+                payload.frame_start,
+                payload.frame_end,
+            ),
+        )
+        .map_err(|error| error.to_string())?,
+    };
+
     let mut job = FfmpegJob::new(
         payload.name.trim().to_string(),
         source_type,
@@ -953,11 +1006,11 @@ pub async fn insert_ffmpeg_job(
                 Some(trimmed)
             }
         }),
-        PathBuf::from(payload.input_path),
+        input_path,
         payload.frame_start,
         payload.frame_end,
         payload.fps,
-        PathBuf::from(payload.output_path),
+        resolved_output_path,
         payload.crf.min(51),
         normalize_preset(&payload.preset),
         0,

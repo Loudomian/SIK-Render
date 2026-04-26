@@ -13,6 +13,11 @@
   gap: 0.85rem;
 }
 
+.job-form-inline-actions {
+  display: flex;
+  justify-content: flex-start;
+}
+
 .job-form-modern-grid {
   display: grid;
   grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr) minmax(0, 1fr);

@@ -1,6 +1,9 @@
 use crate::queue::job::{DbRenderJob, JobStatus, RenderJob};
 use crate::queue::scheduler;
 use crate::state::AppState;
+use crate::path_template::{
+    blend_file_name_from_path, default_context, resolve_output_path, PathKind,
+};
 use chrono::Utc;
 use serde::Deserialize;
 use serde::Serialize;
@@ -314,11 +317,26 @@ pub async fn add_job(
         return Err("frame_start must be <= frame_end".into());
     }
 
+    let blend_file = PathBuf::from(payload.blend_file.trim());
+    let blender_executable = PathBuf::from(payload.blender_executable.trim());
+    let output_path = resolve_output_path(
+        payload.output_path.trim(),
+        &default_context(
+            PathKind::BlenderRender,
+            blend_file.parent().map(|value| value.to_path_buf()),
+            blend_file_name_from_path(&blend_file),
+            None,
+            payload.frame_start,
+            payload.frame_end,
+        ),
+    )
+    .map_err(|error| error.to_string())?;
+
     let mut job = RenderJob::new(
         payload.name,
-        PathBuf::from(payload.blend_file),
-        PathBuf::from(payload.blender_executable),
-        PathBuf::from(payload.output_path),
+        blend_file.clone(),
+        blender_executable,
+        output_path,
         payload.output_format,
         payload.frame_start,
         payload.frame_end,
@@ -332,7 +350,21 @@ pub async fn add_job(
     job.transcode_fps_override =
         normalize_optional_positive_f32(payload.transcode_fps_override, "transcode_fps_override")?;
     job.transcode_output_path_override = normalize_optional_text(payload.transcode_output_path_override)
-        .map(PathBuf::from);
+        .map(|template| {
+            resolve_output_path(
+                &template,
+                &default_context(
+                    PathKind::BlenderFfmpeg,
+                    blend_file.parent().map(|value| value.to_path_buf()),
+                    blend_file_name_from_path(&blend_file),
+                    None,
+                    payload.frame_start,
+                    payload.frame_end,
+                ),
+            )
+            .map_err(|error| error.to_string())
+        })
+        .transpose()?;
     job.transcode_crf_override = payload.transcode_crf_override.map(|value| value.min(51) as i32);
     job.transcode_preset_override = normalize_optional_preset(payload.transcode_preset_override);
     job.fps = payload.fps.filter(|value| *value > 0.0);
@@ -483,7 +515,9 @@ pub async fn update_job_transcode_settings(
     state: State<'_, AppState>,
     app: tauri::AppHandle,
 ) -> Result<RenderJob, String> {
-    let output_format = sqlx::query_scalar::<_, String>("SELECT output_format FROM jobs WHERE id = ?")
+    let (output_format, blend_file, frame_start, frame_end) = sqlx::query_as::<_, (String, String, i32, i32)>(
+        "SELECT output_format, blend_file, frame_start, frame_end FROM jobs WHERE id = ?",
+    )
         .bind(&payload.id)
         .fetch_optional(&state.pool)
         .await
@@ -492,8 +526,24 @@ pub async fn update_job_transcode_settings(
     let auto_transcode_mp4 =
         payload.auto_transcode_mp4 && !output_format_disables_transcode(&output_format);
     let transcode_name_override = normalize_optional_text(payload.transcode_name_override);
-    let transcode_output_path_override =
-        normalize_optional_text(payload.transcode_output_path_override);
+    let blend_file = PathBuf::from(blend_file);
+    let transcode_output_path_override = normalize_optional_text(payload.transcode_output_path_override)
+        .map(|template| {
+            resolve_output_path(
+                &template,
+                &default_context(
+                    PathKind::BlenderFfmpeg,
+                    blend_file.parent().map(|value| value.to_path_buf()),
+                    blend_file_name_from_path(&blend_file),
+                    None,
+                    frame_start,
+                    frame_end,
+                ),
+            )
+            .map(|value| value.to_string_lossy().to_string())
+            .map_err(|error| error.to_string())
+        })
+        .transpose()?;
     let transcode_preset_override = normalize_optional_preset(payload.transcode_preset_override);
     let transcode_fps_override =
         normalize_optional_positive_f32(payload.transcode_fps_override, "transcode_fps_override")?;

@@ -131,7 +131,6 @@
     </UModal>
 
     <TranscodeSubmitModal
-      v-if="transcodeModalOpen"
       :open="transcodeModalOpen"
       :folder-path="activePendingFolder?.path"
       :folder-input-path="activePendingFolder?.inputPath"

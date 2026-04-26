@@ -15,6 +15,12 @@ pub struct AppSettings {
     pub transcode_preset: String,
     #[serde(default = "default_ffmpeg_max_concurrent")]
     pub ffmpeg_max_concurrent: u32,
+    #[serde(default = "default_render_output_path_template")]
+    pub render_output_path_template: String,
+    #[serde(default = "default_blender_transcode_output_path_template")]
+    pub blender_transcode_output_path_template: String,
+    #[serde(default = "default_standalone_transcode_output_path_template")]
+    pub standalone_transcode_output_path_template: String,
     #[serde(default = "default_png_color_mode")]
     pub png_color_mode: String,
     #[serde(default = "default_png_color_depth")]
@@ -47,6 +53,11 @@ impl Default for AppSettings {
             transcode_crf: default_transcode_crf(),
             transcode_preset: default_transcode_preset(),
             ffmpeg_max_concurrent: default_ffmpeg_max_concurrent(),
+            render_output_path_template: default_render_output_path_template(),
+            blender_transcode_output_path_template:
+                default_blender_transcode_output_path_template(),
+            standalone_transcode_output_path_template:
+                default_standalone_transcode_output_path_template(),
             png_color_mode: default_png_color_mode(),
             png_color_depth: default_png_color_depth(),
             png_compression: default_png_compression(),
@@ -71,6 +82,8 @@ struct SettingsFile {
     #[serde(default)]
     blender: BlenderSettings,
     #[serde(default)]
+    output_paths: OutputPathSettings,
+    #[serde(default)]
     blender_output: BlenderOutputSettings,
 }
 
@@ -90,6 +103,16 @@ struct ToolsSettings {
     ffmpeg_max_concurrent: u32,
     #[serde(default = "default_max_crash_retries")]
     max_crash_retries: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+struct OutputPathSettings {
+    #[serde(default = "default_render_output_path_template")]
+    render_output_path_template: String,
+    #[serde(default = "default_blender_transcode_output_path_template")]
+    blender_transcode_output_path_template: String,
+    #[serde(default = "default_standalone_transcode_output_path_template")]
+    standalone_transcode_output_path_template: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -161,6 +184,18 @@ fn default_ffmpeg_max_concurrent() -> u32 {
 
 fn default_theme() -> String {
     String::from("dark")
+}
+
+fn default_render_output_path_template() -> String {
+    String::from("./{blendFileName}_{frameStart}-{frameEnd}/{blendFileName}_{frame}")
+}
+
+fn default_blender_transcode_output_path_template() -> String {
+    String::from("./转码/{blendFileName}_{frameStart}-{frameEnd}.mp4")
+}
+
+fn default_standalone_transcode_output_path_template() -> String {
+    String::from("../转码/{folderName}_{frameStart}-{frameEnd}.mp4")
 }
 
 fn default_png_color_mode() -> String {
@@ -263,6 +298,15 @@ fn normalize_preset(preset: &str) -> String {
     }
 }
 
+fn normalize_output_path_template(template: String, fallback: fn() -> String) -> String {
+    let trimmed = template.trim();
+    if trimmed.is_empty() {
+        fallback()
+    } else {
+        trimmed.to_string()
+    }
+}
+
 impl From<SettingsFile> for AppSettings {
     fn from(value: SettingsFile) -> Self {
         Self {
@@ -275,6 +319,18 @@ impl From<SettingsFile> for AppSettings {
             transcode_preset: normalize_preset(&value.tools.transcode_preset),
             ffmpeg_max_concurrent: normalize_ffmpeg_max_concurrent(
                 value.tools.ffmpeg_max_concurrent,
+            ),
+            render_output_path_template: normalize_output_path_template(
+                value.output_paths.render_output_path_template,
+                default_render_output_path_template,
+            ),
+            blender_transcode_output_path_template: normalize_output_path_template(
+                value.output_paths.blender_transcode_output_path_template,
+                default_blender_transcode_output_path_template,
+            ),
+            standalone_transcode_output_path_template: normalize_output_path_template(
+                value.output_paths.standalone_transcode_output_path_template,
+                default_standalone_transcode_output_path_template,
             ),
             png_color_mode: normalize_png_color_mode(&value.blender_output.png_color_mode),
             png_color_depth: normalize_png_color_depth(value.blender_output.png_color_depth),
@@ -311,6 +367,20 @@ impl From<AppSettings> for SettingsFile {
             blender: BlenderSettings {
                 extra_blender_paths: value.extra_blender_paths,
                 excluded_blender_paths: value.excluded_blender_paths,
+            },
+            output_paths: OutputPathSettings {
+                render_output_path_template: normalize_output_path_template(
+                    value.render_output_path_template,
+                    default_render_output_path_template,
+                ),
+                blender_transcode_output_path_template: normalize_output_path_template(
+                    value.blender_transcode_output_path_template,
+                    default_blender_transcode_output_path_template,
+                ),
+                standalone_transcode_output_path_template: normalize_output_path_template(
+                    value.standalone_transcode_output_path_template,
+                    default_standalone_transcode_output_path_template,
+                ),
             },
             blender_output: BlenderOutputSettings {
                 png_color_mode: normalize_png_color_mode(&value.png_color_mode),
@@ -436,6 +506,18 @@ pub fn save_settings(app: AppHandle, settings: AppSettings) -> Result<(), String
     settings.transcode_preset = normalize_preset(&settings.transcode_preset);
     settings.ffmpeg_max_concurrent =
         normalize_ffmpeg_max_concurrent(settings.ffmpeg_max_concurrent);
+    settings.render_output_path_template = normalize_output_path_template(
+        settings.render_output_path_template,
+        default_render_output_path_template,
+    );
+    settings.blender_transcode_output_path_template = normalize_output_path_template(
+        settings.blender_transcode_output_path_template,
+        default_blender_transcode_output_path_template,
+    );
+    settings.standalone_transcode_output_path_template = normalize_output_path_template(
+        settings.standalone_transcode_output_path_template,
+        default_standalone_transcode_output_path_template,
+    );
     settings.png_color_mode = normalize_png_color_mode(&settings.png_color_mode);
     settings.png_color_depth = normalize_png_color_depth(settings.png_color_depth);
     settings.png_compression = normalize_png_compression(settings.png_compression);

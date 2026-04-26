@@ -142,10 +142,11 @@
     />
 
     <TranscodeSubmitModal
-      v-if="transcodeModalOpen && job"
+      v-if="job"
       :open="transcodeModalOpen"
       :initial-config="effectiveTranscodeConfig"
       :blender-job-id="job.id"
+      :blender-job-blend-file="job.blendFile"
       :blender-job-name="job.name"
       :blender-job-fps="job.fps ?? null"
       :blender-job-frame-start="job.frameStart"
@@ -157,12 +158,13 @@
     />
 
     <TranscodeSubmitModal
-      v-if="transcodeSettingsModalOpen && job"
+      v-if="job"
       :open="transcodeSettingsModalOpen"
       mode="settings"
       :initial-config="effectiveTranscodeConfig"
       :base-config="baseTranscodeConfig"
       :blender-job-id="job.id"
+      :blender-job-blend-file="job.blendFile"
       :blender-job-name="job.name"
       :blender-job-fps="job.fps ?? null"
       :blender-job-frame-start="job.frameStart"
@@ -456,7 +458,7 @@ import { convertFileSrc } from '@tauri-apps/api/core'
 import type { DropdownMenuItem } from '@nuxt/ui'
 import type { AddFfmpegJobPayload, JobLogSummary, RenderJob, RenderJobTranscodeConfig, RenderedFramesStatus } from '~/types'
 import { JOB_STATUS_COLOR, JOB_STATUS_LABEL } from '~/composables/useJobStatus'
-import { resolveBaseRenderJobTranscodeConfig, resolveEffectiveRenderJobTranscodeConfig } from '~/composables/useTranscodeConfig'
+import { buildTranscodeOutputPath, normalizeTranscodeDirectory, splitTranscodeOutputPath } from '~/composables/useTranscodeConfig'
 import { parseLogLine } from '~/utils/log-line'
 
 const route = useRoute()
@@ -467,7 +469,7 @@ const transcodeStore = useTranscodeStore()
 
 const settingsStore = useSettingsStore()
 
-const { openPath, inspectRenderedFrames, getLastRenderedFrame, getJobLogSummary, getJobLogs, updateJobPreviewDimensions } = useTauri()
+const { openPath, inspectRenderedFrames, getLastRenderedFrame, getJobLogSummary, getJobLogs, updateJobPreviewDimensions, previewOutputPathTemplate } = useTauri()
 const { onProgress, onJobUpdated, onLog, onFfmpegJobUpdated } = useRenderEvents()
 const STATUS_LABEL = JOB_STATUS_LABEL
 
@@ -508,24 +510,99 @@ const metadataDialogOpen = ref(false)
 const metadataJob = computed(() => job.value ?? null)
 const transcodeModalOpen = ref(false)
 const transcodeSettingsModalOpen = ref(false)
+const resolvedBaseTranscodeOutputPath = ref('')
 const blenderVersion = computed(() => {
   const exe = job.value?.blenderExecutable
   if (!exe) return '—'
   const match = settingsStore.blenderVersions.find((b) => b.executable === exe)
   return match ? `Blender ${match.version}` : exe
 })
+
+function deriveRenderSequenceDirectory(outputPath: string) {
+  const normalized = outputPath.replace(/\\/g, '/')
+  const slashIndex = normalized.lastIndexOf('/')
+  return slashIndex >= 0 ? outputPath.slice(0, slashIndex) : outputPath
+}
+
+async function refreshResolvedBaseTranscodeOutputPath() {
+  const currentJob = job.value
+  if (!currentJob) {
+    resolvedBaseTranscodeOutputPath.value = ''
+    return
+  }
+
+  try {
+    const preview = await previewOutputPathTemplate({
+      kind: 'blender-ffmpeg',
+      template: settingsStore.settings.blenderTranscodeOutputPathTemplate,
+      blend_file: currentJob.blendFile,
+      frame_start: currentJob.frameStart,
+      frame_end: currentJob.frameEnd,
+    })
+    resolvedBaseTranscodeOutputPath.value = preview.resolvedPath || ''
+  } catch {
+    resolvedBaseTranscodeOutputPath.value = ''
+  }
+}
+
 const baseTranscodeConfig = computed<RenderJobTranscodeConfig | null>(() => {
-  if (!job.value) return null
-  return resolveBaseRenderJobTranscodeConfig(job.value, settingsStore.settings)
+  const currentJob = job.value
+  if (!currentJob) return null
+
+  const fallbackOutputPath = buildTranscodeOutputPath(
+    normalizeTranscodeDirectory(deriveRenderSequenceDirectory(currentJob.outputPath)),
+    currentJob.name,
+  )
+  const outputPath = resolvedBaseTranscodeOutputPath.value || fallbackOutputPath
+  const split = splitTranscodeOutputPath(outputPath)
+
+  return {
+    name: currentJob.name,
+    fps: Math.max(1, Math.round(currentJob.fps && currentJob.fps > 0 ? currentJob.fps : 30)),
+    outputPath,
+    outputDir: split.outputDir,
+    outputStem: split.outputStem,
+    crf: settingsStore.settings.transcodeCrf,
+    preset: settingsStore.settings.transcodePreset,
+  }
 })
 const effectiveTranscodeConfig = computed<RenderJobTranscodeConfig | null>(() => {
-  if (!job.value) return null
-  return resolveEffectiveRenderJobTranscodeConfig(job.value, settingsStore.settings)
+  const currentJob = job.value
+  const base = baseTranscodeConfig.value
+  if (!currentJob || !base) return null
+
+  const outputPath = currentJob.transcodeOutputPathOverride || base.outputPath
+  const split = splitTranscodeOutputPath(outputPath)
+
+  return {
+    name: currentJob.transcodeNameOverride || base.name,
+    fps: Math.max(1, Math.round(currentJob.transcodeFpsOverride && currentJob.transcodeFpsOverride > 0 ? currentJob.transcodeFpsOverride : base.fps)),
+    outputPath,
+    outputDir: split.outputDir,
+    outputStem: split.outputStem,
+    crf: currentJob.transcodeCrfOverride ?? base.crf,
+    preset: currentJob.transcodePresetOverride || base.preset,
+  }
 })
 const transcodeSupported = computed(() => {
   const format = job.value?.outputFormat
   return Boolean(job.value) && format !== 'OPEN_EXR' && format !== 'EXR'
 })
+
+watch(
+  () => [
+    job.value?.id,
+    job.value?.blendFile,
+    job.value?.frameStart,
+    job.value?.frameEnd,
+    settingsStore.settings.blenderTranscodeOutputPathTemplate,
+  ] as const,
+  () => {
+    void refreshResolvedBaseTranscodeOutputPath()
+  },
+  { immediate: true },
+)
+
 const autoTranscodeEnabled = computed(() => transcodeSupported.value && Boolean(job.value?.autoTranscodeMp4))
 const transcodePrimaryAction = computed(() => {
   const currentJob = job.value
@@ -561,18 +638,18 @@ const transcodePrimaryAction = computed(() => {
   }
 
   const statusMap = {
-    pending: { icon: 'i-lucide-loader-circle', color: 'warning' as const, loading: false },
-    running: { icon: 'i-lucide-loader-circle', color: 'info' as const, loading: true },
-    done: { icon: 'i-lucide-circle-check-big', color: 'success' as const, loading: false },
-    failed: { icon: 'i-lucide-triangle-alert', color: 'error' as const, loading: false },
-    cancelled: { icon: 'i-lucide-square', color: 'warning' as const, loading: false },
+    pending: { icon: 'i-lucide-loader-circle', color: 'warning' as const },
+    running: { icon: 'i-lucide-loader-circle', color: 'info' as const },
+    done: { icon: 'i-lucide-circle-check-big', color: 'success' as const },
+    failed: { icon: 'i-lucide-triangle-alert', color: 'error' as const },
+    cancelled: { icon: 'i-lucide-square', color: 'warning' as const },
   }[currentTranscodeJob.status]
 
   return {
     label: '查看转码',
     icon: statusMap.icon,
     color: statusMap.color,
-    loading: statusMap.loading,
+    loading: false,
     disabled: false,
   }
 })

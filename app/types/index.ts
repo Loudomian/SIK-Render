@@ -132,6 +132,14 @@ export interface RenderJobTranscodeConfig {
   preset: string
 }
 
+export type PathTemplateKind = 'blender' | 'blender-ffmpeg' | 'standalone-ffmpeg'
+
+export interface OutputPathTemplatePreview {
+  resolvedPath: string | null
+  errors: string[]
+  notes: string[]
+}
+
 export interface TranscodeProgressEvent {
   jobId: string
   frame: number
@@ -215,6 +223,9 @@ export interface AppSettings {
   transcodeCrf: number
   transcodePreset: string
   ffmpegMaxConcurrent: number
+  renderOutputPathTemplate: string
+  blenderTranscodeOutputPathTemplate: string
+  standaloneTranscodeOutputPathTemplate: string
   pngColorMode: 'BW' | 'RGB' | 'RGBA'
   pngColorDepth: number
   pngCompression: number
