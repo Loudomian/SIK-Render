@@ -71,7 +71,6 @@ fn build_render_settings_script(job: &RenderJob, settings: &AppSettings) -> Stri
 
     if job.render_mode.is_quick_mp4() {
         lines.extend([
-            "image.file_format = 'FFMPEG'".to_string(),
             "r.use_file_extension = False".to_string(),
             format!("r.filepath = {}", output_path_literal),
             "r.ffmpeg.format = 'MPEG4'".to_string(),
@@ -126,7 +125,9 @@ pub fn render_command(
         .arg("--python-expr")
         .arg(render_settings_script);
 
-    if !job.render_mode.is_quick_mp4() {
+    if job.render_mode.is_quick_mp4() {
+        command = command.arg("-F").arg("FFMPEG");
+    } else {
         command = command
             .arg("--render-output")
             .arg(job.output_path.as_os_str().to_os_string())

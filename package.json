@@ -31,7 +31,8 @@
     "@tauri-apps/plugin-store": "^2",
     "lucide-vue-next": "^1.0.0",
     "nuxt": "4.4.2",
-    "pinia": "^2.2.0"
+    "pinia": "^2.2.0",
+    "vidstack": "^0.6.15"
   },
   "devDependencies": {
     "@nuxt/devtools": "latest",

@@ -1,6 +1,28 @@
+@import 'vidstack/styles/defaults.css';
+@import 'vidstack/styles/community-skin/video.css';
+
 .preview-card {
   display: flex;
   flex-direction: column;
+}
+
+.preview-card-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.preview-card-title {
+  margin-bottom: 0;
+}
+
+.preview-switch {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: flex-end;
 }
 
 .preview-thumb-wrap {
@@ -23,6 +45,57 @@
   width: 100%;
   height: 100%;
   object-fit: contain;
+}
+
+.preview-video-wrap {
+  padding: 0;
+}
+
+.preview-player-shell,
+.preview-player {
+  width: 100%;
+  height: 100%;
+}
+
+.preview-player {
+  --video-border-radius: 1rem;
+  --video-border: 1px solid color-mix(in srgb, var(--ui-border) 82%, transparent);
+  --video-bg: color-mix(in srgb, var(--ui-bg) 82%, black 18%);
+  --video-brand: var(--ui-primary);
+  --video-font-family: 'Segoe UI', 'Microsoft YaHei UI', sans-serif;
+  --video-controls-color: color-mix(in srgb, var(--ui-text-highlighted) 92%, white 8%);
+  --video-title-color: color-mix(in srgb, var(--ui-text-muted) 80%, white 20%);
+  --video-scrim-bg: linear-gradient(180deg, rgb(7 10 20 / 0.1) 0%, rgb(7 10 20 / 0.72) 100%);
+  --video-focus-ring: 0 0 0 3px color-mix(in srgb, var(--ui-primary) 38%, transparent);
+  display: block;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at top, color-mix(in srgb, var(--ui-primary) 14%, transparent) 0%, transparent 52%),
+    color-mix(in srgb, var(--ui-bg) 88%, black 12%);
+  border-radius: 1rem;
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.05),
+    0 16px 48px rgb(0 0 0 / 0.22);
+}
+
+:root.light .preview-player,
+.light .preview-player {
+  --video-bg: color-mix(in srgb, white 96%, var(--ui-bg) 4%);
+  --video-controls-color: color-mix(in srgb, var(--ui-text-highlighted) 94%, black 6%);
+  --video-title-color: color-mix(in srgb, var(--ui-text-muted) 90%, black 10%);
+  --video-scrim-bg: linear-gradient(180deg, rgb(255 255 255 / 0.05) 0%, rgb(18 18 24 / 0.52) 100%);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.85),
+    0 16px 42px rgb(18 23 35 / 0.09);
+}
+
+.preview-player::part(media-outlet),
+.preview-player media-outlet {
+  border-radius: inherit;
+}
+
+.preview-player media-community-skin {
+  border-radius: inherit;
 }
 
 .preview-thumb-empty {
@@ -57,4 +130,15 @@
   border-radius: 0.75rem;
   object-fit: contain;
   box-shadow: 0 20px 80px rgba(0, 0, 0, 0.5);
+}
+
+@media (max-width: 720px) {
+  .preview-card-head {
+    align-items: stretch;
+  }
+
+  .preview-switch {
+    width: 100%;
+    justify-content: flex-start;
+  }
 }

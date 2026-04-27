@@ -71,6 +71,33 @@
             </div>
 
             <div class="transcode-submit-fields">
+              <div v-if="showBlenderFrameRangeSection" class="transcode-submit-inline-grid">
+                <UFormField label="转码起始帧">
+                  <UInputNumber
+                    v-model="selectedFrameStart"
+                    :min="blenderFrameRangeMin"
+                    :max="blenderFrameRangeMax"
+                    :disabled="saving"
+                    orientation="horizontal"
+                    decrement-icon="i-lucide-minus"
+                    increment-icon="i-lucide-plus"
+                    :ui="{ root: 'w-full' }"
+                  />
+                </UFormField>
+
+                <UFormField label="转码结束帧">
+                  <UInputNumber
+                    v-model="selectedFrameEnd"
+                    :min="blenderFrameRangeMin"
+                    :max="blenderFrameRangeMax"
+                    :disabled="saving"
+                    orientation="horizontal"
+                    decrement-icon="i-lucide-minus"
+                    increment-icon="i-lucide-plus"
+                    :ui="{ root: 'w-full' }"
+                  />
+                </UFormField>
+              </div>
               <UFormField label="任务名">
                 <UTextarea
                   v-model.trim="form.name"
@@ -234,6 +261,8 @@ const props = defineProps<{
   blenderJobFps?: number | null
   blenderJobFrameStart?: number
   blenderJobFrameEnd?: number
+  blenderJobOriginalFrameStart?: number
+  blenderJobOriginalFrameEnd?: number
   blenderJobOutputPath?: string
 }>()
 
@@ -284,12 +313,18 @@ const sourceLoading = ref(false)
 const selectedSourceFolder = ref('')
 const sourceItems = ref<SourceItem[]>([])
 const selectedSourceInputPath = ref('')
+const selectedFrameStart = ref(1)
+const selectedFrameEnd = ref(1)
 const outputPathPreview = ref<OutputPathTemplatePreview | null>(null)
 const resolvedDefaultOutputPath = ref('')
+let lastDerivedConfig: RenderJobTranscodeConfig | null = null
 let outputPathPreviewTimer: ReturnType<typeof setTimeout> | null = null
 
 const showManualFolderSourceSection = computed(() =>
   mode.value === 'submit' && !props.blenderJobId && !props.folderInputPath && !props.folderPath,
+)
+const showBlenderFrameRangeSection = computed(() =>
+  mode.value === 'submit' && Boolean(props.blenderJobId),
 )
 
 const selectedSourceOption = computed(() =>
@@ -298,8 +333,16 @@ const selectedSourceOption = computed(() =>
 const templateKind = computed<PathTemplateKind>(() =>
   props.blenderJobId ? 'blender-ffmpeg' : 'standalone-ffmpeg',
 )
-const currentFrameStart = computed(() => currentFolderSource()?.frameStart ?? props.blenderJobFrameStart ?? 1)
-const currentFrameEnd = computed(() => currentFolderSource()?.frameEnd ?? props.blenderJobFrameEnd ?? 1)
+const blenderFrameRangeMin = computed(() => props.blenderJobOriginalFrameStart ?? props.blenderJobFrameStart ?? 1)
+const blenderFrameRangeMax = computed(() => props.blenderJobOriginalFrameEnd ?? props.blenderJobFrameEnd ?? blenderFrameRangeMin.value)
+const currentFrameStart = computed(() => {
+  if (props.blenderJobId) return selectedFrameStart.value
+  return currentFolderSource()?.frameStart ?? props.blenderJobFrameStart ?? 1
+})
+const currentFrameEnd = computed(() => {
+  if (props.blenderJobId) return selectedFrameEnd.value
+  return currentFolderSource()?.frameEnd ?? props.blenderJobFrameEnd ?? 1
+})
 const hasTemplateErrors = computed(() => Boolean(outputPathPreview.value?.errors.length))
 
 function buildSourceItems(folderPath: string, groups: FolderFrameGroup[]): SourceItem[] {
@@ -395,13 +438,27 @@ function applyConfig(config: RenderJobTranscodeConfig) {
   form.preset = config.preset
 }
 
+function syncDerivedOutputFields(previousConfig: RenderJobTranscodeConfig | null, nextConfig: RenderJobTranscodeConfig) {
+  if (!previousConfig) return
+
+  const currentOutputPath = buildTranscodeOutputPath(form.outputDir, form.outputStem)
+  if (currentOutputPath === previousConfig.outputPath) {
+    form.outputDir = nextConfig.outputDir
+    form.outputStem = nextConfig.outputStem
+  }
+}
+
 async function syncForm() {
   const singleSourceItem = buildSingleSourceItem()
   selectedSourceFolder.value = singleSourceItem?.folderPath ?? ''
   sourceItems.value = singleSourceItem ? [singleSourceItem] : []
   selectedSourceInputPath.value = singleSourceItem?.value ?? ''
+  selectedFrameStart.value = props.blenderJobFrameStart ?? blenderFrameRangeMin.value
+  selectedFrameEnd.value = props.blenderJobFrameEnd ?? blenderFrameRangeMax.value
   await refreshResolvedDefaultOutputPath()
-  applyConfig(props.initialConfig ?? buildDerivedConfig())
+  const derivedConfig = buildDerivedConfig()
+  lastDerivedConfig = derivedConfig
+  applyConfig(props.initialConfig ?? derivedConfig)
   errorMessage.value = ''
 }
 
@@ -418,6 +475,8 @@ watch(
     props.blenderJobFps,
     props.blenderJobFrameStart,
     props.blenderJobFrameEnd,
+    props.blenderJobOriginalFrameStart,
+    props.blenderJobOriginalFrameEnd,
     props.blenderJobOutputPath,
     props.initialConfig,
     props.baseConfig,
@@ -546,8 +605,24 @@ watch(
   async (value, previousValue) => {
     if (!showManualFolderSourceSection.value || !value || value === previousValue) return
     await refreshResolvedDefaultOutputPath()
-    applyConfig(buildDerivedConfig())
+    const derivedConfig = buildDerivedConfig()
+    lastDerivedConfig = derivedConfig
+    applyConfig(derivedConfig)
     errorMessage.value = ''
+  },
+)
+
+watch(
+  () => [props.open, currentFrameStart.value, currentFrameEnd.value] as const,
+  async ([open, frameStart, frameEnd], [, previousFrameStart, previousFrameEnd]) => {
+    if (!open || !showBlenderFrameRangeSection.value) return
+    if (frameStart === previousFrameStart && frameEnd === previousFrameEnd) return
+
+    const previousDerivedConfig = lastDerivedConfig
+    await refreshResolvedDefaultOutputPath()
+    const nextDerivedConfig = buildDerivedConfig()
+    syncDerivedOutputFields(previousDerivedConfig, nextDerivedConfig)
+    lastDerivedConfig = nextDerivedConfig
   },
 )
 
@@ -559,11 +634,11 @@ watch(
     form.outputStem,
     selectedSourceInputPath.value,
     selectedSourceFolder.value,
+    currentFrameStart.value,
+    currentFrameEnd.value,
     props.folderPath,
     props.folderName,
     props.blenderJobBlendFile,
-    props.blenderJobFrameStart,
-    props.blenderJobFrameEnd,
     templateKind.value,
   ] as const,
   () => {
@@ -590,6 +665,16 @@ async function submit() {
   if (!name) {
     errorMessage.value = '任务名不能为空。'
     return
+  }
+  if (showBlenderFrameRangeSection.value) {
+    if (selectedFrameStart.value > selectedFrameEnd.value) {
+      errorMessage.value = '转码起始帧不能大于结束帧。'
+      return
+    }
+    if (selectedFrameStart.value < blenderFrameRangeMin.value || selectedFrameEnd.value > blenderFrameRangeMax.value) {
+      errorMessage.value = `转码帧范围必须在项目范围 ${blenderFrameRangeMin.value}–${blenderFrameRangeMax.value} 内。`
+      return
+    }
   }
   if (!outputDir) {
     errorMessage.value = '输出目录不能为空。'
@@ -636,8 +721,8 @@ async function submit() {
       source_type: props.blenderJobId ? 'blender_job' : 'folder',
       source_blender_job_id: props.blenderJobId ?? null,
       input_path: folderSource?.inputPath ?? props.blenderJobOutputPath ?? '',
-      frame_start: folderSource?.frameStart ?? props.blenderJobFrameStart ?? 1,
-      frame_end: folderSource?.frameEnd ?? props.blenderJobFrameEnd ?? 1,
+      frame_start: props.blenderJobId ? selectedFrameStart.value : (folderSource?.frameStart ?? props.blenderJobFrameStart ?? 1),
+      frame_end: props.blenderJobId ? selectedFrameEnd.value : (folderSource?.frameEnd ?? props.blenderJobFrameEnd ?? 1),
       fps,
       output_path: config.outputPath,
       crf: config.crf,

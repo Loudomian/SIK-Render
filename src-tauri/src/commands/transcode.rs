@@ -986,8 +986,9 @@ pub async fn insert_ffmpeg_job(
                 .map(str::trim)
                 .filter(|value| !value.is_empty())
                 .ok_or_else(|| String::from("source_blender_job_id is required for blender_job output templates"))?;
-            let (blend_file, render_mode) = sqlx::query_as::<_, (String, crate::queue::job::RenderMode)>(
-                "SELECT blend_file, render_mode FROM jobs WHERE id = ?",
+            let (blend_file, render_mode, original_frame_start, original_frame_end) =
+                sqlx::query_as::<_, (String, crate::queue::job::RenderMode, i32, i32)>(
+                "SELECT blend_file, render_mode, original_frame_start, original_frame_end FROM jobs WHERE id = ?",
             )
                 .bind(source_blender_job_id)
                 .fetch_optional(&state.pool)
@@ -996,6 +997,11 @@ pub async fn insert_ffmpeg_job(
                 .ok_or_else(|| format!("blender job {source_blender_job_id} was not found"))?;
             if render_mode.is_quick_mp4() {
                 return Err("quick_mp4 render jobs cannot create FFmpeg jobs".into());
+            }
+            if payload.frame_start < original_frame_start || payload.frame_end > original_frame_end {
+                return Err(format!(
+                    "transcode frame range must stay within original render range {original_frame_start}-{original_frame_end}"
+                ));
             }
             let blend_file = PathBuf::from(blend_file);
             resolve_output_path(

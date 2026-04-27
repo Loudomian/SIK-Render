@@ -44,7 +44,7 @@
                 @click="handleCancel"
               />
               <UButton
-                v-if="job.status !== 'running' && job.sourceBlenderJobId"
+                v-if="job.sourceBlenderJobId"
                 :to="`/jobs/${job.sourceBlenderJobId}`"
                 icon="i-lucide-arrow-right"
                 label="查看源任务"
@@ -102,7 +102,7 @@
                     variant="ghost"
                     size="xs"
                     square
-                    @click="openPath(job.outputPath)"
+                    @click="openPath(resolveOutputDirectory(job.outputPath))"
                   />
                 </UTooltip>
               </div>
@@ -196,7 +196,7 @@
                 color="neutral"
                 variant="subtle"
                 size="sm"
-                @click="openPath(job.outputPath)"
+                @click="openPath(resolveOutputDirectory(job.outputPath))"
               />
             </div>
           </div>
@@ -239,6 +239,7 @@
 import type { TranscodeLogEvent } from '~/types'
 import { FFMPEG_STATUS_COLOR, FFMPEG_STATUS_LABEL } from '~/composables/useFfmpegStatus'
 import { parseLogLine } from '~/utils/log-line'
+import { resolveOutputDirectory } from '~/utils/output-path'
 
 const route = useRoute()
 const router = useRouter()

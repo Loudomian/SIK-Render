@@ -12,6 +12,83 @@ use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Child;
 use tokio::sync::Mutex;
 
+async fn generate_quick_mp4_preview(
+    app: &AppHandle,
+    state: &AppState,
+    job: &RenderJob,
+    log_file_path: &std::path::Path,
+) {
+    let preview_path = match crate::app_paths::job_preview_image_path(job.job_number, &job.id) {
+        Ok(path) => path,
+        Err(error) => {
+            let _ = crate::app_paths::append_log_line(
+                log_file_path,
+                &format!("[preview] failed to resolve preview path: {error}"),
+            );
+            return;
+        }
+    };
+
+    let settings = state.cached_settings().unwrap_or_default();
+    let configured_ffmpeg = if settings.ffmpeg_executable.trim().is_empty() {
+        None
+    } else {
+        Some(std::path::PathBuf::from(settings.ffmpeg_executable.trim()))
+    };
+
+    let lookup = crate::blender::ffmpeg::find_ffmpeg_executable(
+        Some(app),
+        configured_ffmpeg.as_deref(),
+        &job.blender_executable,
+    );
+
+    let Some(ffmpeg_executable) = lookup.executable else {
+        let _ = crate::app_paths::append_log_line(
+            log_file_path,
+            "[preview] skipped preview.jpg generation because FFmpeg was not found.",
+        );
+        return;
+    };
+
+    if let Some(parent) = preview_path.parent() {
+        let _ = tokio::fs::create_dir_all(parent).await;
+    }
+
+    let status = crate::blender::ffmpeg::extract_preview_frame_command(
+        &ffmpeg_executable,
+        &job.output_path,
+        &preview_path,
+    )
+    .into_tokio_command()
+    .status()
+    .await;
+
+    match status {
+        Ok(exit_status) if exit_status.success() => {
+            let _ = crate::app_paths::append_log_line(
+                log_file_path,
+                &format!("[preview] generated {}", preview_path.display()),
+            );
+        }
+        Ok(exit_status) => {
+            let _ = tokio::fs::remove_file(&preview_path).await;
+            let _ = crate::app_paths::append_log_line(
+                log_file_path,
+                &format!(
+                    "[preview] failed to generate preview.jpg, ffmpeg exited with status {exit_status}."
+                ),
+            );
+        }
+        Err(error) => {
+            let _ = tokio::fs::remove_file(&preview_path).await;
+            let _ = crate::app_paths::append_log_line(
+                log_file_path,
+                &format!("[preview] failed to launch ffmpeg for preview generation: {error}"),
+            );
+        }
+    }
+}
+
 
 #[derive(Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -381,6 +458,11 @@ pub async fn run_job(app: AppHandle, state: AppState, job: RenderJob) -> Result<
         if quick_mp4 && job.output_path.exists() {
             let _ = tokio::fs::remove_file(&job.output_path).await;
         }
+        if quick_mp4 {
+            if let Ok(path) = crate::app_paths::job_preview_image_path(job.job_number, &job.id) {
+                let _ = tokio::fs::remove_file(path).await;
+            }
+        }
 
         let mut child = match spawn_blender(&job, actual_start, &render_settings) {
             Ok(c) => c,
@@ -620,6 +702,9 @@ pub async fn run_job(app: AppHandle, state: AppState, job: RenderJob) -> Result<
         state.active_jobs.lock().await.remove(&job.id);
 
         if exit_status.success() {
+            if quick_mp4 {
+                generate_quick_mp4_preview(&app, &state, &job, &log_file_path).await;
+            }
             persist_job_progress(
                 &state,
                 &job.id,

@@ -31,6 +31,7 @@ export interface RenderJob {
   frameEnd: number
   previewWidth: number | null
   previewHeight: number | null
+  previewImagePath: string | null
   resumeFromExisting: boolean
   status: JobStatus
   priority: number

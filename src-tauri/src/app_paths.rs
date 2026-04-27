@@ -13,6 +13,7 @@ const BLENDER_ROOT_DIR_NAME: &str = "blender";
 const FFMPEG_ROOT_DIR_NAME: &str = "ffmpeg";
 const LOG_DIR_NAME: &str = "log";
 const JOB_TOML_FILE_NAME: &str = "job.toml";
+const JOB_PREVIEW_FILE_NAME: &str = "preview.jpg";
 
 pub fn tool_root_dir() -> Result<PathBuf> {
     if cfg!(debug_assertions) {
@@ -137,6 +138,10 @@ pub fn job_log_dir(job_number: i32, job_id: &str) -> Result<PathBuf> {
     let dir = ensure_blender_job_layout(job_number, job_id)?.join(LOG_DIR_NAME);
     fs::create_dir_all(&dir).context("failed to create blender job log directory")?;
     Ok(dir)
+}
+
+pub fn job_preview_image_path(job_number: i32, job_id: &str) -> Result<PathBuf> {
+    Ok(ensure_blender_job_layout(job_number, job_id)?.join(JOB_PREVIEW_FILE_NAME))
 }
 
 pub fn ffmpeg_job_log_dir(job_number: i32, job_id: &str) -> Result<PathBuf> {

@@ -52,6 +52,13 @@ export default defineNuxtConfig({
   ],
 
   vite: {
+    vue: {
+      template: {
+        compilerOptions: {
+          isCustomElement: tag => tag.startsWith('media-'),
+        },
+      },
+    },
     cacheDir: viteCacheDir,
     optimizeDeps: {
       include: [

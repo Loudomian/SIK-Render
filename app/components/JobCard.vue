@@ -116,16 +116,27 @@
       <div
         class="job-preview"
         :class="{
-          'job-preview-empty': !displayPreviewUrl && !previewLoading,
-          'job-preview-clickable': !!displayPreviewUrl,
-          'job-preview-loading': previewLoading && !displayPreviewUrl,
+          'job-preview-empty': !displayPreviewUrl && !displayPreviewVideoUrl && !previewLoading,
+          'job-preview-clickable': !!displayPreviewUrl && !displayPreviewVideoUrl,
+          'job-preview-loading': previewLoading && !displayPreviewUrl && !displayPreviewVideoUrl,
         }"
-        :data-no-drag="displayPreviewUrl ? '' : null"
+        :data-no-drag="displayPreviewUrl || displayPreviewVideoUrl ? '' : null"
         :style="previewStyle"
-        @click="displayPreviewUrl && (lightboxOpen = true)"
+        @click="displayPreviewUrl && !displayPreviewVideoUrl && (lightboxOpen = true)"
       >
+        <video
+          v-if="displayPreviewVideoUrl"
+          ref="previewVideoEl"
+          :src="displayPreviewVideoUrl"
+          class="job-preview-image job-preview-video"
+          :class="{ 'job-preview-image-visible': previewVisible }"
+          muted
+          playsinline
+          preload="metadata"
+          @loadedmetadata="syncQuickMp4VideoFrame"
+        />
         <img
-          v-if="displayPreviewUrl"
+          v-else-if="displayPreviewUrl"
           :src="displayPreviewUrl"
           class="job-preview-image"
           :class="{ 'job-preview-image-visible': previewVisible }"
@@ -177,12 +188,14 @@ import { useRouter } from 'vue-router'
 import type { RenderJob } from '~/types'
 import { JOB_STATUS_COLOR, JOB_STATUS_LABEL } from '~/composables/useJobStatus'
 import { formatQueueOrderLabel, RENDER_QUEUE_ORDER_HIDDEN_STATUSES, resolveQueueOrder } from '~/composables/useQueueOrder'
+import { resolveOutputDirectory } from '~/utils/output-path'
+import { captureVideoPoster } from '~/utils/video-preview'
 
 const props = defineProps<{ job: RenderJob }>()
 defineEmits(['cancel', 'remove', 'retry'])
 const router = useRouter()
 const jobsStore = useJobsStore()
-const { openPath, getLastRenderedFrame, updateJobPreviewDimensions } = useTauri()
+const { openPath, getLastRenderedFrame, updateJobPreviewDimensions, pathExists } = useTauri()
 
 const STATUS_LABEL = JOB_STATUS_LABEL
 const statusColor = computed(() => JOB_STATUS_COLOR[props.job.status] ?? 'neutral')
@@ -240,18 +253,24 @@ const completedAt = computed(() => {
   return formatDateTime(props.job.finishedAt)
 })
 const previewText = computed(() => {
-  if (props.job.renderMode === 'quick_mp4') return '快速 MP4 不提供帧预览'
+  if (props.job.renderMode === 'quick_mp4') {
+    return props.job.status === 'done'
+      ? '快速 MP4 可直接预览视频'
+      : '快速 MP4 完成后可预览视频'
+  }
   if (props.job.outputFormat === 'OPEN_EXR') return 'EXR 不支持预览'
   return props.job.status === 'running' ? '等待首帧输出' : '暂无已渲染帧'
 })
 
 const previewUrl = ref<string | null>(null)
 const displayPreviewUrl = ref<string | null>(null)
+const displayPreviewVideoUrl = ref<string | null>(null)
 const previewFrame = ref<number | null>(null)
 const previewAspect = ref(aspectFromDimensions(props.job.previewWidth, props.job.previewHeight))
 const previewVisible = ref(false)
 const previewLoading = ref(false)
 const lightboxOpen = ref(false)
+const previewVideoEl = ref<HTMLVideoElement | null>(null)
 const cardInfoEl = ref<HTMLElement | null>(null)
 const cardInfoHeight = ref<number | null>(null)
 let cardInfoResizeObserver: ResizeObserver | null = null
@@ -304,7 +323,7 @@ function openDetails() {
 }
 
 function openOutput() {
-  openPath(props.job.outputPath)
+  openPath(resolveOutputDirectory(props.job.outputPath))
 }
 
 function aspectFromDimensions(width: number | null | undefined, height: number | null | undefined) {
@@ -319,10 +338,53 @@ function applyStoredPreviewAspect() {
 function resetPreview() {
   previewUrl.value = null
   displayPreviewUrl.value = null
+  displayPreviewVideoUrl.value = null
   previewFrame.value = null
   applyStoredPreviewAspect()
   previewVisible.value = false
   previewLoading.value = false
+}
+
+function syncQuickMp4VideoFrame() {
+  const video = previewVideoEl.value
+  if (!video) return
+
+  const targetTime = Number.isFinite(video.duration) && video.duration > 0
+    ? Math.max(video.duration - 0.05, 0)
+    : 0
+
+  const finalize = () => {
+    previewAspect.value = `${video.videoWidth || 16} / ${video.videoHeight || 9}`
+    previewVisible.value = true
+    previewLoading.value = false
+    video.pause()
+  }
+
+  const requestFrame = (video as HTMLVideoElement & {
+    requestVideoFrameCallback?: (callback: () => void) => number
+  }).requestVideoFrameCallback
+
+  const queueFinalize = () => {
+    if (requestFrame) {
+      requestFrame.call(video, () => finalize())
+      return
+    }
+
+    window.setTimeout(finalize, 0)
+  }
+
+  if (Math.abs(video.currentTime - targetTime) < 0.001) {
+    queueFinalize()
+    return
+  }
+
+  const handleSeeked = () => {
+    video.removeEventListener('seeked', handleSeeked)
+    queueFinalize()
+  }
+
+  video.addEventListener('seeked', handleSeeked, { once: true })
+  video.currentTime = targetTime
 }
 
 function preloadPreview(url: string) {
@@ -339,6 +401,7 @@ async function revealPreview(url: string, frame: number | null, width: number, h
 
   previewUrl.value = url
   displayPreviewUrl.value = url
+  displayPreviewVideoUrl.value = null
   previewFrame.value = frame
   previewAspect.value = `${width} / ${height}`
   void syncStoredPreviewDimensions(width, height)
@@ -382,7 +445,55 @@ async function syncStoredPreviewDimensions(width: number, height: number) {
 async function refreshPreview() {
   const token = ++previewLoadToken
   const job = props.job
-  if (job.renderMode === 'quick_mp4' || job.outputFormat === 'OPEN_EXR') {
+  if (job.renderMode === 'quick_mp4') {
+    if (job.status !== 'done' || !job.outputPath) {
+      resetPreview()
+      return
+    }
+
+    try {
+      previewLoading.value = !displayPreviewUrl.value
+
+      if (!(await pathExists(job.outputPath))) {
+        if (token !== previewLoadToken) return
+        resetPreview()
+        return
+      }
+
+      if (job.previewImagePath && await pathExists(job.previewImagePath).catch(() => false)) {
+        const previewImageUrl = `${convertFileSrc(job.previewImagePath)}?t=${Date.now()}`
+        const { width, height } = await preloadPreview(previewImageUrl)
+
+        if (token !== previewLoadToken) return
+        await revealPreview(previewImageUrl, null, width, height)
+        return
+      }
+
+      const videoUrl = `${convertFileSrc(job.outputPath)}?t=${Date.now()}`
+      const poster = await captureVideoPoster(videoUrl)
+
+      if (token !== previewLoadToken) return
+      if (!poster) {
+        previewUrl.value = null
+        displayPreviewUrl.value = null
+        displayPreviewVideoUrl.value = videoUrl
+        previewFrame.value = null
+        applyStoredPreviewAspect()
+        previewVisible.value = false
+        previewLoading.value = false
+        return
+      }
+
+      await revealPreview(poster.dataUrl, null, poster.width, poster.height)
+      return
+    } catch {
+      if (token !== previewLoadToken) return
+      resetPreview()
+      return
+    }
+  }
+
+  if (job.outputFormat === 'OPEN_EXR' || job.outputFormat === 'EXR') {
     resetPreview()
     return
   }
@@ -417,7 +528,7 @@ async function refreshPreview() {
 }
 
 watch(
-  () => [props.job.id, props.job.status, props.job.currentFrame, props.job.outputPath, props.job.outputFormat] as const,
+  () => [props.job.id, props.job.status, props.job.currentFrame, props.job.outputPath, props.job.outputFormat, props.job.previewImagePath] as const,
   () => { void refreshPreview() },
   { immediate: true },
 )

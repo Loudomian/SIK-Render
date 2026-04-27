@@ -56,6 +56,7 @@ pub struct RenderJob {
     pub frame_end: i32,
     pub preview_width: Option<i32>,
     pub preview_height: Option<i32>,
+    pub preview_image_path: Option<PathBuf>,
     pub resume_from_existing: bool,
     pub status: JobStatus,
     pub priority: i32,
@@ -111,6 +112,9 @@ pub struct DbRenderJob {
 
 impl From<DbRenderJob> for RenderJob {
     fn from(value: DbRenderJob) -> Self {
+        let preview_image_path =
+            crate::app_paths::job_preview_image_path(value.job_number, &value.id).ok();
+
         Self {
             id: value.id,
             job_number: value.job_number,
@@ -139,6 +143,7 @@ impl From<DbRenderJob> for RenderJob {
             frame_end: value.frame_end,
             preview_width: value.preview_width,
             preview_height: value.preview_height,
+            preview_image_path,
             resume_from_existing: value.resume_from_existing,
             status: value.status,
             priority: value.priority,
@@ -193,6 +198,7 @@ impl RenderJob {
             frame_end,
             preview_width: None,
             preview_height: None,
+            preview_image_path: None,
             resume_from_existing,
             status: JobStatus::Pending,
             priority,

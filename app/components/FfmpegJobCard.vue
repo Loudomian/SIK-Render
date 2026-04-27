@@ -81,7 +81,7 @@
               color="neutral"
               variant="outline"
               size="sm"
-              @click="openPath(job.outputPath)"
+              @click="openOutputDirectory"
             />
             <UButton
               :to="`/transcode/${job.id}`"
@@ -113,6 +113,7 @@
 import type { FfmpegJob } from '~/types'
 import { FFMPEG_STATUS_COLOR, FFMPEG_STATUS_LABEL } from '~/composables/useFfmpegStatus'
 import { FFMPEG_QUEUE_ORDER_HIDDEN_STATUSES, formatQueueOrderLabel, resolveQueueOrder } from '~/composables/useQueueOrder'
+import { resolveOutputDirectory } from '~/utils/output-path'
 
 const props = defineProps<{ job: FfmpegJob }>()
 
@@ -131,6 +132,10 @@ const queueOrder = computed(() => {
   return resolveQueueOrder(transcodeStore.ffmpegJobs, props.job, FFMPEG_QUEUE_ORDER_HIDDEN_STATUSES)
 })
 const orderBadgeLabel = computed(() => formatQueueOrderLabel(queueOrder.value))
+
+function openOutputDirectory() {
+  openPath(resolveOutputDirectory(props.job.outputPath))
+}
 
 function formatBytes(value: number | null) {
   if (!value || value <= 0) return '—'

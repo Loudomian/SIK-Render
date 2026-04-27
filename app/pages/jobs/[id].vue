@@ -55,6 +55,7 @@
                       size="md"
                       :loading="transcodePrimaryAction.loading"
                       :disabled="transcodePrimaryAction.disabled"
+                      :ui="{ leadingIcon: transcodePrimaryAction.spin ? 'spin' : undefined }"
                       @click="handlePrimaryTranscodeAction"
                     />
                     <UDropdownMenu
@@ -149,8 +150,10 @@
       :blender-job-blend-file="job.blendFile"
       :blender-job-name="job.name"
       :blender-job-fps="job.fps ?? null"
-      :blender-job-frame-start="job.frameStart"
-      :blender-job-frame-end="job.frameEnd"
+      :blender-job-frame-start="getEffectiveTranscodeFrameRange(job).frameStart"
+      :blender-job-frame-end="getEffectiveTranscodeFrameRange(job).frameEnd"
+      :blender-job-original-frame-start="job.originalFrameStart"
+      :blender-job-original-frame-end="job.originalFrameEnd"
       :blender-job-output-path="job.outputPath"
       @submit="handleTranscodeSubmit"
       @close="transcodeModalOpen = false"
@@ -167,8 +170,10 @@
       :blender-job-blend-file="job.blendFile"
       :blender-job-name="job.name"
       :blender-job-fps="job.fps ?? null"
-      :blender-job-frame-start="job.frameStart"
-      :blender-job-frame-end="job.frameEnd"
+      :blender-job-frame-start="getEffectiveTranscodeFrameRange(job).frameStart"
+      :blender-job-frame-end="getEffectiveTranscodeFrameRange(job).frameEnd"
+      :blender-job-original-frame-start="job.originalFrameStart"
+      :blender-job-original-frame-end="job.originalFrameEnd"
       :blender-job-output-path="job.outputPath"
       @save-settings="handleTranscodeSettingsSave"
       @close="transcodeSettingsModalOpen = false"
@@ -394,7 +399,7 @@
               <div class="surface-panel path-row detail-path-row">
                 <span class="path-text" :title="job.outputPath">{{ job.outputPath }}</span>
                 <UTooltip text="打开输出目录" :content="{ side: 'top', sideOffset: 6 }">
-                  <UButton icon="i-lucide-external-link" color="neutral" variant="ghost" size="xs" square @click="openPath(job.outputPath)" />
+                  <UButton icon="i-lucide-external-link" color="neutral" variant="ghost" size="xs" square @click="openPath(resolveOutputDirectory(job.outputPath))" />
                 </UTooltip>
               </div>
             </div>
@@ -457,25 +462,54 @@
         </UCard>
 
         <UCard variant="subtle" :ui="{ root: 'detail-section detail-full preview-card', body: 'detail-card-body' }">
-        <h2 class="detail-card-title">帧预览</h2>
-        <div
-          class="surface-panel preview-thumb-wrap"
-          :class="{ 'preview-thumb-clickable': !!previewUrl }"
-          :style="previewStyle"
-          @click="previewUrl && (lightboxOpen = true)"
-        >
-          <img v-if="previewUrl" :src="previewUrl" class="preview-thumb" alt="last frame" />
-          <div v-else class="preview-thumb-empty">
-            <UIcon name="i-lucide-image" class="preview-thumb-icon" />
-            <span>{{ previewPlaceholderText }}</span>
+        <div class="preview-card-head">
+          <h2 class="detail-card-title preview-card-title">{{ previewCardTitle }}</h2>
+          <div v-if="hasFramePreview && hasVideoPreview" class="preview-switch">
+            <UButton
+              :icon="activePreviewTab === 'video' ? 'i-lucide-image' : 'i-lucide-clapperboard'"
+              :label="activePreviewTab === 'video' ? '帧预览' : '视频预览'"
+              color="neutral"
+              variant="subtle"
+              size="sm"
+              @click="togglePreviewTab"
+            />
           </div>
-          <UBadge
-            v-if="previewFrame && previewUrl"
-            :label="`第 ${previewFrame} 帧`"
-            color="neutral"
-            variant="subtle"
-            class="preview-frame-label"
-          />
+        </div>
+        <template v-if="activePreviewTab === 'video' && hasVideoPreview">
+          <div class="surface-panel preview-thumb-wrap preview-video-wrap">
+            <VideoPreviewPlayer
+              :src="videoPreviewUrl!"
+              :poster="videoPreviewPosterUrl"
+              :title="job.name"
+            />
+          </div>
+        </template>
+        <template v-else-if="hasFramePreview">
+          <div
+            class="surface-panel preview-thumb-wrap"
+            :class="{ 'preview-thumb-clickable': !!previewUrl }"
+            :style="previewStyle"
+            @click="previewUrl && (lightboxOpen = true)"
+          >
+            <img v-if="previewUrl" :src="previewUrl" class="preview-thumb" alt="last frame" />
+            <div v-else class="preview-thumb-empty">
+              <UIcon name="i-lucide-image" class="preview-thumb-icon" />
+              <span>{{ previewPlaceholderText }}</span>
+            </div>
+            <UBadge
+              v-if="previewFrame && previewUrl"
+              :label="`第 ${previewFrame} 帧`"
+              color="neutral"
+              variant="subtle"
+              class="preview-frame-label"
+            />
+          </div>
+        </template>
+        <div v-else class="surface-panel preview-thumb-wrap">
+          <div class="preview-thumb-empty">
+            <UIcon :name="hasVideoPreview ? 'i-lucide-video' : 'i-lucide-image-off'" class="preview-thumb-icon" />
+            <span>{{ previewUnavailableText }}</span>
+          </div>
         </div>
         </UCard>
 
@@ -556,6 +590,8 @@ import { JOB_STATUS_COLOR, JOB_STATUS_LABEL } from '~/composables/useJobStatus'
 import { formatQueueOrderLabel, RENDER_QUEUE_ORDER_HIDDEN_STATUSES, resolveQueueOrder } from '~/composables/useQueueOrder'
 import { buildTranscodeOutputPath, normalizeTranscodeDirectory, splitTranscodeOutputPath } from '~/composables/useTranscodeConfig'
 import { parseLogLine } from '~/utils/log-line'
+import { resolveOutputDirectory } from '~/utils/output-path'
+import { captureVideoPoster } from '~/utils/video-preview'
 
 const route = useRoute()
 const router = useRouter()
@@ -565,7 +601,7 @@ const transcodeStore = useTranscodeStore()
 
 const settingsStore = useSettingsStore()
 
-const { openPath, inspectRenderedFrames, getLastRenderedFrame, getJobLogSummary, getJobLogs, updateJobPreviewDimensions, previewOutputPathTemplate } = useTauri()
+const { openPath, inspectRenderedFrames, getLastRenderedFrame, getJobLogSummary, getJobLogs, updateJobPreviewDimensions, previewOutputPathTemplate, pathExists } = useTauri()
 const { onProgress, onJobUpdated, onLog, onFfmpegJobUpdated } = useRenderEvents()
 const STATUS_LABEL = JOB_STATUS_LABEL
 
@@ -582,6 +618,9 @@ const logLines = computed(() =>
 )
 const displayJobLogs = computed(() => logLines.value.map(line => parseLogLine(line)))
 const relatedFfmpegJobs = computed(() => transcodeStore.getRelatedJobs(jobId.value))
+const completedRelatedFfmpegJobs = computed(() =>
+  relatedFfmpegJobs.value.filter(entry => entry.status === 'done'),
+)
 const primaryTranscodeJob = computed(() =>
   relatedFfmpegJobs.value.find(entry => entry.status === 'running')
   ?? relatedFfmpegJobs.value.find(entry => entry.status === 'pending')
@@ -745,6 +784,7 @@ const transcodePrimaryAction = computed(() => {
       color: 'neutral' as const,
       loading: false,
       disabled: true,
+      spin: false,
     }
   }
 
@@ -756,6 +796,7 @@ const transcodePrimaryAction = computed(() => {
         color: 'neutral' as const,
         loading: false,
         disabled: true,
+        spin: false,
       }
     }
 
@@ -765,23 +806,25 @@ const transcodePrimaryAction = computed(() => {
       color: 'neutral' as const,
       loading: false,
       disabled: currentJob.status === 'running',
+      spin: false,
     }
   }
 
   const statusMap = {
-    pending: { icon: 'i-lucide-loader-circle', color: 'warning' as const },
-    running: { icon: 'i-lucide-loader-circle', color: 'info' as const },
-    done: { icon: 'i-lucide-circle-check-big', color: 'success' as const },
-    failed: { icon: 'i-lucide-triangle-alert', color: 'error' as const },
-    cancelled: { icon: 'i-lucide-square', color: 'warning' as const },
+    pending: { label: '排队转码', icon: 'i-lucide-loader-circle', color: 'warning' as const, spin: true },
+    running: { label: '转码中', icon: 'i-lucide-loader-circle', color: 'info' as const, spin: true },
+    done: { label: '查看转码', icon: 'i-lucide-circle-check-big', color: 'success' as const, spin: false },
+    failed: { label: '查看转码', icon: 'i-lucide-triangle-alert', color: 'error' as const, spin: false },
+    cancelled: { label: '查看转码', icon: 'i-lucide-square', color: 'warning' as const, spin: false },
   }[currentTranscodeJob.status]
 
   return {
-    label: '查看转码',
+    label: statusMap.label,
     icon: statusMap.icon,
     color: statusMap.color,
     loading: false,
     disabled: false,
+    spin: statusMap.spin,
   }
 })
 
@@ -877,14 +920,38 @@ const warnings = computed(() => {
 })
 
 // ── Frame preview ──────────────────────────────────────────────────────────
+const activePreviewTab = ref<'frame' | 'video'>('frame')
 const previewUrl = ref<string | null>(null)
 const previewFrame = ref<number | null>(null)
 const previewAspect = ref<string | null>(null)
 const lightboxOpen = ref(false)
+const videoPreviewUrl = ref<string | null>(null)
+const videoPreviewPosterUrl = ref<string | null>(null)
+const videoPreviewSourcePath = ref<string | null>(null)
+let videoPreviewPosterToken = 0
+const hasFramePreview = computed(() =>
+  Boolean(job.value) && !isQuickMp4Job.value && job.value?.outputFormat !== 'OPEN_EXR' && job.value?.outputFormat !== 'EXR',
+)
+const hasVideoPreview = computed(() => Boolean(videoPreviewUrl.value))
+const previewCardTitle = computed(() => {
+  if (isQuickMp4Job.value || (activePreviewTab.value === 'video' && hasVideoPreview.value)) return '视频预览'
+  return '帧预览'
+})
 const previewPlaceholderText = computed(() => {
-  if (isQuickMp4Job.value) return '快速 MP4 不提供帧预览'
+  if (isQuickMp4Job.value) return '快速 MP4 使用视频预览'
   if (job.value?.outputFormat === 'OPEN_EXR' || job.value?.outputFormat === 'EXR') return 'EXR 不支持预览'
   return '暂无已渲染帧'
+})
+const previewUnavailableText = computed(() => {
+  if (isQuickMp4Job.value) {
+    return job.value?.status === 'done'
+      ? '当前视频还不可播放，请确认输出文件仍存在。'
+      : '快速 MP4 渲染完成后可在这里播放视频，并显示末帧封面。'
+  }
+  if (completedRelatedFfmpegJobs.value.length > 0) {
+    return '已找到转码记录，但视频文件当前不可用。'
+  }
+  return '暂无可播放视频，请先完成转码。'
 })
 const previewStyle = computed(() =>
   previewAspect.value ? { '--preview-aspect': previewAspect.value } : undefined,
@@ -908,6 +975,61 @@ function aspectFromDimensions(width: number | null | undefined, height: number |
 
 function applyStoredPreviewAspect() {
   previewAspect.value = aspectFromDimensions(job.value?.previewWidth, job.value?.previewHeight)
+}
+
+async function refreshVideoPreview() {
+  const currentJob = job.value
+  const token = ++videoPreviewPosterToken
+
+  const candidates: string[] = []
+  if (currentJob?.renderMode === 'quick_mp4' && currentJob.status === 'done') {
+    candidates.push(currentJob.outputPath)
+  } else {
+    candidates.push(...completedRelatedFfmpegJobs.value.map(entry => entry.outputPath))
+  }
+
+  let resolvedPath: string | null = null
+  for (const candidate of candidates) {
+    if (!candidate) continue
+    try {
+      if (await pathExists(candidate)) {
+        resolvedPath = candidate
+        break
+      }
+    } catch {
+      // Ignore transient filesystem checks and keep looking.
+    }
+  }
+
+  if (token !== videoPreviewPosterToken) return
+
+  if (!resolvedPath) {
+    videoPreviewSourcePath.value = null
+    videoPreviewUrl.value = null
+    videoPreviewPosterUrl.value = null
+    return
+  }
+
+  const url = `${convertFileSrc(resolvedPath)}?t=${Date.now()}`
+  videoPreviewSourcePath.value = resolvedPath
+  videoPreviewUrl.value = url
+  videoPreviewPosterUrl.value = null
+
+  if (currentJob?.previewImagePath) {
+    try {
+      if (await pathExists(currentJob.previewImagePath)) {
+        if (token !== videoPreviewPosterToken) return
+        videoPreviewPosterUrl.value = `${convertFileSrc(currentJob.previewImagePath)}?t=${Date.now()}`
+        return
+      }
+    } catch {
+      // Fall through to runtime capture when the stored preview is unavailable.
+    }
+  }
+
+  const poster = await captureVideoPoster(url).catch(() => null)
+  if (token !== videoPreviewPosterToken) return
+  videoPreviewPosterUrl.value = poster?.dataUrl ?? null
 }
 
 async function preloadPreview(url: string) {
@@ -968,6 +1090,41 @@ async function refreshPreview() {
     previewFrame.value = null
     applyStoredPreviewAspect()
   }
+}
+
+watch(
+  () => [
+    job.value?.id,
+    job.value?.status,
+    job.value?.renderMode,
+    job.value?.outputPath,
+    job.value?.previewImagePath,
+    ...completedRelatedFfmpegJobs.value.map(entry => `${entry.id}:${entry.status}:${entry.outputPath}:${entry.finishedAt ?? 0}`),
+  ] as const,
+  () => {
+    void refreshVideoPreview()
+  },
+  { immediate: true },
+)
+
+watch(
+  [hasFramePreview, hasVideoPreview],
+  ([frameAvailable, videoAvailable]) => {
+    if (videoAvailable && (!frameAvailable || activePreviewTab.value === 'video')) {
+      activePreviewTab.value = 'video'
+      return
+    }
+
+    if (frameAvailable) {
+      activePreviewTab.value = 'frame'
+    }
+  },
+  { immediate: true },
+)
+
+function togglePreviewTab() {
+  if (!hasFramePreview.value || !hasVideoPreview.value) return
+  activePreviewTab.value = activePreviewTab.value === 'video' ? 'frame' : 'video'
 }
 
 watch(

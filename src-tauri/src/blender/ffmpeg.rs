@@ -167,6 +167,24 @@ pub fn concat_to_mp4_command(
         .arg("+faststart")
 }
 
+pub fn extract_preview_frame_command(
+    ffmpeg_executable: &Path,
+    input_file: &Path,
+    output_file: &Path,
+) -> FfmpegCliCommand {
+    FfmpegCliCommand::new(ffmpeg_executable, output_file)
+        .arg_before("-hide_banner")
+        .arg_before("-y")
+        .input_arg("-sseof")
+        .input_arg("-0.05")
+        .input_arg("-i")
+        .input_arg(input_file.as_os_str().to_os_string())
+        .arg("-frames:v")
+        .arg("1")
+        .arg("-q:v")
+        .arg("2")
+}
+
 fn binary_candidates_in(dir: &Path) -> Vec<PathBuf> {
     ffmpeg_binary_names()
         .iter()
