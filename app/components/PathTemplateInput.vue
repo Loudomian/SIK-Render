@@ -648,6 +648,11 @@ function handlePaste(event: ClipboardEvent) {
   event.preventDefault()
   if (props.disabled) return
   const text = event.clipboardData?.getData('text/plain') ?? ''
+  const selection = getSelectionOffsets()
+  if (selection) {
+    replaceRange(selection.start, selection.end, text)
+    return
+  }
   const offset = getCaretOffset()
   replaceRange(offset, offset, text)
 }

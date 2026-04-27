@@ -25,13 +25,28 @@
             </div>
             <div class="queue-hero-actions-stack">
               <div class="page-hero-actions queue-hero-actions">
-                <UButton
-                  icon="i-lucide-plus"
-                  label="新建任务"
-                  color="primary"
-                  variant="solid"
-                  @click="openCreateModal"
-                />
+                <UFieldGroup size="md">
+                  <UButton
+                    icon="i-lucide-plus"
+                    label="新建任务"
+                    color="primary"
+                    variant="solid"
+                    @click="openCreateModal"
+                  />
+                  <UDropdownMenu
+                    :items="transcodeQueueActionItems"
+                    arrow
+                    :content="{ side: 'bottom', align: 'end', sideOffset: 8 }"
+                  >
+                    <UButton
+                      icon="i-lucide-chevron-down"
+                      color="neutral"
+                      variant="outline"
+                      square
+                      :disabled="clearingCompletedTranscodeJobs"
+                    />
+                  </UDropdownMenu>
+                </UFieldGroup>
               </div>
             </div>
           </div>
@@ -130,6 +145,42 @@
       </template>
     </UModal>
 
+    <UModal
+      :open="showClearCompletedConfirm"
+      :close="false"
+      title="清理已完成任务"
+      :ui="{ content: 'job-modal-content' }"
+      @update:open="v => { if (!v) showClearCompletedConfirm = false }"
+    >
+      <template #body>
+        <div class="modal-stack">
+          <p class="modal-copy">
+            确定清理当前所有
+            <strong>{{ doneJobs.length }}</strong>
+            个已完成转码任务？此操作不可撤销。
+          </p>
+          <div class="modal-actions">
+            <UButton
+              icon="i-lucide-x"
+              label="取消"
+              color="warning"
+              variant="outline"
+              :disabled="clearingCompletedTranscodeJobs"
+              @click="showClearCompletedConfirm = false"
+            />
+            <UButton
+              icon="i-lucide-trash-2"
+              label="确认清理"
+              color="error"
+              variant="outline"
+              :loading="clearingCompletedTranscodeJobs"
+              @click="confirmClearCompletedTranscodeJobs"
+            />
+          </div>
+        </div>
+      </template>
+    </UModal>
+
     <TranscodeSubmitModal
       :open="transcodeModalOpen"
       :folder-path="activePendingFolder?.path"
@@ -146,7 +197,7 @@
 
 <script setup lang="ts">
 import { getCurrentWindow } from '@tauri-apps/api/window'
-import type { TabsItem } from '@nuxt/ui'
+import type { DropdownMenuItem, TabsItem } from '@nuxt/ui'
 import type { AddFfmpegJobPayload, FfmpegJob } from '~/types'
 
 const router = useRouter()
@@ -159,6 +210,8 @@ const { onTranscodeProgress, onTranscodeLog, onFfmpegJobUpdated } = useRenderEve
 const activeTab = ref<'all' | 'queue' | 'done' | 'error'>('all')
 const isDragging = ref(false)
 const transcodeModalOpen = ref(false)
+const clearingCompletedTranscodeJobs = ref(false)
+const showClearCompletedConfirm = ref(false)
 const deleteConfirmJob = ref<FfmpegJob | null>(null)
 const pendingFolderQueue = ref<Array<{
   path: string
@@ -231,6 +284,16 @@ const emptyTabToneClass = computed(() => {
       return 'queue-empty-tone-all'
   }
 })
+const transcodeQueueActionItems = computed<DropdownMenuItem[][]>(() => [[
+  {
+    label: '清理已完成',
+    icon: 'i-lucide-trash-2',
+    disabled: clearingCompletedTranscodeJobs.value || doneJobs.value.length === 0,
+    onSelect: () => {
+      showClearCompletedConfirm.value = true
+    },
+  },
+]])
 const tabItems = computed<TabsItem[]>(() => [
   {
     label: '全部',
@@ -492,6 +555,31 @@ function handlePointerDown(job: FfmpegJob, event: PointerEvent) {
   window.addEventListener('pointermove', handlePointerMove)
   window.addEventListener('pointerup', handlePointerUp)
   window.addEventListener('pointercancel', handlePointerCancel)
+}
+
+async function confirmClearCompletedTranscodeJobs() {
+  if (clearingCompletedTranscodeJobs.value || doneJobs.value.length === 0) return
+
+  clearingCompletedTranscodeJobs.value = true
+  try {
+    const { removed, failed } = await transcodeStore.clearCompletedJobs()
+    if (removed > 0) {
+      toast.add({
+        title: '已清理完成任务',
+        description: failed > 0 ? `成功清理 ${removed} 个，另有 ${failed} 个失败。` : `成功清理 ${removed} 个已完成任务。`,
+        color: failed > 0 ? 'warning' : 'success',
+      })
+    } else if (failed > 0) {
+      toast.add({
+        title: '清理完成任务失败',
+        description: `共有 ${failed} 个任务未能删除。`,
+        color: 'error',
+      })
+    }
+  } finally {
+    showClearCompletedConfirm.value = false
+    clearingCompletedTranscodeJobs.value = false
+  }
 }
 
 async function handleCancel(id: string) {

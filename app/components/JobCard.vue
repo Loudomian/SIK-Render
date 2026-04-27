@@ -35,8 +35,15 @@
           <div class="job-meta">
             <span class="job-meta-item">
               <span class="job-meta-label">帧范围</span>
-              <strong>{{ job.frameStart }}–{{ job.frameEnd }}</strong>
+              <strong>{{ displayFrameRange }}</strong>
             </span>
+            <template v-if="showCurrentExecutionRange">
+              <span class="job-meta-divider" aria-hidden="true" />
+              <span class="job-meta-item">
+                <span class="job-meta-label">当前执行</span>
+                <strong>{{ currentExecutionRange }}</strong>
+              </span>
+            </template>
             <span class="job-meta-divider" aria-hidden="true" />
             <span class="job-meta-item">
               <span class="job-meta-label">渲染时间</span>
@@ -163,6 +170,7 @@ import { computed } from 'vue'
 import { useRouter } from 'vue-router'
 import type { RenderJob } from '~/types'
 import { JOB_STATUS_COLOR, JOB_STATUS_LABEL } from '~/composables/useJobStatus'
+import { formatQueueOrderLabel, RENDER_QUEUE_ORDER_HIDDEN_STATUSES, resolveQueueOrder } from '~/composables/useQueueOrder'
 
 const props = defineProps<{ job: RenderJob }>()
 defineEmits(['cancel', 'remove', 'retry'])
@@ -189,18 +197,20 @@ const retryButtonTooltip = computed(() => {
   return '重新渲染这个任务'
 })
 const queueOrder = computed(() => {
-  if (props.job.status === 'running' || props.job.status === 'done') return null
-  const queue = jobsStore.jobs.filter(job => job.status !== 'running' && job.status !== 'done')
-  const index = queue.findIndex(job => job.id === props.job.id)
-  return index === -1 ? null : index + 1
+  return resolveQueueOrder(jobsStore.jobs, props.job, RENDER_QUEUE_ORDER_HIDDEN_STATUSES)
 })
-const orderBadgeLabel = computed(() => queueOrder.value != null ? `顺序 ${queueOrder.value}` : null)
+const orderBadgeLabel = computed(() => formatQueueOrderLabel(queueOrder.value))
 
 const renderTime = computed(() => {
   const job = props.job
   if (!job.startedAt) return '未开始'
   return formatDuration((job.finishedAt ?? Date.now()) - job.startedAt)
 })
+const displayFrameRange = computed(() => `${props.job.originalFrameStart}–${props.job.originalFrameEnd}`)
+const currentExecutionRange = computed(() => `${props.job.frameStart}–${props.job.frameEnd}`)
+const showCurrentExecutionRange = computed(() =>
+  props.job.originalFrameStart !== props.job.frameStart || props.job.originalFrameEnd !== props.job.frameEnd,
+)
 const finishedAtLabel = computed(() => {
   switch (props.job.status) {
     case 'done':

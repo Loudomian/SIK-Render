@@ -31,6 +31,8 @@ const tauriApi = {
       transcode_output_path_override: string | null
       transcode_crf_override: number | null
       transcode_preset_override: string | null
+      transcode_frame_start_override: number | null
+      transcode_frame_end_override: number | null
     },
   ) =>
     invoke<RenderJob>('update_job_transcode_settings', { payload }),

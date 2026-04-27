@@ -2,6 +2,8 @@ import { defineStore } from 'pinia'
 import { open } from '@tauri-apps/plugin-dialog'
 import type { AppSettings, BlenderInstall } from '~/types'
 
+const THEME_STORAGE_KEY = 'sik-render-theme'
+
 export const useSettingsStore = defineStore('settings', () => {
   const settings = ref<AppSettings>({
     defaultBlender: '',
@@ -10,7 +12,7 @@ export const useSettingsStore = defineStore('settings', () => {
     transcodeCrf: 18,
     transcodePreset: 'medium',
     ffmpegMaxConcurrent: 2,
-    renderOutputPathTemplate: './{blendFileName}{frameStart}-{frameEnd}/{blendFileName}_{frame}',
+    renderOutputPathTemplate: './{blendFileName}_{frameStart}-{frameEnd}/{blendFileName}_{frame}',
     blenderTranscodeOutputPathTemplate: './转码/{blendFileName}_{frameStart}-{frameEnd}.mp4',
     standaloneTranscodeOutputPathTemplate: '../转码/{folderName}_{frameStart}-{frameEnd}.mp4',
     pngColorMode: 'RGB',
@@ -27,6 +29,15 @@ export const useSettingsStore = defineStore('settings', () => {
   })
   const blenderVersions = ref<BlenderInstall[]>([])
   const { getSettings, saveSettings, addBlenderByPath, getBlenderVersions } = useTauri()
+
+  function persistThemePreference(theme: AppSettings['theme']) {
+    if (!import.meta.client) return
+    try {
+      window.localStorage.setItem(THEME_STORAGE_KEY, theme)
+    } catch {
+      // Ignore storage failures and fall back to settings file on next launch.
+    }
+  }
 
   function mergeInstalls(extra: BlenderInstall[]): BlenderInstall[] {
     const seen = new Set<string>()
@@ -45,6 +56,7 @@ export const useSettingsStore = defineStore('settings', () => {
       extraBlenderPaths: loaded.extraBlenderPaths ?? [],
       excludedBlenderPaths: loaded.excludedBlenderPaths ?? [],
     }
+    persistThemePreference(settings.value.theme)
     blenderVersions.value = mergeInstalls(await getBlenderVersions())
   }
 
@@ -126,12 +138,14 @@ export const useSettingsStore = defineStore('settings', () => {
   async function setTheme(theme: AppSettings['theme']) {
     if (settings.value.theme === theme) return
     settings.value.theme = theme
+    persistThemePreference(theme)
     await saveSettings(settings.value)
   }
 
   async function toggleTheme() {
     const nextTheme: AppSettings['theme'] = settings.value.theme === 'dark' ? 'light' : 'dark'
     settings.value.theme = nextTheme
+    persistThemePreference(nextTheme)
     await saveSettings(settings.value)
     return nextTheme
   }

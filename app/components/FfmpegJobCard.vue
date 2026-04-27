@@ -112,6 +112,7 @@
 <script setup lang="ts">
 import type { FfmpegJob } from '~/types'
 import { FFMPEG_STATUS_COLOR, FFMPEG_STATUS_LABEL } from '~/composables/useFfmpegStatus'
+import { FFMPEG_QUEUE_ORDER_HIDDEN_STATUSES, formatQueueOrderLabel, resolveQueueOrder } from '~/composables/useQueueOrder'
 
 const props = defineProps<{ job: FfmpegJob }>()
 
@@ -127,12 +128,9 @@ const statusLabel = computed(() => FFMPEG_STATUS_LABEL[props.job.status])
 const statusColor = computed(() => FFMPEG_STATUS_COLOR[props.job.status])
 const totalFrames = computed(() => props.job.frameEnd - props.job.frameStart + 1)
 const queueOrder = computed(() => {
-  if (props.job.status === 'running' || props.job.status === 'done') return null
-  const queue = transcodeStore.ffmpegJobs.filter(job => job.status !== 'running' && job.status !== 'done')
-  const index = queue.findIndex(job => job.id === props.job.id)
-  return index === -1 ? null : index + 1
+  return resolveQueueOrder(transcodeStore.ffmpegJobs, props.job, FFMPEG_QUEUE_ORDER_HIDDEN_STATUSES)
 })
-const orderBadgeLabel = computed(() => queueOrder.value != null ? `顺序 ${queueOrder.value}` : null)
+const orderBadgeLabel = computed(() => formatQueueOrderLabel(queueOrder.value))
 
 function formatBytes(value: number | null) {
   if (!value || value <= 0) return '—'

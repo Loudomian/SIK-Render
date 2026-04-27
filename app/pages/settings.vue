@@ -172,8 +172,8 @@
         <section class="surface-panel settings-field-panel">
           <div class="settings-field-copy">
             <p class="settings-field-title">当前版本</p>
+            <p class="settings-version-value">v{{ appVersion }}</p>
           </div>
-          <p class="settings-version-value">v{{ appVersion }}</p>
         </section>
       </div>
     </section>

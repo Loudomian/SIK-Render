@@ -184,100 +184,162 @@
     >
       <template #body>
         <div class="modal-stack">
-          <p class="modal-copy">
-            <template v-if="retryExistingCount > 0">
-              检测到当前输出范围已存在
-              <strong>{{ retryExistingCount }} 帧</strong>
-              <template v-if="retryFrameStatus?.lastFrame != null">
-                ，当前最后一帧为 <strong>{{ retryFrameStatus.lastFrame }}</strong>
-              </template>
-              。
-            </template>
-            <template v-else>
-              当前任务帧段里还没有检测到已渲染输出，你可以直接重开、继续，或改成指定区间渲染。
-            </template>
-          </p>
-          <div class="choice-grid retry-choice-grid">
-            <UCard variant="subtle" class="choice-card" :ui="{ body: 'choice-card-body' }">
-              <div class="choice-card-head">
-                <p class="choice-card-mode">覆盖模式</p>
-                <h3 class="choice-card-title">重新开始渲染</h3>
+          <div class="transcode-submit-stack retry-modal-stack">
+            <div class="choice-grid retry-choice-grid">
+              <section class="surface-panel transcode-submit-section retry-option-section retry-option-section-wide">
+                <div class="transcode-submit-head">
+                  <div>
+                    <p class="choice-card-mode">整体片段</p>
+                    <h3 class="choice-card-title">重跑整个片段</h3>
+                  </div>
+                </div>
+                <p class="choice-card-desc">
+                  处理完整片段 <span class="choice-card-accent">{{ retryFullRangeLabel }}</span>。
+                </p>
+                <div class="choice-card-toggle-group">
+                  <UButton
+                    icon="i-lucide-chevrons-right"
+                    label="整段续跑"
+                    color="neutral"
+                    variant="outline"
+                    size="sm"
+                    class="choice-card-toggle-button"
+                    :loading="retrySubmittingMode === 'continue'"
+                    :disabled="retrySubmittingMode !== null || job?.status === 'done'"
+                    @mouseenter="retryFullRangePreviewMode = 'continue'"
+                    @mouseleave="clearRetryPreviewOnLeave($event, 'full')"
+                    @focus="retryFullRangePreviewMode = 'continue'"
+                    @blur="clearRetryPreviewOnLeave($event, 'full')"
+                    @click="confirmRetryContinue"
+                  />
+                  <UButton
+                    icon="i-lucide-refresh-ccw"
+                    label="整段覆盖"
+                    color="neutral"
+                    variant="outline"
+                    size="sm"
+                    class="choice-card-toggle-button"
+                    :loading="retrySubmittingMode === 'restart'"
+                    :disabled="retrySubmittingMode !== null"
+                    @mouseenter="retryFullRangePreviewMode = 'restart'"
+                    @mouseleave="clearRetryPreviewOnLeave($event, 'full')"
+                    @focus="retryFullRangePreviewMode = 'restart'"
+                    @blur="clearRetryPreviewOnLeave($event, 'full')"
+                    @click="confirmRetryFromStart"
+                  />
+                </div>
+                <div class="choice-card-note-stack">
+                  <p class="choice-card-inline-note">{{ retryFullRangeSummary }}</p>
+                </div>
+              </section>
+
+              <section class="surface-panel transcode-submit-section retry-option-section retry-option-section-wide">
+                <div class="transcode-submit-head">
+                  <div>
+                    <p class="choice-card-mode">指定区间</p>
+                    <h3 class="choice-card-title">只重跑需要修复的部分</h3>
+                  </div>
+                </div>
+                <p class="choice-card-desc">
+                  只处理你填写的帧范围，适合补帧或局部返修。
+                </p>
+                <div class="choice-card-fields">
+                  <UFormField label="起始帧">
+                    <UInputNumber v-model="retryCustomStart" :min="1" />
+                  </UFormField>
+                  <UFormField label="结束帧">
+                    <UInputNumber v-model="retryCustomEnd" :min="1" />
+                  </UFormField>
+                </div>
+                <div class="choice-card-toggle-group">
+                  <UButton
+                    icon="i-lucide-chevrons-right"
+                    label="按区间续跑"
+                    color="neutral"
+                    variant="outline"
+                    size="sm"
+                    class="choice-card-toggle-button"
+                    :loading="retrySubmittingMode === 'range-continue'"
+                    :disabled="retrySubmittingMode !== null"
+                    @mouseenter="retryCustomPreviewMode = 'continue'"
+                    @mouseleave="clearRetryPreviewOnLeave($event, 'custom')"
+                    @focus="retryCustomPreviewMode = 'continue'"
+                    @blur="clearRetryPreviewOnLeave($event, 'custom')"
+                    @click="confirmRetryCustomRange(true)"
+                  />
+                  <UButton
+                    icon="i-lucide-refresh-ccw"
+                    label="按区间覆盖"
+                    color="neutral"
+                    variant="outline"
+                    size="sm"
+                    class="choice-card-toggle-button"
+                    :loading="retrySubmittingMode === 'range-restart'"
+                    :disabled="retrySubmittingMode !== null"
+                    @mouseenter="retryCustomPreviewMode = 'restart'"
+                    @mouseleave="clearRetryPreviewOnLeave($event, 'custom')"
+                    @focus="retryCustomPreviewMode = 'restart'"
+                    @blur="clearRetryPreviewOnLeave($event, 'custom')"
+                    @click="confirmRetryCustomRange(false)"
+                  />
+                </div>
+                <div class="choice-card-note-stack">
+                  <p class="choice-card-inline-note">{{ retryCustomActionDescription }}</p>
+                  <p v-if="retryCustomInspectLoading" class="choice-card-inline-note">正在检查所选区间…</p>
+                  <p v-else-if="retryCustomRangeSummary" class="choice-card-inline-note">{{ retryCustomRangeSummary }}</p>
+                </div>
+                <UAlert
+                  v-if="retryActionError"
+                  color="error"
+                  variant="subtle"
+                  :description="retryActionError"
+                />
+              </section>
+            </div>
+
+            <section v-if="job && transcodeSupported" class="surface-panel transcode-submit-section retry-transcode-panel">
+              <div class="retry-transcode-head">
+                <p class="choice-card-mode">自动转码</p>
+                <h3 class="choice-card-title">补渲后自动创建转码任务</h3>
               </div>
               <p class="choice-card-desc">
-                从第 <span class="choice-card-accent">{{ job?.frameStart }}</span> 帧开始渲染，直接覆盖
-                <span class="choice-card-accent">{{ job?.frameStart }}–{{ job?.frameEnd }}</span>
-                范围内的同名帧
+                决定这次补渲结束后，是否自动生成 FFmpeg Job。
               </p>
-              <UButton
-                color="neutral"
-                variant="outline"
-                label="从头覆盖"
-                class="choice-card-action"
-                :loading="retrySubmittingMode === 'restart'"
-                :disabled="retrySubmittingMode !== null"
-                @click="confirmRetryFromStart"
-              />
-            </UCard>
-
-            <UCard variant="subtle" class="choice-card" :ui="{ body: 'choice-card-body' }">
-              <div class="choice-card-head">
-                <p class="choice-card-mode">续跑模式</p>
-                <h3 class="choice-card-title">从最后一帧继续</h3>
-              </div>
-              <p class="choice-card-desc">
-                <template v-if="job && retryFrameStatus && retryFrameStatus.nextFrame <= job.frameEnd">
-                  从第 <span class="choice-card-accent">{{ retryFrameStatus.nextFrame }}</span> 帧继续渲染
-                </template>
-                <template v-else>
-                  当前帧段已完整存在，继续将直接完成
-                </template>
-              </p>
-              <UButton
-                color="neutral"
-                variant="outline"
-                label="继续渲染"
-                class="choice-card-action"
-                :loading="retrySubmittingMode === 'continue'"
-                :disabled="retrySubmittingMode !== null"
-                @click="confirmRetryContinue"
-              />
-            </UCard>
-
-            <UCard variant="subtle" class="choice-card" :ui="{ body: 'choice-card-body' }">
-              <div class="choice-card-head">
-                <p class="choice-card-mode">区间模式</p>
-                <h3 class="choice-card-title">指定区间渲染</h3>
-              </div>
-              <div class="choice-card-fields">
-                <UFormField label="起始帧">
-                  <UInputNumber v-model="retryCustomStart" :min="1" />
-                </UFormField>
-                <UFormField label="结束帧">
-                  <UInputNumber v-model="retryCustomEnd" :min="1" />
-                </UFormField>
-              </div>
               <USwitch
-                v-model="retryCustomResumeFromExisting"
+                v-model="retryAutoTranscodeEnabled"
                 color="neutral"
-                label="从已有帧续跑"
-                :description="retryCustomResumeFromExisting ? '开启后会在所选区间内查找最后一帧，并从下一帧继续。' : '关闭后会从所选区间起始帧重新覆盖渲染。'"
+                label="补渲完成后自动转码"
                 class="choice-card-switch"
               />
-              <p v-if="retryCustomInspectLoading" class="choice-card-inline-note">正在检查所选区间…</p>
-              <p v-else-if="retryCustomRangeSummary" class="choice-card-inline-note">{{ retryCustomRangeSummary }}</p>
-              <UButton
-                color="neutral"
-                variant="outline"
-                :label="retryCustomResumeFromExisting ? '按区间续跑' : '按区间覆盖'"
-                class="choice-card-action"
-                :loading="retrySubmittingMode === 'range-continue' || retrySubmittingMode === 'range-restart'"
-                :disabled="retrySubmittingMode !== null"
-                @click="confirmRetryCustomRange"
-              />
-            </UCard>
+              <div class="choice-card-toggle-group">
+                <UButton
+                  icon="i-lucide-scan-line"
+                  :label="`目标片段 ${retryCurrentTargetRangeLabel}`"
+                  :color="retryTranscodeRangeMode === 'current' ? 'primary' : 'neutral'"
+                  :variant="retryTranscodeRangeMode === 'current' ? 'solid' : 'outline'"
+                  size="sm"
+                  class="choice-card-toggle-button"
+                  :disabled="retrySubmittingMode !== null || !retryAutoTranscodeEnabled"
+                  @click="retryTranscodeRangeMode = 'current'"
+                />
+                <UButton
+                  icon="i-lucide-film"
+                  :label="`${retrySavedTranscodeRangeTitle} ${retryOriginalTranscodeRangeLabel}`"
+                  :color="retryTranscodeRangeMode === 'original' ? 'primary' : 'neutral'"
+                  :variant="retryTranscodeRangeMode === 'original' ? 'solid' : 'outline'"
+                  size="sm"
+                  class="choice-card-toggle-button"
+                  :disabled="retrySubmittingMode !== null || !retryAutoTranscodeEnabled"
+                  @click="retryTranscodeRangeMode = 'original'"
+                />
+              </div>
+              <div class="choice-card-note-stack">
+                <p class="choice-card-inline-note">{{ retryTranscodeSummary }}</p>
+              </div>
+            </section>
           </div>
           <div class="modal-actions">
-            <UButton icon="i-lucide-x" label="取消" color="warning" variant="outline" :disabled="retrySubmittingMode !== null" @click="closeRetryConfirm" />
+            <UButton icon="i-lucide-x" label="取消" color="warning" variant="outline" size="sm" :disabled="retrySubmittingMode !== null" @click="closeRetryConfirm" />
           </div>
         </div>
       </template>
@@ -319,7 +381,11 @@
           </div>
           <div class="stat-item">
             <p class="stat-label">帧范围</p>
-            <p class="stat-value">{{ job.frameStart }} – {{ job.frameEnd }}（共 {{ job.frameEnd - job.frameStart + 1 }} 帧）</p>
+            <p class="stat-value">{{ originalFrameRangeLabel }}（共 {{ originalFrameTotal }} 帧）</p>
+          </div>
+          <div v-if="showCurrentExecutionRange" class="stat-item">
+            <p class="stat-label">当前执行</p>
+            <p class="stat-value">{{ currentExecutionRangeLabel }}（共 {{ currentExecutionTotal }} 帧）</p>
           </div>
           <div class="stat-item">
             <p class="stat-label">Blender</p>
@@ -458,6 +524,7 @@ import { convertFileSrc } from '@tauri-apps/api/core'
 import type { DropdownMenuItem } from '@nuxt/ui'
 import type { AddFfmpegJobPayload, JobLogSummary, RenderJob, RenderJobTranscodeConfig, RenderedFramesStatus } from '~/types'
 import { JOB_STATUS_COLOR, JOB_STATUS_LABEL } from '~/composables/useJobStatus'
+import { formatQueueOrderLabel, RENDER_QUEUE_ORDER_HIDDEN_STATUSES, resolveQueueOrder } from '~/composables/useQueueOrder'
 import { buildTranscodeOutputPath, normalizeTranscodeDirectory, splitTranscodeOutputPath } from '~/composables/useTranscodeConfig'
 import { parseLogLine } from '~/utils/log-line'
 
@@ -500,12 +567,8 @@ const detailBreadcrumbItems = computed(() => {
   ]
 })
 const statusBadgeColor = computed(() => JOB_STATUS_COLOR[job.value?.status ?? 'pending'] ?? 'neutral')
-const orderBadgeLabel = computed(() => {
-  if (!job.value || job.value.status === 'running') return null
-  const queue = jobsStore.jobs.filter(item => item.status !== 'running')
-  const index = queue.findIndex(item => item.id === job.value?.id)
-  return index === -1 ? null : `顺序 ${index + 1}`
-})
+const queueOrder = computed(() => resolveQueueOrder(jobsStore.jobs, job.value, RENDER_QUEUE_ORDER_HIDDEN_STATUSES))
+const orderBadgeLabel = computed(() => formatQueueOrderLabel(queueOrder.value))
 const metadataDialogOpen = ref(false)
 const metadataJob = computed(() => job.value ?? null)
 const transcodeModalOpen = ref(false)
@@ -517,11 +580,43 @@ const blenderVersion = computed(() => {
   const match = settingsStore.blenderVersions.find((b) => b.executable === exe)
   return match ? `Blender ${match.version}` : exe
 })
+const originalFrameRangeLabel = computed(() => {
+  const currentJob = job.value
+  if (!currentJob) return '—'
+  return `${currentJob.originalFrameStart} – ${currentJob.originalFrameEnd}`
+})
+const originalFrameTotal = computed(() => {
+  const currentJob = job.value
+  if (!currentJob) return 0
+  return currentJob.originalFrameEnd - currentJob.originalFrameStart + 1
+})
+const currentExecutionRangeLabel = computed(() => {
+  const currentJob = job.value
+  if (!currentJob) return '—'
+  return `${currentJob.frameStart} – ${currentJob.frameEnd}`
+})
+const currentExecutionTotal = computed(() => {
+  const currentJob = job.value
+  if (!currentJob) return 0
+  return currentJob.frameEnd - currentJob.frameStart + 1
+})
+const showCurrentExecutionRange = computed(() => {
+  const currentJob = job.value
+  if (!currentJob) return false
+  return currentJob.originalFrameStart !== currentJob.frameStart || currentJob.originalFrameEnd !== currentJob.frameEnd
+})
 
 function deriveRenderSequenceDirectory(outputPath: string) {
   const normalized = outputPath.replace(/\\/g, '/')
   const slashIndex = normalized.lastIndexOf('/')
   return slashIndex >= 0 ? outputPath.slice(0, slashIndex) : outputPath
+}
+
+function getEffectiveTranscodeFrameRange(currentJob: RenderJob) {
+  return {
+    frameStart: currentJob.transcodeFrameStartOverride ?? currentJob.frameStart,
+    frameEnd: currentJob.transcodeFrameEndOverride ?? currentJob.frameEnd,
+  }
 }
 
 async function refreshResolvedBaseTranscodeOutputPath() {
@@ -531,13 +626,15 @@ async function refreshResolvedBaseTranscodeOutputPath() {
     return
   }
 
+  const range = getEffectiveTranscodeFrameRange(currentJob)
+
   try {
     const preview = await previewOutputPathTemplate({
       kind: 'blender-ffmpeg',
       template: settingsStore.settings.blenderTranscodeOutputPathTemplate,
       blend_file: currentJob.blendFile,
-      frame_start: currentJob.frameStart,
-      frame_end: currentJob.frameEnd,
+      frame_start: range.frameStart,
+      frame_end: range.frameEnd,
     })
     resolvedBaseTranscodeOutputPath.value = preview.resolvedPath || ''
   } catch {
@@ -978,15 +1075,20 @@ onUnmounted(() => {
 
 const showDeleteConfirm = ref(false)
 const showRetryConfirm = ref(false)
-const retryExistingCount = ref(0)
 const retryFrameStatus = ref<RenderedFramesStatus | null>(null)
 const retryActionError = ref('')
 const retrySubmittingMode = ref<'restart' | 'continue' | 'range-restart' | 'range-continue' | null>(null)
 const retryCustomStart = ref<number | null>(null)
 const retryCustomEnd = ref<number | null>(null)
+const retryFullRangePreviewMode = ref<'continue' | 'restart' | null>(null)
 const retryCustomResumeFromExisting = ref(true)
+const retryCustomPreviewMode = ref<'continue' | 'restart' | null>(null)
 const retryCustomFrameStatus = ref<RenderedFramesStatus | null>(null)
 const retryCustomInspectLoading = ref(false)
+const retryAutoTranscodeEnabled = ref(false)
+const retryTranscodeRangeMode = ref<'current' | 'original'>('current')
+const retryOriginalTranscodeFrameStart = ref<number | null>(null)
+const retryOriginalTranscodeFrameEnd = ref<number | null>(null)
 let retryCustomInspectToken = 0
 
 async function handleAutoTranscodeToggle(value: boolean) {
@@ -1004,6 +1106,8 @@ async function handleAutoTranscodeToggle(value: boolean) {
       transcode_output_path_override: currentJob.transcodeOutputPathOverride,
       transcode_crf_override: currentJob.transcodeCrfOverride,
       transcode_preset_override: currentJob.transcodePresetOverride,
+      transcode_frame_start_override: currentJob.transcodeFrameStartOverride,
+      transcode_frame_end_override: currentJob.transcodeFrameEndOverride,
     })
   } finally {
     updatingAutoTranscode.value = false
@@ -1020,12 +1124,16 @@ async function handleRetry() {
   retryActionError.value = ''
   const status = await inspectRenderedFrames(j.outputPath, j.outputFormat, j.frameStart, j.frameEnd)
     .catch(() => ({ frameCount: 0, lastFrame: null, nextFrame: j.frameStart }))
-  retryExistingCount.value = status.frameCount
   retryFrameStatus.value = normalizeRetryFrameStatus(j, status)
   retryCustomStart.value = j.frameStart
   retryCustomEnd.value = j.frameEnd
-  retryCustomResumeFromExisting.value = true
+  retryCustomResumeFromExisting.value = j.status !== 'done'
   retryCustomFrameStatus.value = status
+  retryAutoTranscodeEnabled.value = j.autoTranscodeMp4
+  retryOriginalTranscodeFrameStart.value = j.transcodeFrameStartOverride ?? j.originalFrameStart
+  retryOriginalTranscodeFrameEnd.value = j.transcodeFrameEndOverride ?? j.originalFrameEnd
+  retryTranscodeRangeMode.value =
+    j.transcodeFrameStartOverride != null && j.transcodeFrameEndOverride != null ? 'original' : 'current'
   showRetryConfirm.value = true
   void refreshRetryCustomInspection()
 }
@@ -1048,11 +1156,33 @@ function resetRetryConfirmState() {
   retryCustomEnd.value = null
   retryCustomFrameStatus.value = null
   retryCustomInspectLoading.value = false
+  retryFullRangePreviewMode.value = null
+  retryCustomPreviewMode.value = null
+  retryAutoTranscodeEnabled.value = false
+  retryTranscodeRangeMode.value = 'current'
+  retryOriginalTranscodeFrameStart.value = null
+  retryOriginalTranscodeFrameEnd.value = null
 }
 
 function closeRetryConfirm() {
   if (retrySubmittingMode.value) return
   resetRetryConfirmState()
+}
+
+function clearRetryPreviewOnLeave(event: MouseEvent | FocusEvent, target: 'full' | 'custom') {
+  const currentTarget = event.currentTarget
+  const relatedTarget = event.relatedTarget
+  if (currentTarget instanceof HTMLElement && relatedTarget instanceof Node) {
+    const group = currentTarget.closest('.choice-card-toggle-group')
+    if (group?.contains(relatedTarget)) return
+  }
+
+  if (target === 'full') {
+    retryFullRangePreviewMode.value = null
+    return
+  }
+
+  retryCustomPreviewMode.value = null
 }
 
 async function submitTranscodeForJob() {
@@ -1077,6 +1207,8 @@ async function handleTranscodeSettingsSave(payload: {
       id: currentJob.id,
       auto_transcode_mp4: currentJob.autoTranscodeMp4,
       ...payload,
+      transcode_frame_start_override: currentJob.transcodeFrameStartOverride,
+      transcode_frame_end_override: currentJob.transcodeFrameEndOverride,
     })
     transcodeSettingsModalOpen.value = false
   } catch (error) {
@@ -1108,7 +1240,10 @@ async function confirmRetryContinue() {
   const j = job.value
   retrySubmittingMode.value = 'continue'
   try {
-    if (j) await jobsStore.retryJob(j)
+    if (j) {
+      await persistRetryTranscodeSettings(j, { start: j.frameStart, end: j.frameEnd })
+      await jobsStore.retryJob(j)
+    }
     resetRetryConfirmState()
   } catch (error) {
     retryActionError.value = error instanceof Error ? error.message : String(error)
@@ -1123,7 +1258,10 @@ async function confirmRetryFromStart() {
   const j = job.value
   retrySubmittingMode.value = 'restart'
   try {
-    if (j) await jobsStore.retryJobFromStart(j)
+    if (j) {
+      await persistRetryTranscodeSettings(j, { start: j.frameStart, end: j.frameEnd })
+      await jobsStore.retryJobFromStart(j)
+    }
     resetRetryConfirmState()
   } catch (error) {
     retryActionError.value = error instanceof Error ? error.message : String(error)
@@ -1132,23 +1270,125 @@ async function confirmRetryFromStart() {
   }
 }
 
-const retryCustomRangeSummary = computed(() => {
+const retryCustomActionResumeMode = computed(() => {
+  if (retryCustomPreviewMode.value === 'continue') return true
+  if (retryCustomPreviewMode.value === 'restart') return false
+  return retryCustomResumeFromExisting.value
+})
+
+const retryFullRangeLabel = computed(() => {
+  const currentJob = job.value
+  if (!currentJob) return '当前片段'
+  return `${currentJob.frameStart}–${currentJob.frameEnd}`
+})
+
+const retryFullRangeSummary = computed(() => {
+  const currentJob = job.value
+  if (!currentJob) return ''
+  if (retryFullRangePreviewMode.value === 'restart') {
+    return `整段覆盖会从第 ${currentJob.frameStart} 帧重新渲染到 ${currentJob.frameEnd} 帧。`
+  }
+  if (retryFullRangePreviewMode.value === 'continue') {
+    if (currentJob.status === 'done') {
+      return '当前任务已完成，不能整段续跑。'
+    }
+    if (retryFrameStatus.value && retryFrameStatus.value.nextFrame <= currentJob.frameEnd) {
+      return `整段续跑会从第 ${retryFrameStatus.value.nextFrame} 帧开始。`
+    }
+    return '当前范围的帧已齐全，整段续跑会直接完成。'
+  }
+  if (currentJob.status === 'done') {
+    return '当前任务已完成；如需再次输出，请用整段覆盖或改为指定区间。'
+  }
+  if (retryFrameStatus.value && retryFrameStatus.value.nextFrame <= currentJob.frameEnd) {
+    return `整段续跑会从第 ${retryFrameStatus.value.nextFrame} 帧开始。`
+  }
+  return '当前范围的帧已齐全，整段续跑会直接完成。'
+})
+
+const retryCustomActionDescription = computed(() =>
+  retryCustomActionResumeMode.value
+    ? '区间续跑会自动查找断点，并从下一帧继续。'
+    : '区间覆盖会从起始帧开始重新渲染。',
+)
+
+function buildRetryCustomRangeSummary(resumeFromExisting: boolean) {
   const j = job.value
   const start = retryCustomStart.value
   const end = retryCustomEnd.value
-  if (!j || start == null || end == null) return '设置这次要重跑的帧区间，可用于补帧或局部返修。'
+  if (!j || start == null || end == null) return '输入起止帧后，可选择续跑或覆盖。'
   if (start > end) return '起始帧不能大于结束帧。'
   const status = retryCustomFrameStatus.value
-  if (!status) return `将渲染 ${start}–${end}。`
-  if (status.frameCount === 0) return `所选区间 ${start}–${end} 内还没有已渲染帧。`
-  if (retryCustomResumeFromExisting.value) {
+  if (!status) return `将处理区间 ${start}–${end}。`
+  if (status.frameCount === 0) return `区间 ${start}–${end} 还没有已渲染帧。`
+  if (resumeFromExisting) {
     if (status.nextFrame <= end) {
-      return `区间内已存在 ${status.frameCount} 帧，最后一帧 ${status.lastFrame ?? '—'}，将从 ${status.nextFrame} 继续。`
+      return `已找到 ${status.frameCount} 帧，最后一帧 ${status.lastFrame ?? '—'}，将从 ${status.nextFrame} 继续。`
     }
-    return `区间 ${start}–${end} 已完整存在，继续后会直接完成。`
+    return `区间 ${start}–${end} 已完整，继续后会直接完成。`
   }
-  return `区间内已存在 ${status.frameCount} 帧，关闭续跑后会从 ${start} 开始覆盖。`
+  return `已找到 ${status.frameCount} 帧，覆盖后会从 ${start} 重新开始。`
+}
+
+const retryCustomRangeSummary = computed(() => {
+  return buildRetryCustomRangeSummary(retryCustomActionResumeMode.value)
 })
+
+const retryOriginalTranscodeRangeLabel = computed(() => {
+  const start = retryOriginalTranscodeFrameStart.value ?? job.value?.originalFrameStart ?? 1
+  const end = retryOriginalTranscodeFrameEnd.value ?? job.value?.originalFrameEnd ?? start
+  return `${start}–${end}`
+})
+
+const retrySavedTranscodeRangeTitle = computed(() => {
+  const currentJob = job.value
+  if (!currentJob) return '原始片段'
+  const hasSavedOverride = currentJob.transcodeFrameStartOverride != null && currentJob.transcodeFrameEndOverride != null
+  return hasSavedOverride ? '已保存片段' : '原始片段'
+})
+
+const retryCurrentTargetRangeLabel = computed(() => {
+  const currentJob = job.value
+  if (!currentJob) return '当前范围'
+  const start = retryCustomStart.value ?? currentJob.frameStart
+  const end = retryCustomEnd.value ?? currentJob.frameEnd
+  return `${start}–${end}`
+})
+
+const retryTranscodeSummary = computed(() => {
+  if (!job.value) return ''
+  if (!retryAutoTranscodeEnabled.value) {
+    return '关闭后，本次补渲不会自动转码。'
+  }
+  if (retryTranscodeRangeMode.value === 'original') {
+    if (retryOriginalTranscodeRangeLabel.value === retryCurrentTargetRangeLabel.value) {
+      return `完成后自动转码 ${retryOriginalTranscodeRangeLabel.value}。`
+    }
+    return `完成后自动转码${retrySavedTranscodeRangeTitle.value} ${retryOriginalTranscodeRangeLabel.value}。`
+  }
+  return `完成后自动转码目标片段 ${retryCurrentTargetRangeLabel.value}。`
+})
+
+async function persistRetryTranscodeSettings(currentJob: RenderJob, nextRange: { start: number, end: number }) {
+  const originalStart = retryOriginalTranscodeFrameStart.value ?? currentJob.originalFrameStart
+  const originalEnd = retryOriginalTranscodeFrameEnd.value ?? currentJob.originalFrameEnd
+  const useOriginalRange =
+    retryAutoTranscodeEnabled.value
+    && retryTranscodeRangeMode.value === 'original'
+    && (originalStart !== nextRange.start || originalEnd !== nextRange.end)
+
+  await jobsStore.updateJobTranscodeSettings({
+    id: currentJob.id,
+    auto_transcode_mp4: retryAutoTranscodeEnabled.value,
+    transcode_name_override: currentJob.transcodeNameOverride,
+    transcode_fps_override: currentJob.transcodeFpsOverride,
+    transcode_output_path_override: currentJob.transcodeOutputPathOverride,
+    transcode_crf_override: currentJob.transcodeCrfOverride,
+    transcode_preset_override: currentJob.transcodePresetOverride,
+    transcode_frame_start_override: useOriginalRange ? originalStart : null,
+    transcode_frame_end_override: useOriginalRange ? originalEnd : null,
+  })
+}
 
 async function refreshRetryCustomInspection() {
   const j = job.value
@@ -1174,24 +1414,26 @@ async function refreshRetryCustomInspection() {
   }
 }
 
-async function confirmRetryCustomRange() {
+async function confirmRetryCustomRange(resumeFromExisting = retryCustomResumeFromExisting.value) {
   if (retrySubmittingMode.value) return
   retryActionError.value = ''
   const j = job.value
   const start = retryCustomStart.value
   const end = retryCustomEnd.value
+  retryCustomResumeFromExisting.value = resumeFromExisting
   if (!j || start == null || end == null) return
   if (start > end) {
     retryActionError.value = '起始帧不能大于结束帧。'
     return
   }
-  if (start < j.frameStart || end > j.frameEnd) {
-    retryActionError.value = `帧范围必须在任务范围 ${j.frameStart}–${j.frameEnd} 内。`
+  if (start < j.originalFrameStart || end > j.originalFrameEnd) {
+    retryActionError.value = `帧范围必须在原始片段 ${j.originalFrameStart}–${j.originalFrameEnd} 内。`
     return
   }
 
   retrySubmittingMode.value = retryCustomResumeFromExisting.value ? 'range-continue' : 'range-restart'
   try {
+    await persistRetryTranscodeSettings(j, { start, end })
     if (retryCustomResumeFromExisting.value) {
       await jobsStore.retryJob(j, true, { start, end })
     } else {

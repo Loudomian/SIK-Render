@@ -16,11 +16,15 @@ export interface RenderJob {
   transcodeOutputPathOverride: string | null
   transcodeCrfOverride: number | null
   transcodePresetOverride: string | null
+  transcodeFrameStartOverride: number | null
+  transcodeFrameEndOverride: number | null
   fps?: number | null
   blendFile: string
   blenderExecutable: string
   outputPath: string
   outputFormat: string
+  originalFrameStart: number
+  originalFrameEnd: number
   frameStart: number
   frameEnd: number
   previewWidth: number | null
@@ -47,6 +51,8 @@ export interface AddJobPayload {
   transcode_output_path_override?: string | null
   transcode_crf_override?: number | null
   transcode_preset_override?: string | null
+  transcode_frame_start_override?: number | null
+  transcode_frame_end_override?: number | null
   fps?: number | null
   blend_file: string
   blender_executable: string

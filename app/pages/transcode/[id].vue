@@ -5,7 +5,6 @@
         <div class="detail-heading-stack">
           <div class="detail-heading-line">
             <UBadge :label="statusLabel(job.status)" :color="statusColor(job.status)" variant="subtle" />
-            <UBadge :label="`#${job.jobNumber}`" color="neutral" variant="subtle" />
             <UBadge :label="job.sourceType === 'blender_job' ? '来自 Blender Job' : '来自文件夹'" color="neutral" variant="subtle" />
           </div>
           <div class="detail-title-row">
@@ -13,7 +12,7 @@
               as="h1"
               :items="[
                 { label: '转码队列', to: '/transcode' },
-                { label: job.name },
+                { label: `#${job.jobNumber} ${job.name}` },
               ]"
               :ui="{
                 root: 'detail-breadcrumb',

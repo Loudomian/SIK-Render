@@ -65,6 +65,7 @@
 </template>
 
 <script setup lang="ts">
+import { invoke } from '@tauri-apps/api/core'
 import appIconLightUrl from '~/assets/app-icon-light.png'
 import appIconDarkUrl from '~/assets/app-icon-dark.png'
 
@@ -100,6 +101,7 @@ const navItems = computed(() => [
 const unlisteners: Array<() => void> = []
 let systemThemeMedia: MediaQueryList | null = null
 const systemPrefersDark = ref(false)
+let startupReadyNotified = false
 
 function resolveTheme(theme: 'dark' | 'light' | 'system') {
   if (theme === 'system') {
@@ -116,6 +118,7 @@ function applyThemeClass(theme: 'dark' | 'light' | 'system') {
   const root = document.documentElement
   root.classList.toggle('dark', resolved === 'dark')
   root.classList.toggle('light', resolved !== 'dark')
+  root.style.colorScheme = resolved === 'dark' ? 'dark' : 'light'
 }
 
 function handleSystemThemeChange() {
@@ -138,6 +141,20 @@ async function handleBrandIconClick() {
   }
 }
 
+async function notifyAppReadyAfterPaint() {
+  if (!import.meta.client || startupReadyNotified) return
+  startupReadyNotified = true
+
+  try {
+    await nextTick()
+    await new Promise<void>(resolve => window.requestAnimationFrame(() => resolve()))
+    await new Promise<void>(resolve => window.requestAnimationFrame(() => resolve()))
+    await invoke('app_ready')
+  } catch (error) {
+    console.error('Failed to finalize app startup:', error)
+  }
+}
+
 if (import.meta.client) {
   systemThemeMedia = window.matchMedia('(prefers-color-scheme: dark)')
   systemPrefersDark.value = systemThemeMedia.matches
@@ -154,6 +171,7 @@ if (import.meta.client) {
 onMounted(async () => {
   systemThemeMedia?.addEventListener('change', handleSystemThemeChange)
   window.addEventListener('contextmenu', handleGlobalContextMenu, true)
+  await notifyAppReadyAfterPaint()
   await Promise.all([
     jobsStore.fetchJobs(),
     jobsStore.fetchQueueState(),

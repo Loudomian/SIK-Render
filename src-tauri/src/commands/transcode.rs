@@ -219,7 +219,32 @@ fn sanitize_file_name(value: &str) -> String {
     }
 }
 
-pub fn default_output_path_for_render_job(job: &RenderJob) -> PathBuf {
+fn effective_render_job_transcode_range(job: &RenderJob) -> (i32, i32) {
+    match (
+        job.transcode_frame_start_override,
+        job.transcode_frame_end_override,
+    ) {
+        (Some(start), Some(end)) if start <= end => (start, end),
+        _ => (job.frame_start, job.frame_end),
+    }
+}
+
+pub fn default_output_path_for_render_job(job: &RenderJob, settings: &AppSettings) -> PathBuf {
+    let (frame_start, frame_end) = effective_render_job_transcode_range(job);
+    if let Ok(path) = resolve_output_path(
+        &settings.blender_transcode_output_path_template,
+        &default_context(
+            PathKind::BlenderFfmpeg,
+            job.blend_file.parent().map(|value| value.to_path_buf()),
+            blend_file_name_from_path(&job.blend_file),
+            None,
+            frame_start,
+            frame_end,
+        ),
+    ) {
+        return path;
+    }
+
     let dir = if job.output_path.is_dir() {
         job.output_path.clone()
     } else {
@@ -237,10 +262,11 @@ pub fn build_ffmpeg_payload_for_render_job(
     settings: Option<&AppSettings>,
 ) -> AddFfmpegJobPayload {
     let settings = settings.cloned().unwrap_or_default();
+    let (frame_start, frame_end) = effective_render_job_transcode_range(job);
     let output_path = job
         .transcode_output_path_override
         .clone()
-        .unwrap_or_else(|| default_output_path_for_render_job(job))
+        .unwrap_or_else(|| default_output_path_for_render_job(job, &settings))
         .to_string_lossy()
         .to_string();
 
@@ -252,8 +278,8 @@ pub fn build_ffmpeg_payload_for_render_job(
         source_type: String::from("blender_job"),
         source_blender_job_id: Some(job.id.clone()),
         input_path: job.output_path.to_string_lossy().to_string(),
-        frame_start: job.frame_start,
-        frame_end: job.frame_end,
+        frame_start,
+        frame_end,
         fps: job
             .transcode_fps_override
             .or(job.fps)

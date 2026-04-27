@@ -171,7 +171,6 @@
 
 .settings-version-value {
   margin: 0;
-  align-self: center;
   color: var(--ui-text);
   font-size: 1.05rem;
   font-weight: 700;

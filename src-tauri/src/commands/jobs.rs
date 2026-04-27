@@ -21,6 +21,8 @@ pub struct AddJobPayload {
     pub transcode_output_path_override: Option<String>,
     pub transcode_crf_override: Option<u32>,
     pub transcode_preset_override: Option<String>,
+    pub transcode_frame_start_override: Option<i32>,
+    pub transcode_frame_end_override: Option<i32>,
     pub fps: Option<f32>,
     pub blend_file: String,
     pub blender_executable: String,
@@ -53,6 +55,8 @@ pub struct UpdateJobTranscodeSettingsPayload {
     pub transcode_output_path_override: Option<String>,
     pub transcode_crf_override: Option<u32>,
     pub transcode_preset_override: Option<String>,
+    pub transcode_frame_start_override: Option<i32>,
+    pub transcode_frame_end_override: Option<i32>,
 }
 
 #[derive(Deserialize)]
@@ -123,11 +127,15 @@ async fn fetch_jobs(pool: &sqlx::SqlitePool) -> Result<Vec<RenderJob>, sqlx::Err
             transcode_output_path_override,
             transcode_crf_override,
             transcode_preset_override,
+            transcode_frame_start_override,
+            transcode_frame_end_override,
             fps,
             blend_file,
             blender_exec,
             output_path,
             output_format,
+            original_frame_start,
+            original_frame_end,
             frame_start,
             frame_end,
             preview_width,
@@ -190,6 +198,33 @@ fn normalize_optional_preset(value: Option<String>) -> Option<String> {
 
 fn output_format_disables_transcode(format: &str) -> bool {
     format.eq_ignore_ascii_case("OPEN_EXR") || format.eq_ignore_ascii_case("EXR")
+}
+
+fn normalize_transcode_frame_range_override(
+    frame_start: Option<i32>,
+    frame_end: Option<i32>,
+    job_frame_start: i32,
+    job_frame_end: i32,
+) -> Result<(Option<i32>, Option<i32>), String> {
+    match (frame_start, frame_end) {
+        (None, None) => Ok((None, None)),
+        (Some(start), Some(end)) => {
+            if start > end {
+                return Err("transcode_frame_start_override must be <= transcode_frame_end_override".into());
+            }
+            if start < job_frame_start || end > job_frame_end {
+                return Err(format!(
+                    "transcode frame override must stay within render range {job_frame_start}-{job_frame_end}"
+                ));
+            }
+            if start == job_frame_start && end == job_frame_end {
+                Ok((None, None))
+            } else {
+                Ok((Some(start), Some(end)))
+            }
+        }
+        _ => Err("transcode frame override requires both start and end".into()),
+    }
 }
 
 #[tauri::command]
@@ -367,6 +402,15 @@ pub async fn add_job(
         .transpose()?;
     job.transcode_crf_override = payload.transcode_crf_override.map(|value| value.min(51) as i32);
     job.transcode_preset_override = normalize_optional_preset(payload.transcode_preset_override);
+    let (transcode_frame_start_override, transcode_frame_end_override) =
+        normalize_transcode_frame_range_override(
+            payload.transcode_frame_start_override,
+            payload.transcode_frame_end_override,
+            payload.frame_start,
+            payload.frame_end,
+        )?;
+    job.transcode_frame_start_override = transcode_frame_start_override;
+    job.transcode_frame_end_override = transcode_frame_end_override;
     job.fps = payload.fps.filter(|value| *value > 0.0);
     job.preview_width = payload.preview_width;
     job.preview_height = payload.preview_height;
@@ -409,11 +453,15 @@ pub async fn add_job(
             transcode_output_path_override,
             transcode_crf_override,
             transcode_preset_override,
+            transcode_frame_start_override,
+            transcode_frame_end_override,
             fps,
             blend_file,
             blender_exec,
             output_path,
             output_format,
+            original_frame_start,
+            original_frame_end,
             frame_start,
             frame_end,
             preview_width,
@@ -429,7 +477,7 @@ pub async fn add_job(
             last_rendered_frame,
             time_elapsed,
             remaining_secs
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         "#,
     )
     .bind(&job.id)
@@ -447,11 +495,15 @@ pub async fn add_job(
     )
     .bind(job.transcode_crf_override)
     .bind(&job.transcode_preset_override)
+    .bind(job.transcode_frame_start_override)
+    .bind(job.transcode_frame_end_override)
     .bind(job.fps)
     .bind(job.blend_file.to_string_lossy().to_string())
     .bind(job.blender_executable.to_string_lossy().to_string())
     .bind(job.output_path.to_string_lossy().to_string())
     .bind(&job.output_format)
+    .bind(job.original_frame_start)
+    .bind(job.original_frame_end)
     .bind(job.frame_start)
     .bind(job.frame_end)
     .bind(job.preview_width)
@@ -515,8 +567,9 @@ pub async fn update_job_transcode_settings(
     state: State<'_, AppState>,
     app: tauri::AppHandle,
 ) -> Result<RenderJob, String> {
-    let (output_format, blend_file, frame_start, frame_end) = sqlx::query_as::<_, (String, String, i32, i32)>(
-        "SELECT output_format, blend_file, frame_start, frame_end FROM jobs WHERE id = ?",
+    let (output_format, blend_file, frame_start, frame_end, original_frame_start, original_frame_end) =
+        sqlx::query_as::<_, (String, String, i32, i32, i32, i32)>(
+        "SELECT output_format, blend_file, frame_start, frame_end, original_frame_start, original_frame_end FROM jobs WHERE id = ?",
     )
         .bind(&payload.id)
         .fetch_optional(&state.pool)
@@ -527,6 +580,15 @@ pub async fn update_job_transcode_settings(
         payload.auto_transcode_mp4 && !output_format_disables_transcode(&output_format);
     let transcode_name_override = normalize_optional_text(payload.transcode_name_override);
     let blend_file = PathBuf::from(blend_file);
+    let (transcode_frame_start_override, transcode_frame_end_override) =
+        normalize_transcode_frame_range_override(
+            payload.transcode_frame_start_override,
+            payload.transcode_frame_end_override,
+            original_frame_start,
+            original_frame_end,
+        )?;
+    let transcode_context_frame_start = transcode_frame_start_override.unwrap_or(frame_start);
+    let transcode_context_frame_end = transcode_frame_end_override.unwrap_or(frame_end);
     let transcode_output_path_override = normalize_optional_text(payload.transcode_output_path_override)
         .map(|template| {
             resolve_output_path(
@@ -536,8 +598,8 @@ pub async fn update_job_transcode_settings(
                     blend_file.parent().map(|value| value.to_path_buf()),
                     blend_file_name_from_path(&blend_file),
                     None,
-                    frame_start,
-                    frame_end,
+                    transcode_context_frame_start,
+                    transcode_context_frame_end,
                 ),
             )
             .map(|value| value.to_string_lossy().to_string())
@@ -558,7 +620,9 @@ pub async fn update_job_transcode_settings(
              transcode_fps_override = ?,
              transcode_output_path_override = ?,
              transcode_crf_override = ?,
-             transcode_preset_override = ?
+             transcode_preset_override = ?,
+             transcode_frame_start_override = ?,
+             transcode_frame_end_override = ?
          WHERE id = ?",
     )
         .bind(auto_transcode_mp4)
@@ -567,6 +631,8 @@ pub async fn update_job_transcode_settings(
         .bind(transcode_output_path_override)
         .bind(transcode_crf_override)
         .bind(transcode_preset_override)
+        .bind(transcode_frame_start_override)
+        .bind(transcode_frame_end_override)
         .bind(&payload.id)
         .execute(&state.pool)
         .await
@@ -802,8 +868,8 @@ pub async fn reset_job(
     state: State<'_, AppState>,
     app: tauri::AppHandle,
 ) -> Result<RenderJob, String> {
-    let Some((current_frame_start, current_frame_end, current_priority, status)) = sqlx::query_as::<_, (i32, i32, i32, JobStatus)>(
-        "SELECT frame_start, frame_end, priority, status FROM jobs WHERE id = ?",
+    let Some((current_frame_start, current_frame_end, original_frame_start, original_frame_end, current_priority, status)) = sqlx::query_as::<_, (i32, i32, i32, i32, i32, JobStatus)>(
+        "SELECT frame_start, frame_end, original_frame_start, original_frame_end, priority, status FROM jobs WHERE id = ?",
     )
     .bind(&id)
     .fetch_optional(&state.pool)
@@ -824,6 +890,11 @@ pub async fn reset_job(
 
     if target_frame_start > target_frame_end {
         return Err("frameStart must be <= frameEnd".into());
+    }
+    if target_frame_start < original_frame_start || target_frame_end > original_frame_end {
+        return Err(format!(
+            "frame range must stay within original range {original_frame_start}-{original_frame_end}"
+        ));
     }
 
     let range_changed =

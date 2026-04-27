@@ -70,6 +70,19 @@ export const useTranscodeStore = defineStore('transcode', () => {
     delete logs.value[id]
   }
 
+  async function clearCompletedJobs() {
+    const ids = ffmpegJobs.value.filter(job => job.status === 'done').map(job => job.id)
+    if (!ids.length) {
+      return { removed: 0, failed: 0 }
+    }
+
+    const results = await Promise.allSettled(ids.map(id => deleteFfmpegJob(id)))
+    return {
+      removed: results.filter(result => result.status === 'fulfilled').length,
+      failed: results.filter(result => result.status === 'rejected').length,
+    }
+  }
+
   async function reorderPendingJobs(orderedIds: string[]) {
     ffmpegJobs.value = await invokeReorderFfmpegJobs(orderedIds)
     sortJobs()
@@ -132,6 +145,7 @@ export const useTranscodeStore = defineStore('transcode', () => {
     submitFfmpegJob,
     cancelFfmpegJob,
     deleteFfmpegJob,
+    clearCompletedJobs,
     reorderPendingJobs,
     loadFfmpegJobLogs,
     applyProgress,

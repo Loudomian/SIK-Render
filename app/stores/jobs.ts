@@ -106,10 +106,12 @@ export const useJobsStore = defineStore('jobs', () => {
     auto_transcode_mp4: boolean
     transcode_name_override: string | null
     transcode_fps_override: number | null
-    transcode_output_path_override: string | null
-    transcode_crf_override: number | null
-    transcode_preset_override: string | null
-  }) {
+      transcode_output_path_override: string | null
+      transcode_crf_override: number | null
+      transcode_preset_override: string | null
+      transcode_frame_start_override: number | null
+      transcode_frame_end_override: number | null
+    }) {
     const updated = await invokeUpdateJobTranscodeSettings(payload)
     const index = jobs.value.findIndex(job => job.id === updated.id)
     if (index === -1) {
@@ -129,6 +131,19 @@ export const useJobsStore = defineStore('jobs', () => {
     jobs.value = jobs.value.filter((j) => j.id !== id)
     delete logs.value[id]
     delete renderStarted.value[id]
+  }
+
+  async function clearCompletedJobs() {
+    const ids = doneJobs.value.map(job => job.id)
+    if (!ids.length) {
+      return { removed: 0, failed: 0 }
+    }
+
+    const results = await Promise.allSettled(ids.map(id => deleteJob(id)))
+    return {
+      removed: results.filter(result => result.status === 'fulfilled').length,
+      failed: results.filter(result => result.status === 'rejected').length,
+    }
   }
 
   function _applyReset(updated: RenderJob) {
@@ -280,6 +295,7 @@ export const useJobsStore = defineStore('jobs', () => {
     retryJob,
     retryJobFromStart,
     deleteJob,
+    clearCompletedJobs,
     stopJob,
     applyProgress,
     applyLog,

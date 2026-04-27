@@ -1,5 +1,3 @@
-import type { RenderJob } from '~/types'
-
 export const TRANSCODE_PRESET_OPTIONS = [
   'ultrafast',
   'superfast',
@@ -49,20 +47,4 @@ export function splitTranscodeOutputPath(outputPath: string | null | undefined) 
     outputDir,
     outputStem,
   }
-}
-
-function deriveRenderSequenceDirectory(outputPath: string) {
-  const normalized = outputPath.replace(/\\/g, '/')
-  if (normalized.includes('#') || normalized.includes('{frame}')) {
-    const slashIndex = normalized.lastIndexOf('/')
-    return slashIndex >= 0 ? outputPath.slice(0, slashIndex) : outputPath
-  }
-
-  const slashIndex = normalized.lastIndexOf('/')
-  return slashIndex >= 0 ? outputPath.slice(0, slashIndex) : outputPath
-}
-
-export function defaultTranscodeOutputPathForRenderJob(job: RenderJob) {
-  const outputDir = normalizeTranscodeDirectory(deriveRenderSequenceDirectory(job.outputPath))
-  return buildTranscodeOutputPath(outputDir, job.name)
 }

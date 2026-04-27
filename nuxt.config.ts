@@ -4,11 +4,23 @@ import { readFileSync } from 'node:fs'
 const buildDir = process.env.NUXT_BUILD_DIR || '.nuxt-dev'
 const viteCacheDir = process.env.VITE_CACHE_DIR || `.vite-cache/${buildDir.replace(/[\\/]/g, '-')}`
 const packageVersion = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')).version
+const themeBootstrapScript = `(function(){try{var storedTheme=window.localStorage.getItem('sik-render-theme')||'dark';var resolvedTheme=storedTheme==='system'?(window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'):storedTheme;var root=document.documentElement;root.classList.toggle('dark',resolvedTheme==='dark');root.classList.toggle('light',resolvedTheme!=='dark');root.style.colorScheme=resolvedTheme==='dark'?'dark':'light';}catch(_){var root=document.documentElement;root.classList.add('dark');root.classList.remove('light');root.style.colorScheme='dark';}})();`
 
 export default defineNuxtConfig({
   ssr: false, // Tauri requires SPA mode
   srcDir: 'app/',
   buildDir,
+  app: {
+    head: {
+      script: [
+        {
+          key: 'theme-bootstrap',
+          innerHTML: themeBootstrapScript,
+          tagPosition: 'head',
+        },
+      ],
+    },
+  },
   devtools: {
     enabled: false,
   },
