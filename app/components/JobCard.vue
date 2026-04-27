@@ -188,6 +188,7 @@ import { useRouter } from 'vue-router'
 import type { RenderJob } from '~/types'
 import { JOB_STATUS_COLOR, JOB_STATUS_LABEL } from '~/composables/useJobStatus'
 import { formatQueueOrderLabel, RENDER_QUEUE_ORDER_HIDDEN_STATUSES, resolveQueueOrder } from '~/composables/useQueueOrder'
+import { formatShortTimestamp } from '~/utils/date-format'
 import { resolveOutputDirectory } from '~/utils/output-path'
 import { captureVideoPoster } from '~/utils/video-preview'
 
@@ -250,7 +251,7 @@ const completedAt = computed(() => {
   if (!props.job.finishedAt) {
     return props.job.status === 'running' ? '进行中' : '未完成'
   }
-  return formatDateTime(props.job.finishedAt)
+  return formatShortTimestamp(props.job.finishedAt)
 })
 const previewText = computed(() => {
   if (props.job.renderMode === 'quick_mp4') {
@@ -306,16 +307,6 @@ function formatDuration(ms: number) {
   const m = Math.floor(s / 60)
   if (m < 60) return `${m}m ${s % 60}s`
   return `${Math.floor(m / 60)}h ${m % 60}m`
-}
-
-function formatDateTime(timestamp: number) {
-  return new Intl.DateTimeFormat('zh-CN', {
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-  }).format(new Date(timestamp))
 }
 
 function openDetails() {

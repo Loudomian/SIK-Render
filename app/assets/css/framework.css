@@ -1,3 +1,6 @@
+@import "vidstack/styles/defaults.css";
+@import "vidstack/styles/community-skin/video.css";
+
 @import "./framework/foundation/base.css";
 
 @import "./framework/layout/shell.css";

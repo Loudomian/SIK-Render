@@ -89,7 +89,7 @@
                     :color="job.status === 'cancelled' || job.status === 'interrupted' ? 'warning' : 'neutral'"
                     variant="outline"
                     size="md"
-                    @click="handleRetry"
+                    @click="handleRetry(job)"
                   />
                   <UButton
                     v-if="job.status === 'running' || job.status === 'pending'"
@@ -585,10 +585,11 @@
 <script setup lang="ts">
 import { convertFileSrc } from '@tauri-apps/api/core'
 import type { DropdownMenuItem } from '@nuxt/ui'
-import type { AddFfmpegJobPayload, JobLogSummary, RenderJob, RenderJobTranscodeConfig, RenderedFramesStatus } from '~/types'
+import type { AddFfmpegJobPayload, JobLogSummary, RenderJob, RenderJobTranscodeConfig } from '~/types'
 import { JOB_STATUS_COLOR, JOB_STATUS_LABEL } from '~/composables/useJobStatus'
 import { formatQueueOrderLabel, RENDER_QUEUE_ORDER_HIDDEN_STATUSES, resolveQueueOrder } from '~/composables/useQueueOrder'
 import { buildTranscodeOutputPath, normalizeTranscodeDirectory, splitTranscodeOutputPath } from '~/composables/useTranscodeConfig'
+import { formatTimestamp } from '~/utils/date-format'
 import { parseLogLine } from '~/utils/log-line'
 import { resolveOutputDirectory, resolvePathBaseName } from '~/utils/output-path'
 import { captureVideoPoster } from '~/utils/video-preview'
@@ -601,7 +602,7 @@ const transcodeStore = useTranscodeStore()
 
 const settingsStore = useSettingsStore()
 
-const { openPath, inspectRenderedFrames, getLastRenderedFrame, getJobLogSummary, getJobLogs, updateJobPreviewDimensions, previewOutputPathTemplate, pathExists } = useTauri()
+const { openPath, getLastRenderedFrame, getJobLogSummary, getJobLogs, updateJobPreviewDimensions, previewOutputPathTemplate, pathExists } = useTauri()
 const { onProgress, onJobUpdated, onLog, onFfmpegJobUpdated } = useRenderEvents()
 const STATUS_LABEL = JOB_STATUS_LABEL
 
@@ -1222,9 +1223,7 @@ function onLogScroll() {
   pinToBottom.value = el.scrollTop + el.clientHeight >= el.scrollHeight - 40
 }
 
-function formatTime(ms: number) {
-  return new Date(ms).toLocaleString()
-}
+const formatTime = formatTimestamp
 
 const duration = computed(() => {
   const j = job.value
@@ -1274,24 +1273,34 @@ onUnmounted(() => {
 })
 
 const showDeleteConfirm = ref(false)
-const showRetryConfirm = ref(false)
-const retryIsQuickMp4 = ref(false)
-const retryFrameStatus = ref<RenderedFramesStatus | null>(null)
-const retryActionError = ref('')
-const retrySubmittingMode = ref<'restart' | 'continue' | 'range-restart' | 'range-continue' | null>(null)
-const retryCustomStart = ref<number | null>(null)
-const retryCustomEnd = ref<number | null>(null)
-const retryFullRangePreviewMode = ref<'continue' | 'restart' | null>(null)
-const retryCustomResumeFromExisting = ref(true)
-const retryCustomPreviewMode = ref<'continue' | 'restart' | null>(null)
-const retryCustomFrameStatus = ref<RenderedFramesStatus | null>(null)
-const retryCustomInspectLoading = ref(false)
-const retryAutoTranscodeEnabled = ref(false)
-const retryTranscodeRangeMode = ref<'current' | 'original'>('current')
-const retryOriginalTranscodeFrameStart = ref<number | null>(null)
-const retryOriginalTranscodeFrameEnd = ref<number | null>(null)
-let retryCustomInspectToken = 0
-let retryCloseCleanupTimer: ReturnType<typeof setTimeout> | null = null
+const {
+  showRetryConfirm,
+  retryIsQuickMp4,
+  retryActionError,
+  retrySubmittingMode,
+  retryCustomStart,
+  retryCustomEnd,
+  retryFullRangePreviewMode,
+  retryCustomPreviewMode,
+  retryCustomInspectLoading,
+  retryAutoTranscodeEnabled,
+  retryTranscodeRangeMode,
+  retryFullRangeLabel,
+  retryFullRangeSummary,
+  retryCustomActionDescription,
+  retryCustomRangeSummary,
+  retryOriginalTranscodeRangeLabel,
+  retrySavedTranscodeRangeTitle,
+  retryCurrentTargetRangeLabel,
+  retryTranscodeSummary,
+  cancelRetryCloseCleanup,
+  handleRetry,
+  closeRetryConfirm,
+  clearRetryPreviewOnLeave,
+  confirmRetryContinue,
+  confirmRetryFromStart,
+  confirmRetryCustomRange,
+} = useJobRetry()
 
 async function handleAutoTranscodeToggle(value: boolean) {
   const currentJob = job.value
@@ -1318,103 +1327,6 @@ async function handleAutoTranscodeToggle(value: boolean) {
 
 function handleAutoTranscodeSwitchUpdate(value: boolean) {
   void handleAutoTranscodeToggle(value)
-}
-
-function clearRetryConfirmState() {
-  retryIsQuickMp4.value = false
-  retryFrameStatus.value = null
-  retrySubmittingMode.value = null
-  retryCustomStart.value = null
-  retryCustomEnd.value = null
-  retryCustomFrameStatus.value = null
-  retryCustomInspectLoading.value = false
-  retryFullRangePreviewMode.value = null
-  retryCustomPreviewMode.value = null
-  retryAutoTranscodeEnabled.value = false
-  retryTranscodeRangeMode.value = 'current'
-  retryOriginalTranscodeFrameStart.value = null
-  retryOriginalTranscodeFrameEnd.value = null
-}
-
-function cancelRetryCloseCleanup() {
-  if (!retryCloseCleanupTimer) return
-  clearTimeout(retryCloseCleanupTimer)
-  retryCloseCleanupTimer = null
-}
-
-function beginCloseRetryConfirm() {
-  showRetryConfirm.value = false
-  cancelRetryCloseCleanup()
-  retryCloseCleanupTimer = setTimeout(() => {
-    clearRetryConfirmState()
-    retryCloseCleanupTimer = null
-  }, 220)
-}
-
-async function handleRetry() {
-  const j = job.value
-  if (!j) return
-  cancelRetryCloseCleanup()
-  retryActionError.value = ''
-  retryIsQuickMp4.value = j.renderMode === 'quick_mp4'
-  if (j.renderMode === 'quick_mp4') {
-    retryFrameStatus.value = null
-    retryCustomStart.value = j.frameStart
-    retryCustomEnd.value = j.frameEnd
-    retryCustomResumeFromExisting.value = false
-    retryCustomFrameStatus.value = null
-    retryAutoTranscodeEnabled.value = false
-    retryOriginalTranscodeFrameStart.value = null
-    retryOriginalTranscodeFrameEnd.value = null
-    retryTranscodeRangeMode.value = 'current'
-    showRetryConfirm.value = true
-    return
-  }
-  const status = await inspectRenderedFrames(j.outputPath, j.outputFormat, j.frameStart, j.frameEnd)
-    .catch(() => ({ frameCount: 0, lastFrame: null, nextFrame: j.frameStart }))
-  retryFrameStatus.value = normalizeRetryFrameStatus(j, status)
-  retryCustomStart.value = j.frameStart
-  retryCustomEnd.value = j.frameEnd
-  retryCustomResumeFromExisting.value = j.status !== 'done'
-  retryCustomFrameStatus.value = status
-  retryAutoTranscodeEnabled.value = j.autoTranscodeMp4
-  retryOriginalTranscodeFrameStart.value = j.transcodeFrameStartOverride ?? j.originalFrameStart
-  retryOriginalTranscodeFrameEnd.value = j.transcodeFrameEndOverride ?? j.originalFrameEnd
-  retryTranscodeRangeMode.value =
-    j.transcodeFrameStartOverride != null && j.transcodeFrameEndOverride != null ? 'original' : 'current'
-  showRetryConfirm.value = true
-  void refreshRetryCustomInspection()
-}
-
-function normalizeRetryFrameStatus(job: RenderJob, status: RenderedFramesStatus): RenderedFramesStatus {
-  if (job.lastRenderedFrame == null) return status
-  const lastFrame = Math.min(job.frameEnd, Math.max(job.frameStart, job.lastRenderedFrame))
-  return {
-    frameCount: status.frameCount,
-    lastFrame,
-    nextFrame: Math.min(job.frameEnd + 1, lastFrame + 1),
-  }
-}
-
-function closeRetryConfirm() {
-  if (retrySubmittingMode.value) return
-  beginCloseRetryConfirm()
-}
-
-function clearRetryPreviewOnLeave(event: MouseEvent | FocusEvent, target: 'full' | 'custom') {
-  const currentTarget = event.currentTarget
-  const relatedTarget = event.relatedTarget
-  if (currentTarget instanceof HTMLElement && relatedTarget instanceof Node) {
-    const group = currentTarget.closest('.choice-card-toggle-group')
-    if (group?.contains(relatedTarget)) return
-  }
-
-  if (target === 'full') {
-    retryFullRangePreviewMode.value = null
-    return
-  }
-
-  retryCustomPreviewMode.value = null
 }
 
 async function submitTranscodeForJob() {
@@ -1466,231 +1378,6 @@ async function handlePrimaryTranscodeAction() {
   }
   await submitTranscodeForJob()
 }
-
-async function confirmRetryContinue() {
-  if (retrySubmittingMode.value) return
-  retryActionError.value = ''
-  const j = job.value
-  retrySubmittingMode.value = 'continue'
-  try {
-    if (j) {
-      await persistRetryTranscodeSettings(j, { start: j.frameStart, end: j.frameEnd })
-      await jobsStore.retryJob(j)
-    }
-    beginCloseRetryConfirm()
-  } catch (error) {
-    retryActionError.value = error instanceof Error ? error.message : String(error)
-  } finally {
-    retrySubmittingMode.value = null
-  }
-}
-
-async function confirmRetryFromStart() {
-  if (retrySubmittingMode.value) return
-  retryActionError.value = ''
-  const j = job.value
-  retrySubmittingMode.value = 'restart'
-  try {
-    if (j) {
-      await persistRetryTranscodeSettings(j, { start: j.frameStart, end: j.frameEnd })
-      await jobsStore.retryJobFromStart(j)
-    }
-    beginCloseRetryConfirm()
-  } catch (error) {
-    retryActionError.value = error instanceof Error ? error.message : String(error)
-  } finally {
-    retrySubmittingMode.value = null
-  }
-}
-
-const retryCustomActionResumeMode = computed(() => {
-  if (retryCustomPreviewMode.value === 'continue') return true
-  if (retryCustomPreviewMode.value === 'restart') return false
-  return retryCustomResumeFromExisting.value
-})
-
-const retryFullRangeLabel = computed(() => {
-  const currentJob = job.value
-  if (!currentJob) return '当前片段'
-  return `${currentJob.frameStart}–${currentJob.frameEnd}`
-})
-
-const retryFullRangeSummary = computed(() => {
-  const currentJob = job.value
-  if (!currentJob) return ''
-  if (currentJob.renderMode === 'quick_mp4') {
-    return `会直接覆盖并重渲 ${currentJob.frameStart}–${currentJob.frameEnd} 的整段 MP4 输出。`
-  }
-  if (retryFullRangePreviewMode.value === 'restart') {
-    return `整段覆盖会从第 ${currentJob.frameStart} 帧重新渲染到 ${currentJob.frameEnd} 帧。`
-  }
-  if (retryFullRangePreviewMode.value === 'continue') {
-    if (currentJob.status === 'done') {
-      return '当前任务已完成，不能整段续跑。'
-    }
-    if (retryFrameStatus.value && retryFrameStatus.value.nextFrame <= currentJob.frameEnd) {
-      return `整段续跑会从第 ${retryFrameStatus.value.nextFrame} 帧开始。`
-    }
-    return '当前范围的帧已齐全，整段续跑会直接完成。'
-  }
-  if (currentJob.status === 'done') {
-    return '当前任务已完成；如需再次输出，请用整段覆盖或改为指定区间。'
-  }
-  if (retryFrameStatus.value && retryFrameStatus.value.nextFrame <= currentJob.frameEnd) {
-    return `整段续跑会从第 ${retryFrameStatus.value.nextFrame} 帧开始。`
-  }
-  return '当前范围的帧已齐全，整段续跑会直接完成。'
-})
-
-const retryCustomActionDescription = computed(() =>
-  retryCustomActionResumeMode.value
-    ? '区间续跑会自动查找断点，并从下一帧继续。'
-    : '区间覆盖会从起始帧开始重新渲染。',
-)
-
-function buildRetryCustomRangeSummary(resumeFromExisting: boolean) {
-  const j = job.value
-  const start = retryCustomStart.value
-  const end = retryCustomEnd.value
-  if (!j || start == null || end == null) return '输入起止帧后，可选择续跑或覆盖。'
-  if (start > end) return '起始帧不能大于结束帧。'
-  const status = retryCustomFrameStatus.value
-  if (!status) return `将处理区间 ${start}–${end}。`
-  if (status.frameCount === 0) return `区间 ${start}–${end} 还没有已渲染帧。`
-  if (resumeFromExisting) {
-    if (status.nextFrame <= end) {
-      return `已找到 ${status.frameCount} 帧，最后一帧 ${status.lastFrame ?? '—'}，将从 ${status.nextFrame} 继续。`
-    }
-    return `区间 ${start}–${end} 已完整，继续后会直接完成。`
-  }
-  return `已找到 ${status.frameCount} 帧，覆盖后会从 ${start} 重新开始。`
-}
-
-const retryCustomRangeSummary = computed(() => {
-  return buildRetryCustomRangeSummary(retryCustomActionResumeMode.value)
-})
-
-const retryOriginalTranscodeRangeLabel = computed(() => {
-  const start = retryOriginalTranscodeFrameStart.value ?? job.value?.originalFrameStart ?? 1
-  const end = retryOriginalTranscodeFrameEnd.value ?? job.value?.originalFrameEnd ?? start
-  return `${start}–${end}`
-})
-
-const retrySavedTranscodeRangeTitle = computed(() => {
-  const currentJob = job.value
-  if (!currentJob) return '原始片段'
-  const hasSavedOverride = currentJob.transcodeFrameStartOverride != null && currentJob.transcodeFrameEndOverride != null
-  return hasSavedOverride ? '已保存片段' : '原始片段'
-})
-
-const retryCurrentTargetRangeLabel = computed(() => {
-  const currentJob = job.value
-  if (!currentJob) return '当前范围'
-  const start = retryCustomStart.value ?? currentJob.frameStart
-  const end = retryCustomEnd.value ?? currentJob.frameEnd
-  return `${start}–${end}`
-})
-
-const retryTranscodeSummary = computed(() => {
-  if (!job.value) return ''
-  if (!retryAutoTranscodeEnabled.value) {
-    return '关闭后，本次补渲不会自动转码。'
-  }
-  if (retryTranscodeRangeMode.value === 'original') {
-    if (retryOriginalTranscodeRangeLabel.value === retryCurrentTargetRangeLabel.value) {
-      return `完成后自动转码 ${retryOriginalTranscodeRangeLabel.value}。`
-    }
-    return `完成后自动转码${retrySavedTranscodeRangeTitle.value} ${retryOriginalTranscodeRangeLabel.value}。`
-  }
-  return `完成后自动转码目标片段 ${retryCurrentTargetRangeLabel.value}。`
-})
-
-async function persistRetryTranscodeSettings(currentJob: RenderJob, nextRange: { start: number, end: number }) {
-  if (currentJob.renderMode === 'quick_mp4') return
-  const originalStart = retryOriginalTranscodeFrameStart.value ?? currentJob.originalFrameStart
-  const originalEnd = retryOriginalTranscodeFrameEnd.value ?? currentJob.originalFrameEnd
-  const useOriginalRange =
-    retryAutoTranscodeEnabled.value
-    && retryTranscodeRangeMode.value === 'original'
-    && (originalStart !== nextRange.start || originalEnd !== nextRange.end)
-
-  await jobsStore.updateJobTranscodeSettings({
-    id: currentJob.id,
-    auto_transcode_mp4: retryAutoTranscodeEnabled.value,
-    transcode_name_override: currentJob.transcodeNameOverride,
-    transcode_fps_override: currentJob.transcodeFpsOverride,
-    transcode_output_path_override: currentJob.transcodeOutputPathOverride,
-    transcode_crf_override: currentJob.transcodeCrfOverride,
-    transcode_preset_override: currentJob.transcodePresetOverride,
-    transcode_frame_start_override: useOriginalRange ? originalStart : null,
-    transcode_frame_end_override: useOriginalRange ? originalEnd : null,
-  })
-}
-
-async function refreshRetryCustomInspection() {
-  const j = job.value
-  const start = retryCustomStart.value
-  const end = retryCustomEnd.value
-  if (!j || j.renderMode === 'quick_mp4' || !showRetryConfirm.value || start == null || end == null || start > end) {
-    retryCustomFrameStatus.value = null
-    retryCustomInspectLoading.value = false
-    return
-  }
-
-  const token = ++retryCustomInspectToken
-  retryCustomInspectLoading.value = true
-  try {
-    const status = await inspectRenderedFrames(j.outputPath, j.outputFormat, start, end)
-      .catch(() => ({ frameCount: 0, lastFrame: null, nextFrame: start }))
-    if (token !== retryCustomInspectToken) return
-    retryCustomFrameStatus.value = status
-  } finally {
-    if (token === retryCustomInspectToken) {
-      retryCustomInspectLoading.value = false
-    }
-  }
-}
-
-async function confirmRetryCustomRange(resumeFromExisting = retryCustomResumeFromExisting.value) {
-  if (retrySubmittingMode.value) return
-  retryActionError.value = ''
-  const j = job.value
-  const start = retryCustomStart.value
-  const end = retryCustomEnd.value
-  retryCustomResumeFromExisting.value = resumeFromExisting
-  if (!j || start == null || end == null) return
-  if (start > end) {
-    retryActionError.value = '起始帧不能大于结束帧。'
-    return
-  }
-  if (start < j.originalFrameStart || end > j.originalFrameEnd) {
-    retryActionError.value = `帧范围必须在原始片段 ${j.originalFrameStart}–${j.originalFrameEnd} 内。`
-    return
-  }
-
-  retrySubmittingMode.value = retryCustomResumeFromExisting.value ? 'range-continue' : 'range-restart'
-  try {
-    await persistRetryTranscodeSettings(j, { start, end })
-    if (retryCustomResumeFromExisting.value) {
-      await jobsStore.retryJob(j, true, { start, end })
-    } else {
-      await jobsStore.retryJobFromStart(j, { start, end })
-    }
-    beginCloseRetryConfirm()
-  } catch (error) {
-    retryActionError.value = error instanceof Error ? error.message : String(error)
-  } finally {
-    retrySubmittingMode.value = null
-  }
-}
-
-watch(
-  () => [showRetryConfirm.value, retryCustomStart.value, retryCustomEnd.value] as const,
-  ([open]) => {
-    if (!open) return
-    void refreshRetryCustomInspection()
-  },
-)
 
 async function removeAndBack() {
   const j = job.value

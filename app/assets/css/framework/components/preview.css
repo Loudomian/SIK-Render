@@ -1,6 +1,3 @@
-@import 'vidstack/styles/defaults.css';
-@import 'vidstack/styles/community-skin/video.css';
-
 .preview-card {
   display: flex;
   flex-direction: column;

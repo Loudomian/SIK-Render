@@ -238,6 +238,7 @@
 <script setup lang="ts">
 import type { TranscodeLogEvent } from '~/types'
 import { FFMPEG_STATUS_COLOR, FFMPEG_STATUS_LABEL } from '~/composables/useFfmpegStatus'
+import { formatTimestamp } from '~/utils/date-format'
 import { parseLogLine } from '~/utils/log-line'
 import { resolveOutputDirectory } from '~/utils/output-path'
 
@@ -275,9 +276,7 @@ function statusColor(status: keyof typeof FFMPEG_STATUS_COLOR) {
   return FFMPEG_STATUS_COLOR[status]
 }
 
-function formatTime(ms: number) {
-  return new Date(ms).toLocaleString()
-}
+const formatTime = formatTimestamp
 
 function formatBytes(value: number | null) {
   if (value == null || value <= 0) return '—'
