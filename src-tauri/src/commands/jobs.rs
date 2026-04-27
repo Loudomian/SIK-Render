@@ -1,4 +1,4 @@
-use crate::queue::job::{DbRenderJob, JobStatus, RenderJob};
+use crate::queue::job::{DbRenderJob, JobStatus, RenderJob, RenderMode};
 use crate::queue::scheduler;
 use crate::state::AppState;
 use crate::path_template::{
@@ -15,6 +15,8 @@ use tauri::{AppHandle, Emitter, State};
 pub struct AddJobPayload {
     pub name: String,
     pub note: Option<String>,
+    #[serde(default = "default_render_mode_payload")]
+    pub render_mode: String,
     pub auto_transcode_mp4: bool,
     pub transcode_name_override: Option<String>,
     pub transcode_fps_override: Option<f32>,
@@ -81,6 +83,10 @@ pub struct QueueState {
     pub paused_job: Option<String>,
 }
 
+fn default_render_mode_payload() -> String {
+    String::from("image_sequence")
+}
+
 async fn append_manual_cancel_log(
     app: &AppHandle,
     state: &AppState,
@@ -134,6 +140,7 @@ async fn fetch_jobs(pool: &sqlx::SqlitePool) -> Result<Vec<RenderJob>, sqlx::Err
             blender_exec,
             output_path,
             output_format,
+            render_mode,
             original_frame_start,
             original_frame_end,
             frame_start,
@@ -194,6 +201,14 @@ fn normalize_optional_preset(value: Option<String>) -> Option<String> {
     value
         .map(|preset| crate::commands::transcode::normalize_preset(preset.trim()))
         .filter(|preset| !preset.is_empty())
+}
+
+fn normalize_render_mode(value: &str) -> Result<RenderMode, String> {
+    match value.trim() {
+        "" | "image_sequence" => Ok(RenderMode::ImageSequence),
+        "quick_mp4" => Ok(RenderMode::QuickMp4),
+        other => Err(format!("unsupported render_mode: {other}")),
+    }
 }
 
 fn output_format_disables_transcode(format: &str) -> bool {
@@ -366,55 +381,74 @@ pub async fn add_job(
         ),
     )
     .map_err(|error| error.to_string())?;
+    let render_mode = normalize_render_mode(&payload.render_mode)?;
+    if render_mode.is_quick_mp4()
+        && !output_path
+            .extension()
+            .and_then(|value| value.to_str())
+            .map(|value| value.eq_ignore_ascii_case("mp4"))
+            .unwrap_or(false)
+    {
+        return Err("quick_mp4 output_path must end with .mp4".into());
+    }
+    let output_format = if render_mode.is_quick_mp4() {
+        String::from("FFMPEG")
+    } else {
+        payload.output_format
+    };
 
     let mut job = RenderJob::new(
         payload.name,
         blend_file.clone(),
         blender_executable,
         output_path,
-        payload.output_format,
+        output_format,
+        render_mode,
         payload.frame_start,
         payload.frame_end,
         payload.resume_from_existing,
         payload.priority,
     );
     job.note = normalize_optional_text(payload.note);
-    let transcode_allowed = !output_format_disables_transcode(&job.output_format);
+    let transcode_allowed =
+        !job.render_mode.is_quick_mp4() && !output_format_disables_transcode(&job.output_format);
     job.auto_transcode_mp4 = transcode_allowed && payload.auto_transcode_mp4;
-    job.transcode_name_override = normalize_optional_text(payload.transcode_name_override);
-    job.transcode_fps_override =
-        normalize_optional_positive_f32(payload.transcode_fps_override, "transcode_fps_override")?;
-    job.transcode_output_path_override = normalize_optional_text(payload.transcode_output_path_override)
-        .map(|template| {
-            resolve_output_path(
-                &template,
-                &default_context(
-                    PathKind::BlenderFfmpeg,
-                    blend_file.parent().map(|value| value.to_path_buf()),
-                    blend_file_name_from_path(&blend_file),
-                    None,
-                    payload.frame_start,
-                    payload.frame_end,
-                ),
-            )
-            .map_err(|error| error.to_string())
-        })
-        .transpose()?;
-    job.transcode_crf_override = payload.transcode_crf_override.map(|value| value.min(51) as i32);
-    job.transcode_preset_override = normalize_optional_preset(payload.transcode_preset_override);
-    let (transcode_frame_start_override, transcode_frame_end_override) =
-        normalize_transcode_frame_range_override(
-            payload.transcode_frame_start_override,
-            payload.transcode_frame_end_override,
-            payload.frame_start,
-            payload.frame_end,
-        )?;
-    job.transcode_frame_start_override = transcode_frame_start_override;
-    job.transcode_frame_end_override = transcode_frame_end_override;
+    if transcode_allowed {
+        job.transcode_name_override = normalize_optional_text(payload.transcode_name_override);
+        job.transcode_fps_override =
+            normalize_optional_positive_f32(payload.transcode_fps_override, "transcode_fps_override")?;
+        job.transcode_output_path_override = normalize_optional_text(payload.transcode_output_path_override)
+            .map(|template| {
+                resolve_output_path(
+                    &template,
+                    &default_context(
+                        PathKind::BlenderFfmpeg,
+                        blend_file.parent().map(|value| value.to_path_buf()),
+                        blend_file_name_from_path(&blend_file),
+                        None,
+                        payload.frame_start,
+                        payload.frame_end,
+                    ),
+                )
+                .map_err(|error| error.to_string())
+            })
+            .transpose()?;
+        job.transcode_crf_override = payload.transcode_crf_override.map(|value| value.min(51) as i32);
+        job.transcode_preset_override = normalize_optional_preset(payload.transcode_preset_override);
+        let (transcode_frame_start_override, transcode_frame_end_override) =
+            normalize_transcode_frame_range_override(
+                payload.transcode_frame_start_override,
+                payload.transcode_frame_end_override,
+                payload.frame_start,
+                payload.frame_end,
+            )?;
+        job.transcode_frame_start_override = transcode_frame_start_override;
+        job.transcode_frame_end_override = transcode_frame_end_override;
+    }
     job.fps = payload.fps.filter(|value| *value > 0.0);
     job.preview_width = payload.preview_width;
     job.preview_height = payload.preview_height;
-    if payload.resume_from_existing {
+    if payload.resume_from_existing && !job.render_mode.is_quick_mp4() {
         let total_frames = job.total_frames();
         let resume_floor = 0.max(job.frame_start - 1);
         job.current_frame = payload
@@ -460,6 +494,7 @@ pub async fn add_job(
             blender_exec,
             output_path,
             output_format,
+            render_mode,
             original_frame_start,
             original_frame_end,
             frame_start,
@@ -477,7 +512,7 @@ pub async fn add_job(
             last_rendered_frame,
             time_elapsed,
             remaining_secs
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         "#,
     )
     .bind(&job.id)
@@ -502,6 +537,7 @@ pub async fn add_job(
     .bind(job.blender_executable.to_string_lossy().to_string())
     .bind(job.output_path.to_string_lossy().to_string())
     .bind(&job.output_format)
+    .bind(job.render_mode)
     .bind(job.original_frame_start)
     .bind(job.original_frame_end)
     .bind(job.frame_start)
@@ -567,51 +603,74 @@ pub async fn update_job_transcode_settings(
     state: State<'_, AppState>,
     app: tauri::AppHandle,
 ) -> Result<RenderJob, String> {
-    let (output_format, blend_file, frame_start, frame_end, original_frame_start, original_frame_end) =
-        sqlx::query_as::<_, (String, String, i32, i32, i32, i32)>(
-        "SELECT output_format, blend_file, frame_start, frame_end, original_frame_start, original_frame_end FROM jobs WHERE id = ?",
+    let (output_format, render_mode, blend_file, frame_start, frame_end, original_frame_start, original_frame_end) =
+        sqlx::query_as::<_, (String, RenderMode, String, i32, i32, i32, i32)>(
+        "SELECT output_format, render_mode, blend_file, frame_start, frame_end, original_frame_start, original_frame_end FROM jobs WHERE id = ?",
     )
         .bind(&payload.id)
         .fetch_optional(&state.pool)
         .await
         .map_err(|error| error.to_string())?
         .ok_or_else(|| format!("job {} was not found", payload.id))?;
-    let auto_transcode_mp4 =
-        payload.auto_transcode_mp4 && !output_format_disables_transcode(&output_format);
-    let transcode_name_override = normalize_optional_text(payload.transcode_name_override);
+    let transcode_allowed =
+        !render_mode.is_quick_mp4() && !output_format_disables_transcode(&output_format);
+    let auto_transcode_mp4 = transcode_allowed && payload.auto_transcode_mp4;
+    let transcode_name_override = if transcode_allowed {
+        normalize_optional_text(payload.transcode_name_override)
+    } else {
+        None
+    };
     let blend_file = PathBuf::from(blend_file);
-    let (transcode_frame_start_override, transcode_frame_end_override) =
+    let (transcode_frame_start_override, transcode_frame_end_override) = if transcode_allowed {
         normalize_transcode_frame_range_override(
             payload.transcode_frame_start_override,
             payload.transcode_frame_end_override,
             original_frame_start,
             original_frame_end,
-        )?;
+        )?
+    } else {
+        (None, None)
+    };
     let transcode_context_frame_start = transcode_frame_start_override.unwrap_or(frame_start);
     let transcode_context_frame_end = transcode_frame_end_override.unwrap_or(frame_end);
-    let transcode_output_path_override = normalize_optional_text(payload.transcode_output_path_override)
-        .map(|template| {
-            resolve_output_path(
-                &template,
-                &default_context(
-                    PathKind::BlenderFfmpeg,
-                    blend_file.parent().map(|value| value.to_path_buf()),
-                    blend_file_name_from_path(&blend_file),
-                    None,
-                    transcode_context_frame_start,
-                    transcode_context_frame_end,
-                ),
-            )
-            .map(|value| value.to_string_lossy().to_string())
-            .map_err(|error| error.to_string())
-        })
-        .transpose()?;
-    let transcode_preset_override = normalize_optional_preset(payload.transcode_preset_override);
-    let transcode_fps_override =
-        normalize_optional_positive_f32(payload.transcode_fps_override, "transcode_fps_override")?;
-    let transcode_crf_override = payload
-        .transcode_crf_override
-        .map(|value| value.min(51) as i32);
+    let transcode_output_path_override = if transcode_allowed {
+        normalize_optional_text(payload.transcode_output_path_override)
+            .map(|template| {
+                resolve_output_path(
+                    &template,
+                    &default_context(
+                        PathKind::BlenderFfmpeg,
+                        blend_file.parent().map(|value| value.to_path_buf()),
+                        blend_file_name_from_path(&blend_file),
+                        None,
+                        transcode_context_frame_start,
+                        transcode_context_frame_end,
+                    ),
+                )
+                .map(|value| value.to_string_lossy().to_string())
+                .map_err(|error| error.to_string())
+            })
+            .transpose()?
+    } else {
+        None
+    };
+    let transcode_preset_override = if transcode_allowed {
+        normalize_optional_preset(payload.transcode_preset_override)
+    } else {
+        None
+    };
+    let transcode_fps_override = if transcode_allowed {
+        normalize_optional_positive_f32(payload.transcode_fps_override, "transcode_fps_override")?
+    } else {
+        None
+    };
+    let transcode_crf_override = if transcode_allowed {
+        payload
+            .transcode_crf_override
+            .map(|value| value.min(51) as i32)
+    } else {
+        None
+    };
 
     let rows_affected = sqlx::query(
         "UPDATE jobs
@@ -868,8 +927,8 @@ pub async fn reset_job(
     state: State<'_, AppState>,
     app: tauri::AppHandle,
 ) -> Result<RenderJob, String> {
-    let Some((current_frame_start, current_frame_end, original_frame_start, original_frame_end, current_priority, status)) = sqlx::query_as::<_, (i32, i32, i32, i32, i32, JobStatus)>(
-        "SELECT frame_start, frame_end, original_frame_start, original_frame_end, priority, status FROM jobs WHERE id = ?",
+    let Some((current_frame_start, current_frame_end, original_frame_start, original_frame_end, current_priority, status, render_mode)) = sqlx::query_as::<_, (i32, i32, i32, i32, i32, JobStatus, RenderMode)>(
+        "SELECT frame_start, frame_end, original_frame_start, original_frame_end, priority, status, render_mode FROM jobs WHERE id = ?",
     )
     .bind(&id)
     .fetch_optional(&state.pool)
@@ -883,6 +942,15 @@ pub async fn reset_job(
         JobStatus::Failed | JobStatus::Cancelled | JobStatus::Interrupted | JobStatus::Done
     ) {
         return Err(format!("job {id} is not in a retriable state"));
+    }
+
+    if render_mode.is_quick_mp4() {
+        if resume_from_existing {
+            return Err("quick_mp4 jobs do not support resume_from_existing".into());
+        }
+        if frame_start.is_some() || frame_end.is_some() {
+            return Err("quick_mp4 jobs only support full rerender".into());
+        }
     }
 
     let target_frame_start = frame_start.unwrap_or(current_frame_start);

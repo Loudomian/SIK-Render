@@ -159,7 +159,7 @@
     />
 
     <UModal
-      :open="!!retryConfirmJob"
+      :open="showRetryConfirm"
       :close="false"
       title="选择渲染方式"
       :ui="{ content: 'job-modal-content retry-modal-content' }"
@@ -168,7 +168,36 @@
       <template #body>
         <div class="modal-stack">
           <div class="transcode-submit-stack retry-modal-stack">
-            <div class="choice-grid retry-choice-grid">
+            <div v-if="retryIsQuickMp4" class="choice-grid retry-choice-grid">
+              <section class="surface-panel transcode-submit-section retry-option-section retry-option-section-wide">
+                <div class="transcode-submit-head">
+                  <div>
+                    <p class="choice-card-mode">快速 MP4</p>
+                    <h3 class="choice-card-title">重新渲染整个片段</h3>
+                  </div>
+                </div>
+                <p class="choice-card-desc">
+                  快速 MP4 为单文件输出，仅支持整段覆盖重新渲染。
+                </p>
+                <div class="choice-card-toggle-group">
+                  <UButton
+                    icon="i-lucide-refresh-ccw"
+                    label="整段覆盖"
+                    color="neutral"
+                    variant="outline"
+                    size="sm"
+                    class="choice-card-toggle-button"
+                    :loading="retrySubmittingMode === 'restart'"
+                    :disabled="retrySubmittingMode !== null"
+                    @click="confirmRetryFromStart"
+                  />
+                </div>
+                <div class="choice-card-note-stack">
+                  <p class="choice-card-inline-note">{{ retryFullRangeSummary }}</p>
+                </div>
+              </section>
+            </div>
+            <div v-else class="choice-grid retry-choice-grid">
               <section class="surface-panel transcode-submit-section retry-option-section retry-option-section-wide">
                 <div class="transcode-submit-head">
                   <div>
@@ -280,7 +309,7 @@
               </section>
             </div>
 
-            <section v-if="retryConfirmJob && !['OPEN_EXR', 'EXR'].includes(retryConfirmJob.outputFormat)" class="surface-panel transcode-submit-section retry-transcode-panel">
+            <section v-if="retryConfirmJob && !retryIsQuickMp4 && !['OPEN_EXR', 'EXR'].includes(retryConfirmJob.outputFormat)" class="surface-panel transcode-submit-section retry-transcode-panel">
               <div class="retry-transcode-head">
                 <p class="choice-card-mode">自动转码</p>
                 <h3 class="choice-card-title">补渲后自动创建转码任务</h3>
@@ -431,7 +460,7 @@
                       :rows="1"
                       autoresize
                       class="w-full path-textarea path-textarea-xl"
-                      placeholder="F:\项目\潜行瞬鲨1-250\潜行瞬鲨_######"
+                      :placeholder="outputPathPlaceholder"
                       :ui="{ root: 'w-full' }"
                     />
                     <UButton type="button" icon="i-lucide-folder-open" label="浏览" color="neutral" variant="outline" @click="browseRenderOutputDirectory" />
@@ -467,7 +496,7 @@
                 <div class="job-form-modern-grid">
                   <UFormField label="格式" class="job-format-field">
                     <USelect
-                      v-model="form.output_format"
+                      v-model="selectedOutputMode"
                       :items="outputFormatOptions"
                       trailing-icon="i-lucide-chevron-down"
                       class="job-format-select"
@@ -482,10 +511,10 @@
                     >
                       <template #default="{ modelValue }">
                         <span class="min-w-0 flex-1 truncate opacity-0 pointer-events-none select-none" aria-hidden="true">
-                          {{ modelValue || '选择格式' }}
+                          {{ outputModeLabelMap[modelValue as OutputMode] || '选择格式' }}
                         </span>
                         <span class="absolute inset-0 flex items-center justify-center px-6 pointer-events-none">
-                          {{ modelValue || '选择格式' }}
+                          {{ outputModeLabelMap[modelValue as OutputMode] || '选择格式' }}
                         </span>
                       </template>
                     </USelect>
@@ -508,6 +537,7 @@
                         <p class="hint-text">{{ outputSettingsSummary }}</p>
                       </div>
                       <UButton
+                        v-if="!isQuickMp4Output"
                         type="button"
                         icon="i-lucide-image-up"
                         label="输出设置"
@@ -519,7 +549,7 @@
                   </div>
                 </UFormField>
 
-                <UFormField label="渲染后转码">
+                <UFormField v-if="!isQuickMp4Output" label="渲染后转码">
                   <div class="job-form-transcode-panel surface-panel">
                     <div class="job-form-transcode-toggle-row">
                       <div class="job-form-transcode-copy">
@@ -668,60 +698,88 @@
     >
       <template #body>
         <div class="modal-stack">
-          <p class="modal-copy">
-            检测到当前输出范围已存在
-            <strong>{{ addJobFrameStatus?.frameCount ?? 0 }} 帧</strong>
-            <template v-if="addJobFrameStatus?.lastFrame != null">
-              ，当前最后一帧为 <strong>{{ addJobFrameStatus.lastFrame }}</strong>
-            </template>
-            。
-          </p>
-          <div class="choice-grid">
-            <UCard variant="subtle" class="choice-card" :ui="{ body: 'choice-card-body' }">
-              <div class="choice-card-head">
-                <p class="choice-card-mode">覆盖模式</p>
-                <h3 class="choice-card-title">重新开始渲染</h3>
-              </div>
-              <p class="choice-card-desc">
-                从第 <span class="choice-card-accent">{{ form.frame_start }}</span> 帧开始渲染，直接覆盖
-                <span class="choice-card-accent">{{ form.frame_start }}–{{ form.frame_end }}</span>
-                范围内的同名帧
-              </p>
-              <UButton
-                color="neutral"
-                variant="outline"
-                label="从头覆盖"
-                class="choice-card-action"
-                :loading="submitting && addJobSubmitMode === 'restart'"
-                :disabled="submitting"
-                @click="submitPreparedJob(false)"
-              />
-            </UCard>
+          <template v-if="addJobConflictKind === 'file'">
+            <p class="modal-copy">
+              检测到输出文件已存在：
+              <strong>{{ addJobExistingOutputPath }}</strong>
+            </p>
+            <div class="choice-grid">
+              <UCard variant="subtle" class="choice-card" :ui="{ body: 'choice-card-body' }">
+                <div class="choice-card-head">
+                  <p class="choice-card-mode">快速 MP4</p>
+                  <h3 class="choice-card-title">覆盖现有文件并重新渲染</h3>
+                </div>
+                <p class="choice-card-desc">
+                  该模式会直接输出单个 MP4 文件，不支持续跑或按区间补渲。
+                </p>
+                <UButton
+                  color="neutral"
+                  variant="outline"
+                  label="覆盖并渲染"
+                  class="choice-card-action"
+                  :loading="submitting && addJobSubmitMode === 'restart'"
+                  :disabled="submitting"
+                  @click="submitPreparedJob(false)"
+                />
+              </UCard>
+            </div>
+          </template>
+          <template v-else>
+            <p class="modal-copy">
+              检测到当前输出范围已存在
+              <strong>{{ addJobFrameStatus?.frameCount ?? 0 }} 帧</strong>
+              <template v-if="addJobFrameStatus?.lastFrame != null">
+                ，当前最后一帧为 <strong>{{ addJobFrameStatus.lastFrame }}</strong>
+              </template>
+              。
+            </p>
+            <div class="choice-grid">
+              <UCard variant="subtle" class="choice-card" :ui="{ body: 'choice-card-body' }">
+                <div class="choice-card-head">
+                  <p class="choice-card-mode">覆盖模式</p>
+                  <h3 class="choice-card-title">重新开始渲染</h3>
+                </div>
+                <p class="choice-card-desc">
+                  从第 <span class="choice-card-accent">{{ form.frame_start }}</span> 帧开始渲染，直接覆盖
+                  <span class="choice-card-accent">{{ form.frame_start }}–{{ form.frame_end }}</span>
+                  范围内的同名帧
+                </p>
+                <UButton
+                  color="neutral"
+                  variant="outline"
+                  label="从头覆盖"
+                  class="choice-card-action"
+                  :loading="submitting && addJobSubmitMode === 'restart'"
+                  :disabled="submitting"
+                  @click="submitPreparedJob(false)"
+                />
+              </UCard>
 
-            <UCard variant="subtle" class="choice-card" :ui="{ body: 'choice-card-body' }">
-              <div class="choice-card-head">
-                <p class="choice-card-mode">续跑模式</p>
-                <h3 class="choice-card-title">从最后一帧继续</h3>
-              </div>
-              <p class="choice-card-desc">
-                <template v-if="addJobFrameStatus && addJobFrameStatus.nextFrame <= form.frame_end">
-                  从第 <span class="choice-card-accent">{{ addJobFrameStatus.nextFrame }}</span> 帧继续渲染
-                </template>
-                <template v-else>
-                  当前帧段已完整存在，继续将直接完成
-                </template>
-              </p>
-              <UButton
-                color="neutral"
-                variant="outline"
-                label="继续渲染"
-                class="choice-card-action"
-                :loading="submitting && addJobSubmitMode === 'continue'"
-                :disabled="submitting"
-                @click="submitPreparedJob(true)"
-              />
-            </UCard>
-          </div>
+              <UCard variant="subtle" class="choice-card" :ui="{ body: 'choice-card-body' }">
+                <div class="choice-card-head">
+                  <p class="choice-card-mode">续跑模式</p>
+                  <h3 class="choice-card-title">从最后一帧继续</h3>
+                </div>
+                <p class="choice-card-desc">
+                  <template v-if="addJobFrameStatus && addJobFrameStatus.nextFrame <= form.frame_end">
+                    从第 <span class="choice-card-accent">{{ addJobFrameStatus.nextFrame }}</span> 帧继续渲染
+                  </template>
+                  <template v-else>
+                    当前帧段已完整存在，继续将直接完成
+                  </template>
+                </p>
+                <UButton
+                  color="neutral"
+                  variant="outline"
+                  label="继续渲染"
+                  class="choice-card-action"
+                  :loading="submitting && addJobSubmitMode === 'continue'"
+                  :disabled="submitting"
+                  @click="submitPreparedJob(true)"
+                />
+              </UCard>
+            </div>
+          </template>
           <div class="modal-actions">
             <UButton icon="i-lucide-x" label="取消" color="warning" variant="outline" :disabled="submitting" @click="closeAddJobConfirm" />
           </div>
@@ -736,7 +794,7 @@ import { open } from '@tauri-apps/plugin-dialog'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import type { DropdownMenuItem, TabsItem } from '@nuxt/ui'
 import { useRouter } from 'vue-router'
-import type { AddJobPayload, BlendProjectSettings, OutputPathTemplatePreview, RenderJob, RenderJobTranscodeConfig, RenderedFramesStatus } from '~/types'
+import type { AddJobPayload, BlendProjectSettings, OutputPathTemplatePreview, RenderJob, RenderJobTranscodeConfig, RenderMode, RenderedFramesStatus } from '~/types'
 import { buildTranscodeOutputPath, normalizeTranscodeDirectory, sanitizeTranscodeStemPart, splitTranscodeOutputPath } from '~/composables/useTranscodeConfig'
 
 const router = useRouter()
@@ -915,9 +973,11 @@ const queueToggleTooltip = computed(() =>
     : '立即中止当前渲染任务并暂停队列，恢复时会从断点自动续跑',
 )
 
-const { validateBlendFile, inspectBlendFile, inspectRenderedFrames, inspectToolchain, previewOutputPathTemplate } = useTauri()
+const { validateBlendFile, inspectBlendFile, inspectRenderedFrames, inspectToolchain, previewOutputPathTemplate, pathExists } = useTauri()
 
+const showRetryConfirm = ref(false)
 const retryConfirmJob = ref<RenderJob | null>(null)
+const retryIsQuickMp4 = ref(false)
 const retryFrameStatus = ref<RenderedFramesStatus | null>(null)
 const deleteConfirmJob = ref<RenderJob | null>(null)
 const retryActionError = ref('')
@@ -934,6 +994,7 @@ const retryTranscodeRangeMode = ref<'current' | 'original'>('current')
 const retryOriginalTranscodeFrameStart = ref<number | null>(null)
 const retryOriginalTranscodeFrameEnd = ref<number | null>(null)
 let retryCustomInspectToken = 0
+let retryCloseCleanupTimer: ReturnType<typeof setTimeout> | null = null
 const draggedJobId = ref<string | null>(null)
 const dropTargetJobId = ref<string | null>(null)
 const dropPosition = ref<'before' | 'after'>('before')
@@ -950,36 +1011,9 @@ function confirmDelete() {
   deleteConfirmJob.value = null
 }
 
-async function handleRetry(job: RenderJob) {
-  retryActionError.value = ''
-  const status = await inspectRenderedFrames(job.outputPath, job.outputFormat, job.frameStart, job.frameEnd)
-    .catch(() => ({ frameCount: 0, lastFrame: null, nextFrame: job.frameStart }))
-  retryFrameStatus.value = normalizeRetryFrameStatus(job, status)
-  retryConfirmJob.value = job
-  retryCustomStart.value = job.frameStart
-  retryCustomEnd.value = job.frameEnd
-  retryCustomResumeFromExisting.value = job.status !== 'done'
-  retryCustomFrameStatus.value = status
-  retryAutoTranscodeEnabled.value = job.autoTranscodeMp4
-  retryOriginalTranscodeFrameStart.value = job.transcodeFrameStartOverride ?? job.originalFrameStart
-  retryOriginalTranscodeFrameEnd.value = job.transcodeFrameEndOverride ?? job.originalFrameEnd
-  retryTranscodeRangeMode.value =
-    job.transcodeFrameStartOverride != null && job.transcodeFrameEndOverride != null ? 'original' : 'current'
-  void refreshRetryCustomInspection()
-}
-
-function normalizeRetryFrameStatus(job: RenderJob, status: RenderedFramesStatus): RenderedFramesStatus {
-  if (job.lastRenderedFrame == null) return status
-  const lastFrame = Math.min(job.frameEnd, Math.max(job.frameStart, job.lastRenderedFrame))
-  return {
-    frameCount: status.frameCount,
-    lastFrame,
-    nextFrame: Math.min(job.frameEnd + 1, lastFrame + 1),
-  }
-}
-
-function resetRetryConfirmState() {
+function clearRetryConfirmState() {
   retryConfirmJob.value = null
+  retryIsQuickMp4.value = false
   retryFrameStatus.value = null
   retrySubmittingMode.value = null
   retryCustomStart.value = null
@@ -994,9 +1028,69 @@ function resetRetryConfirmState() {
   retryOriginalTranscodeFrameEnd.value = null
 }
 
+function cancelRetryCloseCleanup() {
+  if (!retryCloseCleanupTimer) return
+  clearTimeout(retryCloseCleanupTimer)
+  retryCloseCleanupTimer = null
+}
+
+function beginCloseRetryConfirm() {
+  showRetryConfirm.value = false
+  cancelRetryCloseCleanup()
+  retryCloseCleanupTimer = setTimeout(() => {
+    clearRetryConfirmState()
+    retryCloseCleanupTimer = null
+  }, 220)
+}
+
+async function handleRetry(job: RenderJob) {
+  cancelRetryCloseCleanup()
+  retryActionError.value = ''
+  retryIsQuickMp4.value = job.renderMode === 'quick_mp4'
+  if (job.renderMode === 'quick_mp4') {
+    retryFrameStatus.value = null
+    retryConfirmJob.value = job
+    retryCustomStart.value = job.frameStart
+    retryCustomEnd.value = job.frameEnd
+    retryCustomResumeFromExisting.value = false
+    retryCustomFrameStatus.value = null
+    retryAutoTranscodeEnabled.value = false
+    retryOriginalTranscodeFrameStart.value = null
+    retryOriginalTranscodeFrameEnd.value = null
+    retryTranscodeRangeMode.value = 'current'
+    showRetryConfirm.value = true
+    return
+  }
+  const status = await inspectRenderedFrames(job.outputPath, job.outputFormat, job.frameStart, job.frameEnd)
+    .catch(() => ({ frameCount: 0, lastFrame: null, nextFrame: job.frameStart }))
+  retryFrameStatus.value = normalizeRetryFrameStatus(job, status)
+  retryConfirmJob.value = job
+  retryCustomStart.value = job.frameStart
+  retryCustomEnd.value = job.frameEnd
+  retryCustomResumeFromExisting.value = job.status !== 'done'
+  retryCustomFrameStatus.value = status
+  retryAutoTranscodeEnabled.value = job.autoTranscodeMp4
+  retryOriginalTranscodeFrameStart.value = job.transcodeFrameStartOverride ?? job.originalFrameStart
+  retryOriginalTranscodeFrameEnd.value = job.transcodeFrameEndOverride ?? job.originalFrameEnd
+  retryTranscodeRangeMode.value =
+    job.transcodeFrameStartOverride != null && job.transcodeFrameEndOverride != null ? 'original' : 'current'
+  showRetryConfirm.value = true
+  void refreshRetryCustomInspection()
+}
+
+function normalizeRetryFrameStatus(job: RenderJob, status: RenderedFramesStatus): RenderedFramesStatus {
+  if (job.lastRenderedFrame == null) return status
+  const lastFrame = Math.min(job.frameEnd, Math.max(job.frameStart, job.lastRenderedFrame))
+  return {
+    frameCount: status.frameCount,
+    lastFrame,
+    nextFrame: Math.min(job.frameEnd + 1, lastFrame + 1),
+  }
+}
+
 function closeRetryConfirm() {
   if (retrySubmittingMode.value) return
-  resetRetryConfirmState()
+  beginCloseRetryConfirm()
 }
 
 function clearRetryPreviewOnLeave(event: MouseEvent | FocusEvent, target: 'full' | 'custom') {
@@ -1027,7 +1121,7 @@ async function confirmRetryContinue() {
       })
       await jobsStore.retryJob(retryConfirmJob.value)
     }
-    resetRetryConfirmState()
+    beginCloseRetryConfirm()
   } catch (error) {
     retryActionError.value = error instanceof Error ? error.message : String(error)
   } finally {
@@ -1047,7 +1141,7 @@ async function confirmRetryFromStart() {
       })
       await jobsStore.retryJobFromStart(retryConfirmJob.value)
     }
-    resetRetryConfirmState()
+    beginCloseRetryConfirm()
   } catch (error) {
     retryActionError.value = error instanceof Error ? error.message : String(error)
   } finally {
@@ -1070,6 +1164,9 @@ const retryFullRangeLabel = computed(() => {
 const retryFullRangeSummary = computed(() => {
   const job = retryConfirmJob.value
   if (!job) return ''
+  if (job.renderMode === 'quick_mp4') {
+    return `会直接覆盖并重渲 ${job.frameStart}–${job.frameEnd} 的整段 MP4 输出。`
+  }
   if (retryFullRangePreviewMode.value === 'restart') {
     return `整段覆盖会从第 ${job.frameStart} 帧重新渲染到 ${job.frameEnd} 帧。`
   }
@@ -1155,6 +1252,7 @@ const retryTranscodeSummary = computed(() => {
 })
 
 async function persistRetryTranscodeSettings(currentJob: RenderJob, nextRange: { start: number, end: number }) {
+  if (currentJob.renderMode === 'quick_mp4') return
   const originalStart = retryOriginalTranscodeFrameStart.value ?? currentJob.originalFrameStart
   const originalEnd = retryOriginalTranscodeFrameEnd.value ?? currentJob.originalFrameEnd
   const useOriginalRange =
@@ -1179,7 +1277,7 @@ async function refreshRetryCustomInspection() {
   const job = retryConfirmJob.value
   const start = retryCustomStart.value
   const end = retryCustomEnd.value
-  if (!job || start == null || end == null || start > end) {
+  if (!job || job.renderMode === 'quick_mp4' || start == null || end == null || start > end) {
     retryCustomFrameStatus.value = null
     retryCustomInspectLoading.value = false
     return
@@ -1224,7 +1322,7 @@ async function confirmRetryCustomRange(resumeFromExisting = retryCustomResumeFro
     } else {
       await jobsStore.retryJobFromStart(job, { start, end })
     }
-    resetRetryConfirmState()
+    beginCloseRetryConfirm()
   } catch (error) {
     retryActionError.value = error instanceof Error ? error.message : String(error)
   } finally {
@@ -1233,9 +1331,9 @@ async function confirmRetryCustomRange(resumeFromExisting = retryCustomResumeFro
 }
 
 watch(
-  [retryConfirmJob, retryCustomStart, retryCustomEnd],
+  [showRetryConfirm, retryConfirmJob, retryCustomStart, retryCustomEnd],
   () => {
-    if (!retryConfirmJob.value) return
+    if (!showRetryConfirm.value || !retryConfirmJob.value) return
     void refreshRetryCustomInspection()
   },
 )
@@ -1275,6 +1373,8 @@ const projectSettings = ref<BlendProjectSettings | null>(null)
 const projectSettingsMessage = ref('')
 const outputFrameStatus = ref<RenderedFramesStatus | null>(null)
 const addJobFrameStatus = ref<RenderedFramesStatus | null>(null)
+const addJobConflictKind = ref<'frames' | 'file' | null>(null)
+const addJobExistingOutputPath = ref('')
 const outputPathPreview = ref<OutputPathTemplatePreview | null>(null)
 const resolvedAddJobBaseTranscodeOutputPath = ref('')
 let inspectTimer: ReturnType<typeof setTimeout> | null = null
@@ -1292,8 +1392,20 @@ function displayEngine(engine: string) {
   return ENGINE_NAMES[engine] ?? engine
 }
 
+type OutputMode = 'PNG' | 'OPEN_EXR' | 'QUICK_MP4'
+
+const QUICK_MP4_OUTPUT_PATH_TEMPLATE = './快速预览/{blendFileName}_{frameStart}-{frameEnd}.mp4'
 const SEQUENCE_FORMATS = ['PNG', 'OPEN_EXR']
-const outputFormatOptions = ['PNG', 'OPEN_EXR']
+const outputFormatOptions = [
+  { label: 'PNG 序列', value: 'PNG' },
+  { label: 'OpenEXR 序列', value: 'OPEN_EXR' },
+  { label: '快速 MP4', value: 'QUICK_MP4' },
+] satisfies Array<{ label: string, value: OutputMode }>
+const outputModeLabelMap: Record<OutputMode, string> = {
+  PNG: 'PNG 序列',
+  OPEN_EXR: 'OpenEXR 序列',
+  QUICK_MP4: '快速 MP4',
+}
 const queueTabItems = computed<TabsItem[]>(() => [
   { label: '全部', value: 'all', badge: { label: String(jobsStore.jobs.length), color: 'neutral' as const, variant: 'subtle' as const }, icon: 'i-lucide-layers', class: 'queue-tab-tone-all', ui: { trigger: 'queue-tab-tone-all' } },
   { label: '排队中', value: 'queue', badge: { label: String(jobsStore.queueJobs.length), color: 'info' as const, variant: 'subtle' as const }, icon: 'i-lucide-loader-circle', class: 'queue-tab-tone-queue', ui: { trigger: 'queue-tab-tone-queue' } },
@@ -1517,14 +1629,22 @@ async function autoFillOutputPath(blendPath: string) {
   try {
     const preview = await previewOutputPathTemplate({
       kind: 'blender',
-      template: settingsStore.settings.renderOutputPathTemplate,
+      template: isQuickMp4Output.value
+        ? QUICK_MP4_OUTPUT_PATH_TEMPLATE
+        : settingsStore.settings.renderOutputPathTemplate,
       blend_file: blendPath,
       frame_start: form.frame_start,
       frame_end: form.frame_end,
     })
-    form.output_path = preview.resolvedPath || settingsStore.settings.renderOutputPathTemplate
+    form.output_path = preview.resolvedPath || (
+      isQuickMp4Output.value
+        ? QUICK_MP4_OUTPUT_PATH_TEMPLATE
+        : settingsStore.settings.renderOutputPathTemplate
+    )
   } catch {
-    form.output_path = settingsStore.settings.renderOutputPathTemplate
+    form.output_path = isQuickMp4Output.value
+      ? QUICK_MP4_OUTPUT_PATH_TEMPLATE
+      : settingsStore.settings.renderOutputPathTemplate
   }
 }
 
@@ -1532,8 +1652,13 @@ function buildOutputPatternForDirectory(directory: string) {
   const normalizedDirectory = directory.replace(/[\\/]+$/, '')
   if (!normalizedDirectory) return ''
 
-  const currentPattern = form.output_path.split(/[/\\]/).pop() || ''
   const defaultName = (form.name || inferJobName(form.blend_file) || 'render').replace(/[<>:"/\\|?*]/g, '_')
+  if (isQuickMp4Output.value) {
+    const quickName = (inferJobName(form.blend_file) || form.name || 'render').replace(/[<>:"/\\|?*]/g, '_')
+    return `${normalizedDirectory}\\${quickName}_${form.frame_start}-${form.frame_end}.mp4`
+  }
+
+  const currentPattern = form.output_path.split(/[/\\]/).pop() || ''
   const outputPattern = currentPattern.includes('#') || currentPattern.includes('{')
     ? currentPattern
     : `${defaultName}_######`
@@ -1582,6 +1707,7 @@ async function browseRenderOutputDirectory() {
 const form = reactive<AddJobPayload>({
   name: '',
   note: '',
+  render_mode: 'image_sequence',
   auto_transcode_mp4: false,
   transcode_name_override: null,
   transcode_fps_override: null,
@@ -1609,6 +1735,7 @@ const formNote = computed({
 function resetForm() {
   form.name = ''
   form.note = ''
+  form.render_mode = 'image_sequence'
   form.auto_transcode_mp4 = false
   form.transcode_name_override = null
   form.transcode_fps_override = null
@@ -1628,6 +1755,8 @@ function resetForm() {
   projectSettingsMessage.value = ''
   outputFrameStatus.value = null
   addJobFrameStatus.value = null
+  addJobConflictKind.value = null
+  addJobExistingOutputPath.value = ''
   outputPathPreview.value = null
   resolvedAddJobBaseTranscodeOutputPath.value = ''
   addJobTranscodeSettingsOpen.value = false
@@ -1677,6 +1806,8 @@ function closeAddJob(force = false) {
   projectSettingsMessage.value = ''
   outputFrameStatus.value = null
   addJobFrameStatus.value = null
+  addJobConflictKind.value = null
+  addJobExistingOutputPath.value = ''
   outputPathPreview.value = null
   resolvedAddJobBaseTranscodeOutputPath.value = ''
 }
@@ -1689,6 +1820,8 @@ function closeAddJobConfirm() {
   if (submitting.value) return
   showAddJobConfirm.value = false
   addJobFrameStatus.value = null
+  addJobConflictKind.value = null
+  addJobExistingOutputPath.value = ''
 }
 
 function goToSettings() {
@@ -1768,14 +1901,45 @@ const addJobEffectiveTranscodeConfig = computed<RenderJobTranscodeConfig>(() => 
   }
 })
 
+const selectedOutputMode = computed<OutputMode>({
+  get: () => {
+    if (form.render_mode === 'quick_mp4') return 'QUICK_MP4'
+    return form.output_format === 'OPEN_EXR' ? 'OPEN_EXR' : 'PNG'
+  },
+  set: (value) => {
+    if (value === 'QUICK_MP4') {
+      form.render_mode = 'quick_mp4'
+      form.output_format = 'FFMPEG'
+      form.auto_transcode_mp4 = false
+      addJobTranscodeSettingsOpen.value = false
+      return
+    }
+
+    form.render_mode = 'image_sequence'
+    form.output_format = value
+  },
+})
+
 const addJobTranscodeSummary = computed(() => {
   const config = addJobEffectiveTranscodeConfig.value
   return `${config.outputStem}.mp4 · ${config.fps} FPS · CRF ${config.crf} · ${config.preset}`
 })
 
-const outputSettingsTitle = computed(() => '图像序列输出设置')
+const isQuickMp4Output = computed(() => form.render_mode === 'quick_mp4')
+const outputPathPlaceholder = computed(() => (
+  isQuickMp4Output.value
+    ? 'F:\\项目\\快速预览\\潜行瞬鲨_1-250.mp4'
+    : 'F:\\项目\\潜行瞬鲨_1-250\\潜行瞬鲨_######'
+))
+
+const outputSettingsTitle = computed(() => (
+  isQuickMp4Output.value ? '快速 MP4 固定预设' : '图像序列输出设置'
+))
 
 const outputSettingsSummary = computed(() => {
+  if (isQuickMp4Output.value) {
+    return 'Blender 直出 H.264 MP4 · 固定预设 · 不进入转码队列'
+  }
   if (form.output_format === 'OPEN_EXR') {
     return [
       'OpenEXR',
@@ -1804,7 +1968,15 @@ const canInspectProject = computed(() => {
 const notices = computed(() => {
   const list: { type: 'warn' | 'info'; text: string }[] = []
   if (projectSettings.value?.outputFormat === 'FFMPEG') {
-    list.push({ type: 'warn', text: '工程原输出为视频 (FFMPEG)，将按所选图像格式渲染序列帧。' })
+    list.push({
+      type: 'warn',
+      text: isQuickMp4Output.value
+        ? '工程原输出为视频 (FFMPEG)，当前将直接输出 MP4。'
+        : '工程原输出为视频 (FFMPEG)，将按所选图像格式渲染序列帧。',
+    })
+  }
+  if (isQuickMp4Output.value && addJobExistingOutputPath.value) {
+    list.push({ type: 'warn', text: `检测到目标 MP4 已存在：${addJobExistingOutputPath.value}` })
   }
   if ((outputFrameStatus.value?.frameCount ?? 0) > 0) {
     const suffix = outputFrameStatus.value?.lastFrame != null ? `，最后一帧 ${outputFrameStatus.value.lastFrame}` : ''
@@ -1845,6 +2017,14 @@ async function inspectProjectSettings(showErrors = false) {
 async function checkOutputDir() {
   if (!outputPathPreview.value?.resolvedPath || outputPathTemplateHasErrors.value) {
     outputFrameStatus.value = null
+    addJobExistingOutputPath.value = ''
+    return
+  }
+  if (isQuickMp4Output.value) {
+    outputFrameStatus.value = null
+    addJobExistingOutputPath.value = await pathExists(outputPathPreview.value.resolvedPath)
+      ? outputPathPreview.value.resolvedPath
+      : ''
     return
   }
   try {
@@ -1857,6 +2037,7 @@ async function checkOutputDir() {
   } catch {
     outputFrameStatus.value = null
   }
+  addJobExistingOutputPath.value = ''
 }
 
 async function refreshOutputPathPreview() {
@@ -1929,12 +2110,23 @@ watch(
   { immediate: true },
 )
 
+watch(
+  selectedOutputMode,
+  () => {
+    if (form.blend_file) {
+      void autoFillOutputPath(form.blend_file)
+    }
+    void checkOutputDir()
+  },
+)
+
 function buildJobPayload(resumeFromExisting: boolean): AddJobPayload {
   const seededFrameStatus = resumeFromExisting ? addJobFrameStatus.value : null
   const totalFrames = form.frame_end - form.frame_start + 1
-  const autoTranscodeEnabled = form.auto_transcode_mp4 && !isExrOutput.value
+  const autoTranscodeEnabled = form.auto_transcode_mp4 && !isExrOutput.value && !isQuickMp4Output.value
   return {
     ...form,
+    render_mode: form.render_mode as RenderMode,
     auto_transcode_mp4: autoTranscodeEnabled,
     transcode_name_override: autoTranscodeEnabled ? form.transcode_name_override : null,
     transcode_fps_override: autoTranscodeEnabled ? form.transcode_fps_override : null,
@@ -1945,10 +2137,11 @@ function buildJobPayload(resumeFromExisting: boolean): AddJobPayload {
     fps: projectSettings.value?.fps ?? null,
     preview_width: projectSettings.value?.resolutionX ?? null,
     preview_height: projectSettings.value?.resolutionY ?? null,
-    resume_from_existing: resumeFromExisting,
-    initial_current_frame: seededFrameStatus?.frameCount ?? null,
-    initial_total_frames: seededFrameStatus ? totalFrames : null,
-    initial_last_rendered_frame: seededFrameStatus?.lastFrame ?? null,
+    output_format: isQuickMp4Output.value ? 'FFMPEG' : form.output_format,
+    resume_from_existing: isQuickMp4Output.value ? false : resumeFromExisting,
+    initial_current_frame: isQuickMp4Output.value ? null : (seededFrameStatus?.frameCount ?? null),
+    initial_total_frames: isQuickMp4Output.value ? null : (seededFrameStatus ? totalFrames : null),
+    initial_last_rendered_frame: isQuickMp4Output.value ? null : (seededFrameStatus?.lastFrame ?? null),
   }
 }
 
@@ -1994,12 +2187,24 @@ async function submitNewJob() {
       formError.value = '当前输出路径还无法解析，请先检查模板变量。'
       return
     }
-    const status = await inspectRenderedFrames(resolvedOutputPath, form.output_format, form.frame_start, form.frame_end)
-      .catch(() => ({ frameCount: 0, lastFrame: null, nextFrame: form.frame_start }))
-    if (status.frameCount > 0) {
-      addJobFrameStatus.value = status
-      showAddJobConfirm.value = true
-      return
+    if (isQuickMp4Output.value) {
+      const exists = await pathExists(resolvedOutputPath)
+      if (exists) {
+        addJobConflictKind.value = 'file'
+        addJobExistingOutputPath.value = resolvedOutputPath
+        showAddJobConfirm.value = true
+        return
+      }
+    }
+    if (!isQuickMp4Output.value) {
+      const status = await inspectRenderedFrames(resolvedOutputPath, form.output_format, form.frame_start, form.frame_end)
+        .catch(() => ({ frameCount: 0, lastFrame: null, nextFrame: form.frame_start }))
+      if (status.frameCount > 0) {
+        addJobConflictKind.value = 'frames'
+        addJobFrameStatus.value = status
+        showAddJobConfirm.value = true
+        return
+      }
     }
 
     await jobsStore.submitJob(buildJobPayload(true))
@@ -2031,6 +2236,7 @@ async function submitPreparedJob(resumeFromExisting: boolean) {
 }
 
 onUnmounted(() => {
+  cancelRetryCloseCleanup()
   unlistenDrop?.()
   window.removeEventListener('pointermove', handleQueuePointerMove)
   window.removeEventListener('pointerup', handleQueuePointerUp)

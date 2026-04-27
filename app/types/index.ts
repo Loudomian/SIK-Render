@@ -3,6 +3,7 @@
 // IPC responses are serde-serialized Rust structs with `rename_all = "camelCase"`.
 
 export type JobStatus = 'pending' | 'running' | 'done' | 'failed' | 'cancelled' | 'interrupted'
+export type RenderMode = 'image_sequence' | 'quick_mp4'
 
 export interface RenderJob {
   id: string
@@ -23,6 +24,7 @@ export interface RenderJob {
   blenderExecutable: string
   outputPath: string
   outputFormat: string
+  renderMode: RenderMode
   originalFrameStart: number
   originalFrameEnd: number
   frameStart: number
@@ -45,6 +47,7 @@ export interface RenderJob {
 export interface AddJobPayload {
   name: string
   note?: string | null
+  render_mode: RenderMode
   auto_transcode_mp4: boolean
   transcode_name_override?: string | null
   transcode_fps_override?: number | null

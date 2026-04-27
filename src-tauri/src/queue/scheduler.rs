@@ -110,6 +110,7 @@ async fn try_start_next_job(app: &AppHandle, state: &AppState) -> anyhow::Result
             blender_exec,
             output_path,
             output_format,
+            render_mode,
             original_frame_start,
             original_frame_end,
             frame_start,
@@ -209,7 +210,10 @@ fn spawn_job_runner(app: AppHandle, state: AppState, running_job: RenderJob) {
                 ) {
                     let _ = crate::commands::transcode::write_blender_job_toml(&updated_job);
                 }
-                if updated_job.status == JobStatus::Done && updated_job.auto_transcode_mp4 {
+                if updated_job.status == JobStatus::Done
+                    && updated_job.auto_transcode_mp4
+                    && !updated_job.render_mode.is_quick_mp4()
+                {
                     let settings = state.cached_settings();
                     let payload = crate::commands::transcode::build_ffmpeg_payload_for_render_job(
                         &updated_job,
@@ -254,6 +258,7 @@ pub async fn load_job(pool: &sqlx::SqlitePool, id: &str) -> anyhow::Result<Rende
             blender_exec,
             output_path,
             output_format,
+            render_mode,
             original_frame_start,
             original_frame_end,
             frame_start,

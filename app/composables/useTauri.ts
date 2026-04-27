@@ -107,6 +107,9 @@ const tauriApi = {
   }) =>
     invoke<OutputPathTemplatePreview>('preview_output_path_template', { payload }),
 
+  pathExists: (path: string) =>
+    invoke<boolean>('path_exists', { path }),
+
   getJobLogs: (jobId: string) =>
     invoke<string[]>('get_job_logs', { jobId }),
 

@@ -73,6 +73,7 @@ pub fn format_to_ext(format: &str) -> &'static str {
         "PNG" => "png",
         "JPEG" => "jpg",
         "OPEN_EXR" => "exr",
+        "FFMPEG" => "mp4",
         "TIFF" => "tiff",
         "BMP" => "bmp",
         "HDR" => "hdr",
@@ -304,6 +305,7 @@ pub async fn run_job(app: AppHandle, state: AppState, job: RenderJob) -> Result<
     )?;
     let log_write_lock = Arc::new(Mutex::new(()));
     let mut crash_count = 0u32;
+    let quick_mp4 = job.render_mode.is_quick_mp4();
 
     let job_result: Result<JobStatus> = loop {
         // Before each attempt check cancellation.
@@ -314,7 +316,9 @@ pub async fn run_job(app: AppHandle, state: AppState, job: RenderJob) -> Result<
             break Err(anyhow::anyhow!("cancelled"));
         }
 
-        let actual_start = if resume_from_existing {
+        let actual_start = if quick_mp4 {
+            job.frame_start
+        } else if resume_from_existing {
             let mut resume_job = job.clone();
             resume_job.resume_from_existing = true;
             resume_job.last_rendered_frame = last_rendered_frame;
@@ -322,7 +326,7 @@ pub async fn run_job(app: AppHandle, state: AppState, job: RenderJob) -> Result<
         } else {
             job.frame_start
         };
-        resume_from_existing = true;
+        resume_from_existing = !quick_mp4;
         if actual_start > job.frame_end {
             persist_job_progress(
                 &state,
@@ -338,12 +342,16 @@ pub async fn run_job(app: AppHandle, state: AppState, job: RenderJob) -> Result<
         }
 
         let already_done = (actual_start - job.frame_start).max(0) as u32;
-        let file_baseline = count_job_image_files_sync(
-            &job.output_path,
-            job.frame_start,
-            job.frame_end,
-            &job.output_format,
-        );
+        let file_baseline = if quick_mp4 {
+            0
+        } else {
+            count_job_image_files_sync(
+                &job.output_path,
+                job.frame_start,
+                job.frame_end,
+                &job.output_format,
+            )
+        };
 
         // Emit initial progress so the UI starts at the right position.
         if already_done > 0 {
@@ -368,6 +376,10 @@ pub async fn run_job(app: AppHandle, state: AppState, job: RenderJob) -> Result<
                     remaining_secs: None,
                 },
             );
+        }
+
+        if quick_mp4 && job.output_path.exists() {
+            let _ = tokio::fs::remove_file(&job.output_path).await;
         }
 
         let mut child = match spawn_blender(&job, actual_start, &render_settings) {
@@ -410,42 +422,46 @@ pub async fn run_job(app: AppHandle, state: AppState, job: RenderJob) -> Result<
         let poll_dir = output_dir.clone();
         let poll_last_primary_progress_ms = last_primary_progress_ms.clone();
         let poll_progress_started_at = progress_started_at.clone();
-        let poll_task = tokio::task::spawn_blocking(move || {
-            let Some(_dir) = poll_dir else { return };
-            let mut last_count = already_done;
-            loop {
-                std::thread::sleep(std::time::Duration::from_millis(500));
-                if !poll_running.load(Ordering::Relaxed) { break; }
-                let raw = count_job_image_files_sync(&poll_output_path, job_frame_start, job_frame_end, &poll_output_format);
-                let new_in_run = raw.saturating_sub(file_baseline);
-                let count = already_done + new_in_run;
-                let silent_ms = poll_progress_started_at
-                    .elapsed()
-                    .as_millis()
-                    .saturating_sub(u128::from(poll_last_primary_progress_ms.load(Ordering::Relaxed)));
-                if count > last_count && silent_ms >= 1500 {
-                    last_count = count;
-                    let elapsed = poll_progress_started_at.elapsed().as_secs_f32();
-                    let secs_per_frame = if new_in_run > 0 { elapsed / new_in_run as f32 } else { 0.0 };
-                    let remaining = if count < total_frames && secs_per_frame > 0.0 {
-                        Some(secs_per_frame * (total_frames - count) as f32)
-                    } else {
-                        None
-                    };
-                    let _ = poll_app.emit(
-                        "render-progress",
-                        RenderProgressEvent {
-                            job_id: poll_job_id.clone(),
-                            frame: count.min(total_frames),
-                            total_frames,
-                            time_elapsed: secs_per_frame,
-                            memory_mb: 0.0,
-                            remaining_secs: remaining,
-                        },
-                    );
+        let poll_task = if quick_mp4 {
+            None
+        } else {
+            Some(tokio::task::spawn_blocking(move || {
+                let Some(_dir) = poll_dir else { return };
+                let mut last_count = already_done;
+                loop {
+                    std::thread::sleep(std::time::Duration::from_millis(500));
+                    if !poll_running.load(Ordering::Relaxed) { break; }
+                    let raw = count_job_image_files_sync(&poll_output_path, job_frame_start, job_frame_end, &poll_output_format);
+                    let new_in_run = raw.saturating_sub(file_baseline);
+                    let count = already_done + new_in_run;
+                    let silent_ms = poll_progress_started_at
+                        .elapsed()
+                        .as_millis()
+                        .saturating_sub(u128::from(poll_last_primary_progress_ms.load(Ordering::Relaxed)));
+                    if count > last_count && silent_ms >= 1500 {
+                        last_count = count;
+                        let elapsed = poll_progress_started_at.elapsed().as_secs_f32();
+                        let secs_per_frame = if new_in_run > 0 { elapsed / new_in_run as f32 } else { 0.0 };
+                        let remaining = if count < total_frames && secs_per_frame > 0.0 {
+                            Some(secs_per_frame * (total_frames - count) as f32)
+                        } else {
+                            None
+                        };
+                        let _ = poll_app.emit(
+                            "render-progress",
+                            RenderProgressEvent {
+                                job_id: poll_job_id.clone(),
+                                frame: count.min(total_frames),
+                                total_frames,
+                                time_elapsed: secs_per_frame,
+                                memory_mb: 0.0,
+                                remaining_secs: remaining,
+                            },
+                        );
+                    }
                 }
-            }
-        });
+            }))
+        };
 
         // ── Stderr drain ──────────────────────────────────────────────────────
         let stderr_buf_clone = stderr_buf.clone();
@@ -490,6 +506,7 @@ pub async fn run_job(app: AppHandle, state: AppState, job: RenderJob) -> Result<
         let mut saved_in_run = 0u32;
         let mut stdout_last_frame = actual_start.max(job_frame_start) as u32;
         let mut latest_frame_time_secs: Option<f32> = None;
+        let mut quick_mp4_progress_seen = false;
         // Sliding window: skip first 3 warmup frames, then average last 8.
         let mut frame_window = FrameTimeWindow::new(3, 8);
         let mut lines = BufReader::new(stdout).lines();
@@ -505,6 +522,9 @@ pub async fn run_job(app: AppHandle, state: AppState, job: RenderJob) -> Result<
             }
             if let Some(frame) = parser::parse_frame(&line) {
                 stdout_last_frame = frame;
+                if quick_mp4 {
+                    quick_mp4_progress_seen = true;
+                }
             }
             if line.contains("Saved:") {
                 saved_in_run += 1;
@@ -558,6 +578,9 @@ pub async fn run_job(app: AppHandle, state: AppState, job: RenderJob) -> Result<
             }
             if let Some(p) = parser::parse_time_progress(&line) {
                 latest_frame_time_secs = Some(p.time_elapsed);
+                if quick_mp4 {
+                    quick_mp4_progress_seen = true;
+                }
                 let new_this_run = stdout_last_frame
                     .saturating_sub(actual_start.max(1) as u32)
                     .saturating_add(1);
@@ -591,7 +614,9 @@ pub async fn run_job(app: AppHandle, state: AppState, job: RenderJob) -> Result<
         let exit_status = child.wait().await?;
 
         render_running.store(false, Ordering::Relaxed);
-        let _ = poll_task.await;
+        if let Some(task) = poll_task {
+            let _ = task.await;
+        }
         state.active_jobs.lock().await.remove(&job.id);
 
         if exit_status.success() {
@@ -620,10 +645,14 @@ pub async fn run_job(app: AppHandle, state: AppState, job: RenderJob) -> Result<
         // ── Crash recovery ────────────────────────────────────────────────────
         crash_count += 1;
         let mut resume_job = job.clone();
-        resume_job.resume_from_existing = true;
-        resume_job.last_rendered_frame = last_rendered_frame;
+        resume_job.resume_from_existing = !quick_mp4;
+        resume_job.last_rendered_frame = if quick_mp4 { None } else { last_rendered_frame };
         let next_start = compute_resume_frame(&resume_job);
-        let frames_done = (next_start - job.frame_start).max(0);
+        let frames_done = if quick_mp4 {
+            stdout_last_frame.saturating_sub(job.frame_start.max(1) as u32).saturating_add(1) as i32
+        } else {
+            (next_start - job.frame_start).max(0)
+        };
         let stderr_tail = stderr_buf
             .lock()
             .await
@@ -632,7 +661,9 @@ pub async fn run_job(app: AppHandle, state: AppState, job: RenderJob) -> Result<
             .collect::<Vec<_>>()
             .join("\n");
 
-        if next_start == actual_start && saved_in_run == 0 {
+        if (!quick_mp4 && next_start == actual_start && saved_in_run == 0)
+            || (quick_mp4 && !quick_mp4_progress_seen)
+        {
             break Err(anyhow::anyhow!(
                 "Blender exited before rendering any new frame.{}",
                 if stderr_tail.is_empty() {
@@ -643,7 +674,12 @@ pub async fn run_job(app: AppHandle, state: AppState, job: RenderJob) -> Result<
             ));
         }
 
-        let recovery_line = if next_start > job.frame_end {
+        let recovery_line = if quick_mp4 && crash_count < max_crash_retries {
+            format!(
+                "[crash-recovery] Blender exited with an error (crash #{}/{}). 任务将从头重新输出 MP4…",
+                crash_count, max_crash_retries
+            )
+        } else if next_start > job.frame_end {
             format!(
                 "[crash-recovery] Blender exited with an error (crash #{}) but all {} frames are complete.",
                 crash_count, total_frames

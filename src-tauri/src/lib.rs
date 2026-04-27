@@ -58,6 +58,7 @@ pub fn run() {
             commands::jobs::update_job_preview_dimensions,
             commands::path_template::preview_output_path_template,
             commands::app::app_ready,
+            commands::app::path_exists,
             commands::blender::get_blender_versions,
             commands::blender::inspect_toolchain,
             commands::blender::add_blender_by_path,

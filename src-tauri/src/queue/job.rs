@@ -14,6 +14,20 @@ pub enum JobStatus {
     Interrupted,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, sqlx::Type)]
+#[sqlx(type_name = "TEXT", rename_all = "snake_case")]
+#[serde(rename_all = "snake_case")]
+pub enum RenderMode {
+    ImageSequence,
+    QuickMp4,
+}
+
+impl RenderMode {
+    pub fn is_quick_mp4(self) -> bool {
+        matches!(self, Self::QuickMp4)
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RenderJob {
@@ -35,6 +49,7 @@ pub struct RenderJob {
     pub blender_executable: PathBuf,
     pub output_path: PathBuf,
     pub output_format: String,
+    pub render_mode: RenderMode,
     pub original_frame_start: i32,
     pub original_frame_end: i32,
     pub frame_start: i32,
@@ -74,6 +89,7 @@ pub struct DbRenderJob {
     pub blender_exec: String,
     pub output_path: String,
     pub output_format: String,
+    pub render_mode: RenderMode,
     pub original_frame_start: i32,
     pub original_frame_end: i32,
     pub frame_start: i32,
@@ -116,6 +132,7 @@ impl From<DbRenderJob> for RenderJob {
             blender_executable: PathBuf::from(value.blender_exec),
             output_path: PathBuf::from(value.output_path),
             output_format: value.output_format,
+            render_mode: value.render_mode,
             original_frame_start: value.original_frame_start,
             original_frame_end: value.original_frame_end,
             frame_start: value.frame_start,
@@ -144,6 +161,7 @@ impl RenderJob {
         blender_executable: PathBuf,
         output_path: PathBuf,
         output_format: String,
+        render_mode: RenderMode,
         frame_start: i32,
         frame_end: i32,
         resume_from_existing: bool,
@@ -168,6 +186,7 @@ impl RenderJob {
             blender_executable,
             output_path,
             output_format,
+            render_mode,
             original_frame_start: frame_start,
             original_frame_end: frame_end,
             frame_start,

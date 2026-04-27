@@ -121,6 +121,7 @@ struct BlenderTomlSourceSection {
 struct BlenderTomlOutputSection {
     path: String,
     format: String,
+    render_mode: String,
     frame_start: i32,
     frame_end: i32,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -681,6 +682,10 @@ pub fn write_blender_job_toml(job: &RenderJob) -> anyhow::Result<()> {
         output: BlenderTomlOutputSection {
             path: job.output_path.to_string_lossy().to_string(),
             format: job.output_format.clone(),
+            render_mode: match job.render_mode {
+                crate::queue::job::RenderMode::ImageSequence => String::from("image_sequence"),
+                crate::queue::job::RenderMode::QuickMp4 => String::from("quick_mp4"),
+            },
             frame_start: job.frame_start,
             frame_end: job.frame_end,
             fps: job.fps,
@@ -981,12 +986,17 @@ pub async fn insert_ffmpeg_job(
                 .map(str::trim)
                 .filter(|value| !value.is_empty())
                 .ok_or_else(|| String::from("source_blender_job_id is required for blender_job output templates"))?;
-            let blend_file = sqlx::query_scalar::<_, String>("SELECT blend_file FROM jobs WHERE id = ?")
+            let (blend_file, render_mode) = sqlx::query_as::<_, (String, crate::queue::job::RenderMode)>(
+                "SELECT blend_file, render_mode FROM jobs WHERE id = ?",
+            )
                 .bind(source_blender_job_id)
                 .fetch_optional(&state.pool)
                 .await
                 .map_err(|error| error.to_string())?
                 .ok_or_else(|| format!("blender job {source_blender_job_id} was not found"))?;
+            if render_mode.is_quick_mp4() {
+                return Err("quick_mp4 render jobs cannot create FFmpeg jobs".into());
+            }
             let blend_file = PathBuf::from(blend_file);
             resolve_output_path(
                 payload.output_path.trim(),

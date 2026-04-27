@@ -18,6 +18,12 @@
                 :color="statusColor"
                 variant="subtle"
               />
+              <UBadge
+                v-if="job.renderMode === 'quick_mp4'"
+                label="快速 MP4"
+                color="neutral"
+                variant="subtle"
+              />
               <UBadge v-if="orderBadgeLabel" :label="orderBadgeLabel" color="neutral" variant="subtle" />
               <UBadge
                 v-if="job.crashCount > 0"
@@ -90,7 +96,7 @@
                 @click="$emit('remove')"
               />
             </UTooltip>
-            <UTooltip text="打开序列帧输出目录" arrow :content="{ side: 'bottom', sideOffset: 8 }">
+            <UTooltip text="打开输出目录" arrow :content="{ side: 'bottom', sideOffset: 8 }">
               <UButton
                 icon="i-lucide-folder-open"
                 label="输出目录"
@@ -234,6 +240,7 @@ const completedAt = computed(() => {
   return formatDateTime(props.job.finishedAt)
 })
 const previewText = computed(() => {
+  if (props.job.renderMode === 'quick_mp4') return '快速 MP4 不提供帧预览'
   if (props.job.outputFormat === 'OPEN_EXR') return 'EXR 不支持预览'
   return props.job.status === 'running' ? '等待首帧输出' : '暂无已渲染帧'
 })
@@ -375,7 +382,7 @@ async function syncStoredPreviewDimensions(width: number, height: number) {
 async function refreshPreview() {
   const token = ++previewLoadToken
   const job = props.job
-  if (job.outputFormat === 'OPEN_EXR') {
+  if (job.renderMode === 'quick_mp4' || job.outputFormat === 'OPEN_EXR') {
     resetPreview()
     return
   }

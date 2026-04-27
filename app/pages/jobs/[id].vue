@@ -46,7 +46,7 @@
                   </template>
                 </UBreadcrumb>
                 <div class="detail-header-actions">
-                  <UFieldGroup size="md" class="detail-action-fieldgroup">
+                  <UFieldGroup v-if="transcodeSupported" size="md" class="detail-action-fieldgroup">
                     <UButton
                       :icon="transcodePrimaryAction.icon"
                       :label="transcodePrimaryAction.label"
@@ -142,7 +142,7 @@
     />
 
     <TranscodeSubmitModal
-      v-if="job"
+      v-if="job && transcodeSupported"
       :open="transcodeModalOpen"
       :initial-config="effectiveTranscodeConfig"
       :blender-job-id="job.id"
@@ -158,7 +158,7 @@
     />
 
     <TranscodeSubmitModal
-      v-if="job"
+      v-if="job && transcodeSupported"
       :open="transcodeSettingsModalOpen"
       mode="settings"
       :initial-config="effectiveTranscodeConfig"
@@ -185,7 +185,36 @@
       <template #body>
         <div class="modal-stack">
           <div class="transcode-submit-stack retry-modal-stack">
-            <div class="choice-grid retry-choice-grid">
+            <div v-if="retryIsQuickMp4" class="choice-grid retry-choice-grid">
+              <section class="surface-panel transcode-submit-section retry-option-section retry-option-section-wide">
+                <div class="transcode-submit-head">
+                  <div>
+                    <p class="choice-card-mode">快速 MP4</p>
+                    <h3 class="choice-card-title">重新渲染整个片段</h3>
+                  </div>
+                </div>
+                <p class="choice-card-desc">
+                  快速 MP4 为单文件输出，仅支持整段覆盖重新渲染。
+                </p>
+                <div class="choice-card-toggle-group">
+                  <UButton
+                    icon="i-lucide-refresh-ccw"
+                    label="整段覆盖"
+                    color="neutral"
+                    variant="outline"
+                    size="sm"
+                    class="choice-card-toggle-button"
+                    :loading="retrySubmittingMode === 'restart'"
+                    :disabled="retrySubmittingMode !== null"
+                    @click="confirmRetryFromStart"
+                  />
+                </div>
+                <div class="choice-card-note-stack">
+                  <p class="choice-card-inline-note">{{ retryFullRangeSummary }}</p>
+                </div>
+              </section>
+            </div>
+            <div v-else class="choice-grid retry-choice-grid">
               <section class="surface-panel transcode-submit-section retry-option-section retry-option-section-wide">
                 <div class="transcode-submit-head">
                   <div>
@@ -297,7 +326,7 @@
               </section>
             </div>
 
-            <section v-if="job && transcodeSupported" class="surface-panel transcode-submit-section retry-transcode-panel">
+            <section v-if="job && !retryIsQuickMp4 && transcodeSupported" class="surface-panel transcode-submit-section retry-transcode-panel">
               <div class="retry-transcode-head">
                 <p class="choice-card-mode">自动转码</p>
                 <h3 class="choice-card-title">补渲后自动创建转码任务</h3>
@@ -374,10 +403,10 @@
         </UCard>
 
         <UCard variant="subtle" :ui="{ root: 'detail-section detail-full', body: 'detail-card-body' }">
-        <div class="stat-row">
+          <div class="stat-row">
           <div class="stat-item">
             <p class="stat-label">格式</p>
-            <p class="stat-value">{{ job.outputFormat }}</p>
+            <p class="stat-value">{{ displayOutputModeLabel }}</p>
           </div>
           <div class="stat-item">
             <p class="stat-label">帧范围</p>
@@ -438,7 +467,7 @@
           <img v-if="previewUrl" :src="previewUrl" class="preview-thumb" alt="last frame" />
           <div v-else class="preview-thumb-empty">
             <UIcon name="i-lucide-image" class="preview-thumb-icon" />
-            <span>{{ job.outputFormat === 'OPEN_EXR' ? 'EXR 不支持预览' : '暂无已渲染帧' }}</span>
+            <span>{{ previewPlaceholderText }}</span>
           </div>
           <UBadge
             v-if="previewFrame && previewUrl"
@@ -547,6 +576,7 @@ const showAllLogs = ref(false)
 const logsLoading = ref(false)
 const allLogsLoaded = ref(false)
 const allLogLines = ref<string[]>([])
+const isQuickMp4Job = computed(() => job.value?.renderMode === 'quick_mp4')
 const logLines = computed(() =>
   showAllLogs.value ? allLogLines.value : jobLogs.value,
 )
@@ -605,6 +635,10 @@ const showCurrentExecutionRange = computed(() => {
   if (!currentJob) return false
   return currentJob.originalFrameStart !== currentJob.frameStart || currentJob.originalFrameEnd !== currentJob.frameEnd
 })
+const displayOutputModeLabel = computed(() => {
+  if (isQuickMp4Job.value) return '快速 MP4（Blender 直出）'
+  return job.value?.outputFormat ?? '—'
+})
 
 function deriveRenderSequenceDirectory(outputPath: string) {
   const normalized = outputPath.replace(/\\/g, '/')
@@ -621,7 +655,7 @@ function getEffectiveTranscodeFrameRange(currentJob: RenderJob) {
 
 async function refreshResolvedBaseTranscodeOutputPath() {
   const currentJob = job.value
-  if (!currentJob) {
+  if (!currentJob || currentJob.renderMode === 'quick_mp4') {
     resolvedBaseTranscodeOutputPath.value = ''
     return
   }
@@ -683,7 +717,7 @@ const effectiveTranscodeConfig = computed<RenderJobTranscodeConfig | null>(() =>
 })
 const transcodeSupported = computed(() => {
   const format = job.value?.outputFormat
-  return Boolean(job.value) && format !== 'OPEN_EXR' && format !== 'EXR'
+  return Boolean(job.value) && !isQuickMp4Job.value && format !== 'OPEN_EXR' && format !== 'EXR'
 })
 
 watch(
@@ -847,6 +881,11 @@ const previewUrl = ref<string | null>(null)
 const previewFrame = ref<number | null>(null)
 const previewAspect = ref<string | null>(null)
 const lightboxOpen = ref(false)
+const previewPlaceholderText = computed(() => {
+  if (isQuickMp4Job.value) return '快速 MP4 不提供帧预览'
+  if (job.value?.outputFormat === 'OPEN_EXR' || job.value?.outputFormat === 'EXR') return 'EXR 不支持预览'
+  return '暂无已渲染帧'
+})
 const previewStyle = computed(() =>
   previewAspect.value ? { '--preview-aspect': previewAspect.value } : undefined,
 )
@@ -896,7 +935,7 @@ async function syncStoredPreviewDimensions(width: number, height: number) {
 
 async function refreshPreview() {
   const j = job.value
-  if (!j || j.outputFormat === 'OPEN_EXR') {
+  if (!j || j.renderMode === 'quick_mp4' || j.outputFormat === 'OPEN_EXR' || j.outputFormat === 'EXR') {
     previewUrl.value = null
     previewFrame.value = null
     applyStoredPreviewAspect()
@@ -1070,11 +1109,13 @@ onUnmounted(() => {
   for (const unlisten of detailUnlisteners) {
     unlisten()
   }
+  cancelRetryCloseCleanup()
   if (logSummaryTimer) clearTimeout(logSummaryTimer)
 })
 
 const showDeleteConfirm = ref(false)
 const showRetryConfirm = ref(false)
+const retryIsQuickMp4 = ref(false)
 const retryFrameStatus = ref<RenderedFramesStatus | null>(null)
 const retryActionError = ref('')
 const retrySubmittingMode = ref<'restart' | 'continue' | 'range-restart' | 'range-continue' | null>(null)
@@ -1090,11 +1131,12 @@ const retryTranscodeRangeMode = ref<'current' | 'original'>('current')
 const retryOriginalTranscodeFrameStart = ref<number | null>(null)
 const retryOriginalTranscodeFrameEnd = ref<number | null>(null)
 let retryCustomInspectToken = 0
+let retryCloseCleanupTimer: ReturnType<typeof setTimeout> | null = null
 
 async function handleAutoTranscodeToggle(value: boolean) {
   const currentJob = job.value
   if (!currentJob || updatingAutoTranscode.value) return
-  if (currentJob.outputFormat === 'OPEN_EXR' || currentJob.outputFormat === 'EXR') return
+  if (!transcodeSupported.value) return
 
   updatingAutoTranscode.value = true
   try {
@@ -1118,10 +1160,56 @@ function handleAutoTranscodeSwitchUpdate(value: boolean) {
   void handleAutoTranscodeToggle(value)
 }
 
+function clearRetryConfirmState() {
+  retryIsQuickMp4.value = false
+  retryFrameStatus.value = null
+  retrySubmittingMode.value = null
+  retryCustomStart.value = null
+  retryCustomEnd.value = null
+  retryCustomFrameStatus.value = null
+  retryCustomInspectLoading.value = false
+  retryFullRangePreviewMode.value = null
+  retryCustomPreviewMode.value = null
+  retryAutoTranscodeEnabled.value = false
+  retryTranscodeRangeMode.value = 'current'
+  retryOriginalTranscodeFrameStart.value = null
+  retryOriginalTranscodeFrameEnd.value = null
+}
+
+function cancelRetryCloseCleanup() {
+  if (!retryCloseCleanupTimer) return
+  clearTimeout(retryCloseCleanupTimer)
+  retryCloseCleanupTimer = null
+}
+
+function beginCloseRetryConfirm() {
+  showRetryConfirm.value = false
+  cancelRetryCloseCleanup()
+  retryCloseCleanupTimer = setTimeout(() => {
+    clearRetryConfirmState()
+    retryCloseCleanupTimer = null
+  }, 220)
+}
+
 async function handleRetry() {
   const j = job.value
   if (!j) return
+  cancelRetryCloseCleanup()
   retryActionError.value = ''
+  retryIsQuickMp4.value = j.renderMode === 'quick_mp4'
+  if (j.renderMode === 'quick_mp4') {
+    retryFrameStatus.value = null
+    retryCustomStart.value = j.frameStart
+    retryCustomEnd.value = j.frameEnd
+    retryCustomResumeFromExisting.value = false
+    retryCustomFrameStatus.value = null
+    retryAutoTranscodeEnabled.value = false
+    retryOriginalTranscodeFrameStart.value = null
+    retryOriginalTranscodeFrameEnd.value = null
+    retryTranscodeRangeMode.value = 'current'
+    showRetryConfirm.value = true
+    return
+  }
   const status = await inspectRenderedFrames(j.outputPath, j.outputFormat, j.frameStart, j.frameEnd)
     .catch(() => ({ frameCount: 0, lastFrame: null, nextFrame: j.frameStart }))
   retryFrameStatus.value = normalizeRetryFrameStatus(j, status)
@@ -1148,25 +1236,9 @@ function normalizeRetryFrameStatus(job: RenderJob, status: RenderedFramesStatus)
   }
 }
 
-function resetRetryConfirmState() {
-  showRetryConfirm.value = false
-  retryFrameStatus.value = null
-  retrySubmittingMode.value = null
-  retryCustomStart.value = null
-  retryCustomEnd.value = null
-  retryCustomFrameStatus.value = null
-  retryCustomInspectLoading.value = false
-  retryFullRangePreviewMode.value = null
-  retryCustomPreviewMode.value = null
-  retryAutoTranscodeEnabled.value = false
-  retryTranscodeRangeMode.value = 'current'
-  retryOriginalTranscodeFrameStart.value = null
-  retryOriginalTranscodeFrameEnd.value = null
-}
-
 function closeRetryConfirm() {
   if (retrySubmittingMode.value) return
-  resetRetryConfirmState()
+  beginCloseRetryConfirm()
 }
 
 function clearRetryPreviewOnLeave(event: MouseEvent | FocusEvent, target: 'full' | 'custom') {
@@ -1187,7 +1259,7 @@ function clearRetryPreviewOnLeave(event: MouseEvent | FocusEvent, target: 'full'
 
 async function submitTranscodeForJob() {
   const currentJob = job.value
-  if (!currentJob || currentJob.status === 'running' || currentJob.outputFormat === 'OPEN_EXR' || currentJob.outputFormat === 'EXR') return
+  if (!currentJob || currentJob.status === 'running' || !transcodeSupported.value) return
   retryActionError.value = ''
   transcodeModalOpen.value = true
 }
@@ -1200,7 +1272,7 @@ async function handleTranscodeSettingsSave(payload: {
   transcode_preset_override: string | null
 }) {
   const currentJob = job.value
-  if (!currentJob) return
+  if (!currentJob || !transcodeSupported.value) return
 
   try {
     await jobsStore.updateJobTranscodeSettings({
@@ -1227,6 +1299,7 @@ async function handleTranscodeSubmit(payload: AddFfmpegJobPayload) {
 }
 
 async function handlePrimaryTranscodeAction() {
+  if (!transcodeSupported.value) return
   if (primaryTranscodeJob.value) {
     await router.push(`/transcode/${primaryTranscodeJob.value.id}`)
     return
@@ -1244,7 +1317,7 @@ async function confirmRetryContinue() {
       await persistRetryTranscodeSettings(j, { start: j.frameStart, end: j.frameEnd })
       await jobsStore.retryJob(j)
     }
-    resetRetryConfirmState()
+    beginCloseRetryConfirm()
   } catch (error) {
     retryActionError.value = error instanceof Error ? error.message : String(error)
   } finally {
@@ -1262,7 +1335,7 @@ async function confirmRetryFromStart() {
       await persistRetryTranscodeSettings(j, { start: j.frameStart, end: j.frameEnd })
       await jobsStore.retryJobFromStart(j)
     }
-    resetRetryConfirmState()
+    beginCloseRetryConfirm()
   } catch (error) {
     retryActionError.value = error instanceof Error ? error.message : String(error)
   } finally {
@@ -1285,6 +1358,9 @@ const retryFullRangeLabel = computed(() => {
 const retryFullRangeSummary = computed(() => {
   const currentJob = job.value
   if (!currentJob) return ''
+  if (currentJob.renderMode === 'quick_mp4') {
+    return `会直接覆盖并重渲 ${currentJob.frameStart}–${currentJob.frameEnd} 的整段 MP4 输出。`
+  }
   if (retryFullRangePreviewMode.value === 'restart') {
     return `整段覆盖会从第 ${currentJob.frameStart} 帧重新渲染到 ${currentJob.frameEnd} 帧。`
   }
@@ -1370,6 +1446,7 @@ const retryTranscodeSummary = computed(() => {
 })
 
 async function persistRetryTranscodeSettings(currentJob: RenderJob, nextRange: { start: number, end: number }) {
+  if (currentJob.renderMode === 'quick_mp4') return
   const originalStart = retryOriginalTranscodeFrameStart.value ?? currentJob.originalFrameStart
   const originalEnd = retryOriginalTranscodeFrameEnd.value ?? currentJob.originalFrameEnd
   const useOriginalRange =
@@ -1394,7 +1471,7 @@ async function refreshRetryCustomInspection() {
   const j = job.value
   const start = retryCustomStart.value
   const end = retryCustomEnd.value
-  if (!j || !showRetryConfirm.value || start == null || end == null || start > end) {
+  if (!j || j.renderMode === 'quick_mp4' || !showRetryConfirm.value || start == null || end == null || start > end) {
     retryCustomFrameStatus.value = null
     retryCustomInspectLoading.value = false
     return
@@ -1439,7 +1516,7 @@ async function confirmRetryCustomRange(resumeFromExisting = retryCustomResumeFro
     } else {
       await jobsStore.retryJobFromStart(j, { start, end })
     }
-    resetRetryConfirmState()
+    beginCloseRetryConfirm()
   } catch (error) {
     retryActionError.value = error instanceof Error ? error.message : String(error)
   } finally {

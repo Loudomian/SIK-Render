@@ -39,15 +39,6 @@ impl BlenderCliCommand {
         self
     }
 
-    pub fn args<I, S>(mut self, args: I) -> Self
-    where
-        I: IntoIterator<Item = S>,
-        S: Into<OsString>,
-    {
-        self.args.extend(args.into_iter().map(Into::into));
-        self
-    }
-
     pub fn into_tokio_command(self) -> Command {
         let mut command = Command::new(&self.executable);
         command.args(&self.args_before);
@@ -68,6 +59,8 @@ impl BlenderCliCommand {
 }
 
 fn build_render_settings_script(job: &RenderJob, settings: &AppSettings) -> String {
+    let output_path_literal = serde_json::to_string(&job.output_path.to_string_lossy().to_string())
+        .expect("output path should serialize to JSON");
     let mut lines = vec![
         "import bpy".to_string(),
         "scene = bpy.context.scene".to_string(),
@@ -75,6 +68,22 @@ fn build_render_settings_script(job: &RenderJob, settings: &AppSettings) -> Stri
         "image = r.image_settings".to_string(),
         "r.use_file_extension = True".to_string(),
     ];
+
+    if job.render_mode.is_quick_mp4() {
+        lines.extend([
+            "image.file_format = 'FFMPEG'".to_string(),
+            "r.use_file_extension = False".to_string(),
+            format!("r.filepath = {}", output_path_literal),
+            "r.ffmpeg.format = 'MPEG4'".to_string(),
+            "r.ffmpeg.codec = 'H264'".to_string(),
+            "r.ffmpeg.constant_rate_factor = 'MEDIUM'".to_string(),
+            "r.ffmpeg.ffmpeg_preset = 'GOOD'".to_string(),
+            "r.ffmpeg.gopsize = scene.render.fps".to_string(),
+            "r.ffmpeg.audio_codec = 'NONE'".to_string(),
+        ]);
+
+        return lines.join("; ");
+    }
 
     match job.output_format.as_str() {
         "OPEN_EXR" | "EXR" => {
@@ -111,22 +120,26 @@ pub fn render_command(
     settings: &AppSettings,
 ) -> BlenderCliCommand {
     let render_settings_script = build_render_settings_script(job, settings);
-    BlenderCliCommand::new(&job.blender_executable)
+    let mut command = BlenderCliCommand::new(&job.blender_executable)
         .arg_before("--background")
         .blend_file(&job.blend_file)
         .arg("--python-expr")
-        .arg(render_settings_script)
-        .args([
-            "--render-output".into(),
-            job.output_path.as_os_str().to_os_string(),
-            "--render-format".into(),
-            job.output_format.clone().into(),
-            "-s".into(),
-            frame_start_actual.to_string().into(),
-            "-e".into(),
-            job.frame_end.to_string().into(),
-            "-a".into(),
-        ])
+        .arg(render_settings_script);
+
+    if !job.render_mode.is_quick_mp4() {
+        command = command
+            .arg("--render-output")
+            .arg(job.output_path.as_os_str().to_os_string())
+            .arg("--render-format")
+            .arg(job.output_format.clone());
+    }
+
+    command
+        .arg("-s")
+        .arg(frame_start_actual.to_string())
+        .arg("-e")
+        .arg(job.frame_end.to_string())
+        .arg("-a")
 }
 
 pub fn inspect_project_command(

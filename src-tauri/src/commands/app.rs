@@ -11,3 +11,8 @@ pub fn app_ready(app: AppHandle) -> Result<(), String> {
 
     Ok(())
 }
+
+#[tauri::command]
+pub fn path_exists(path: String) -> bool {
+    std::path::Path::new(path.trim()).exists()
+}
