@@ -480,7 +480,7 @@
             <VideoPreviewPlayer
               :src="videoPreviewUrl!"
               :poster="videoPreviewPosterUrl"
-              :title="job.name"
+              :title="videoPreviewTitle"
             />
           </div>
         </template>
@@ -590,7 +590,7 @@ import { JOB_STATUS_COLOR, JOB_STATUS_LABEL } from '~/composables/useJobStatus'
 import { formatQueueOrderLabel, RENDER_QUEUE_ORDER_HIDDEN_STATUSES, resolveQueueOrder } from '~/composables/useQueueOrder'
 import { buildTranscodeOutputPath, normalizeTranscodeDirectory, splitTranscodeOutputPath } from '~/composables/useTranscodeConfig'
 import { parseLogLine } from '~/utils/log-line'
-import { resolveOutputDirectory } from '~/utils/output-path'
+import { resolveOutputDirectory, resolvePathBaseName } from '~/utils/output-path'
 import { captureVideoPoster } from '~/utils/video-preview'
 
 const route = useRoute()
@@ -933,6 +933,9 @@ const hasFramePreview = computed(() =>
   Boolean(job.value) && !isQuickMp4Job.value && job.value?.outputFormat !== 'OPEN_EXR' && job.value?.outputFormat !== 'EXR',
 )
 const hasVideoPreview = computed(() => Boolean(videoPreviewUrl.value))
+const videoPreviewTitle = computed(() =>
+  resolvePathBaseName(videoPreviewSourcePath.value) || job.value?.name || '视频预览',
+)
 const previewCardTitle = computed(() => {
   if (isQuickMp4Job.value || (activePreviewTab.value === 'video' && hasVideoPreview.value)) return '视频预览'
   return '帧预览'

@@ -11,3 +11,12 @@ export function resolveOutputDirectory(path: string | null | undefined) {
 
   return looksLikeFile ? rawPath.slice(0, slashIndex) : rawPath
 }
+
+export function resolvePathBaseName(path: string | null | undefined) {
+  const rawPath = (path ?? '').trim()
+  if (!rawPath) return ''
+
+  const normalized = rawPath.replace(/\\/g, '/')
+  const slashIndex = normalized.lastIndexOf('/')
+  return slashIndex < 0 ? rawPath : normalized.slice(slashIndex + 1)
+}
