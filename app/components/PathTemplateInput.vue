@@ -77,6 +77,7 @@
 </template>
 
 <script setup lang="ts">
+import type { ComponentPublicInstance } from 'vue'
 import type { PathTemplateKind } from '~/types'
 
 type VariableState = 'normal' | 'preview' | 'error'
@@ -135,8 +136,8 @@ const shouldShowPanel = computed(() => {
   return showVariables.value
 })
 
-function setSuggestionItemRef(element: Element | null, index: number) {
-  suggestionItemRefs.value[index] = element as HTMLButtonElement | null
+function setSuggestionItemRef(element: Element | ComponentPublicInstance | null, index: number) {
+  suggestionItemRefs.value[index] = element instanceof HTMLButtonElement ? element : null
 }
 
 function tokenLabel(token: string) {

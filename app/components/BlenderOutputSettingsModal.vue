@@ -137,17 +137,20 @@
 </template>
 
 <script setup lang="ts">
-const pngColorModeOptions = ['BW', 'RGB', 'RGBA'] as const
-const pngColorDepthOptions = [
+type ColorModeOption = 'BW' | 'RGB' | 'RGBA'
+type ExrCodecOption = 'NONE' | 'ZIP' | 'PIZ' | 'DWAA' | 'DWAB' | 'ZIPS' | 'RLE' | 'PXR24' | 'B44' | 'B44A'
+
+const pngColorModeOptions: ColorModeOption[] = ['BW', 'RGB', 'RGBA']
+const pngColorDepthOptions: Array<{ label: string, value: number }> = [
   { label: '8-bit', value: 8 },
   { label: '16-bit', value: 16 },
-] as const
-const exrColorModeOptions = ['BW', 'RGB', 'RGBA'] as const
-const exrColorDepthOptions = [
+]
+const exrColorModeOptions: ColorModeOption[] = ['BW', 'RGB', 'RGBA']
+const exrColorDepthOptions: Array<{ label: string, value: number }> = [
   { label: '16-bit', value: 16 },
   { label: '32-bit', value: 32 },
-] as const
-const exrCodecOptions = ['NONE', 'ZIP', 'PIZ', 'DWAA', 'DWAB', 'ZIPS', 'RLE', 'PXR24', 'B44', 'B44A'] as const
+]
+const exrCodecOptions: ExrCodecOption[] = ['NONE', 'ZIP', 'PIZ', 'DWAA', 'DWAB', 'ZIPS', 'RLE', 'PXR24', 'B44', 'B44A']
 const defaultOutputSettings = {
   pngColorMode: 'RGB' as const,
   pngColorDepth: 8,
@@ -169,12 +172,12 @@ const emit = defineEmits<{
 const settingsStore = useSettingsStore()
 
 const draft = reactive({
-  pngColorMode: defaultOutputSettings.pngColorMode as 'BW' | 'RGB' | 'RGBA',
+  pngColorMode: defaultOutputSettings.pngColorMode as ColorModeOption,
   pngColorDepth: defaultOutputSettings.pngColorDepth,
   pngCompression: defaultOutputSettings.pngCompression,
-  exrColorMode: defaultOutputSettings.exrColorMode as 'BW' | 'RGB' | 'RGBA',
+  exrColorMode: defaultOutputSettings.exrColorMode as ColorModeOption,
   exrColorDepth: defaultOutputSettings.exrColorDepth,
-  exrCodec: defaultOutputSettings.exrCodec as 'NONE' | 'ZIP' | 'PIZ' | 'DWAA' | 'DWAB' | 'ZIPS' | 'RLE' | 'PXR24' | 'B44' | 'B44A',
+  exrCodec: defaultOutputSettings.exrCodec as ExrCodecOption,
   exrQuality: defaultOutputSettings.exrQuality,
 })
 const saving = ref(false)

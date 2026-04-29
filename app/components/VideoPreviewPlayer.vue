@@ -20,7 +20,12 @@
 </template>
 
 <script setup lang="ts">
-import type { CommunitySkinTranslations, MediaPlayerElement } from 'vidstack'
+import type { CommunitySkinTranslations } from 'vidstack'
+
+type PreviewPlayerElement = HTMLElement & {
+  readonly paused: boolean
+  pause: () => Promise<void>
+}
 
 defineProps<{
   src: string
@@ -28,7 +33,7 @@ defineProps<{
   title: string
 }>()
 
-const playerEl = ref<MediaPlayerElement | null>(null)
+const playerEl = ref<PreviewPlayerElement | null>(null)
 let keepPausedAfterSeekUntil = 0
 let resetSeekGuardTimer = 0
 
@@ -79,7 +84,7 @@ function handlePlay() {
   })
 }
 
-function bindPlayerEvents(player: MediaPlayerElement, onCleanup: (cleanupFn: () => void) => void) {
+function bindPlayerEvents(player: PreviewPlayerElement, onCleanup: (cleanupFn: () => void) => void) {
   const seekRequestHandler = () => handleSeekRequest()
   const seekedHandler = () => handleSeeked()
   const playHandler = () => handlePlay()
