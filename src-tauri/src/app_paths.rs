@@ -14,6 +14,17 @@ const FFMPEG_ROOT_DIR_NAME: &str = "ffmpeg";
 const LOG_DIR_NAME: &str = "log";
 const JOB_TOML_FILE_NAME: &str = "job.toml";
 const JOB_PREVIEW_FILE_NAME: &str = "preview.jpg";
+const NODE_ID_FILE_NAME: &str = "node-id.toml";
+const LEGACY_NODE_ID_FILE_NAME: &str = "node-id.txt";
+const DB_FILE_NAME: &str = "sik-render.sqlite3";
+const CONFIG_FILE_NAME: &str = "sik-render.toml";
+const APP_VENDOR_DIR_NAME: &str = "SIKFilm";
+const APP_PRODUCT_DIR_NAME: &str = "Render";
+
+#[derive(serde::Deserialize, serde::Serialize)]
+struct NodeIdFile {
+    id: String,
+}
 
 pub fn tool_root_dir() -> Result<PathBuf> {
     if cfg!(debug_assertions) {
@@ -23,14 +34,95 @@ pub fn tool_root_dir() -> Result<PathBuf> {
             .context("failed to resolve workspace root");
     }
 
+    roaming_app_dir()
+}
+
+fn roaming_app_dir() -> Result<PathBuf> {
+    #[cfg(target_os = "windows")]
+    if let Some(app_data) = std::env::var_os("APPDATA") {
+        let dir = PathBuf::from(app_data)
+            .join(APP_VENDOR_DIR_NAME)
+            .join(APP_PRODUCT_DIR_NAME);
+        fs::create_dir_all(&dir)
+            .with_context(|| format!("failed to create app data directory {}", dir.display()))?;
+        return Ok(dir);
+    }
+
+    let dir = std::env::current_dir()
+        .context("failed to resolve current directory")?
+        .join(APP_VENDOR_DIR_NAME)
+        .join(APP_PRODUCT_DIR_NAME);
+    fs::create_dir_all(&dir)
+        .with_context(|| format!("failed to create app data directory {}", dir.display()))?;
+    Ok(dir)
+}
+
+fn executable_dir() -> Result<PathBuf> {
     let exe = std::env::current_exe().context("failed to resolve current executable")?;
     exe.parent()
         .map(Path::to_path_buf)
         .context("failed to resolve executable directory")
 }
 
+fn legacy_runtime_root_dir() -> Result<PathBuf> {
+    if cfg!(debug_assertions) {
+        tool_root_dir()
+    } else {
+        executable_dir()
+    }
+}
+
 pub fn config_path() -> Result<PathBuf> {
-    Ok(tool_root_dir()?.join("sik-render.toml"))
+    Ok(tool_root_dir()?.join(CONFIG_FILE_NAME))
+}
+
+pub fn database_path() -> Result<PathBuf> {
+    Ok(tool_root_dir()?.join(DB_FILE_NAME))
+}
+
+pub fn read_or_create_node_id() -> Result<String> {
+    let root = tool_root_dir()?;
+    let path = root.join(NODE_ID_FILE_NAME);
+    if path.exists() {
+        let content = fs::read_to_string(&path)
+            .with_context(|| format!("failed to read node id {}", path.display()))?;
+        if let Ok(file) = toml::from_str::<NodeIdFile>(&content) {
+            let trimmed = file.id.trim();
+            if !trimmed.is_empty() {
+                return Ok(trimmed.to_string());
+            }
+        }
+
+        let legacy_plain_id = content.trim();
+        if !legacy_plain_id.is_empty() {
+            write_node_id_file(&path, legacy_plain_id)?;
+            return Ok(legacy_plain_id.to_string());
+        }
+    }
+
+    let legacy_path = root.join(LEGACY_NODE_ID_FILE_NAME);
+    if legacy_path.exists() {
+        let value = fs::read_to_string(&legacy_path)
+            .with_context(|| format!("failed to read legacy node id {}", legacy_path.display()))?;
+        let trimmed = value.trim();
+        if !trimmed.is_empty() {
+            write_node_id_file(&path, trimmed)?;
+            let _ = fs::remove_file(&legacy_path);
+            return Ok(trimmed.to_string());
+        }
+    }
+
+    let node_id = uuid::Uuid::new_v4().to_string();
+    write_node_id_file(&path, &node_id)?;
+    Ok(node_id)
+}
+
+fn write_node_id_file(path: &Path, node_id: &str) -> Result<()> {
+    let content = toml::to_string_pretty(&NodeIdFile {
+        id: node_id.to_string(),
+    })
+    .context("failed to serialize node id")?;
+    fs::write(path, content).with_context(|| format!("failed to write node id {}", path.display()))
 }
 
 pub fn logs_dir() -> Result<PathBuf> {
@@ -56,9 +148,64 @@ fn ffmpeg_jobs_root_dir() -> Result<PathBuf> {
 }
 
 pub fn ensure_runtime_layout() -> Result<()> {
+    migrate_legacy_runtime_root()?;
     let _ = blender_jobs_root_dir()?;
     let _ = ffmpeg_jobs_root_dir()?;
     migrate_known_legacy_logs()?;
+    Ok(())
+}
+
+fn migrate_legacy_runtime_root() -> Result<()> {
+    let source_root = legacy_runtime_root_dir()?;
+    let target_root = tool_root_dir()?;
+    if source_root == target_root || !source_root.exists() {
+        return Ok(());
+    }
+
+    migrate_file_if_missing(
+        &source_root.join(CONFIG_FILE_NAME),
+        &target_root.join(CONFIG_FILE_NAME),
+    )?;
+    migrate_database_files(&source_root, &target_root)?;
+    migrate_file_if_missing(
+        &source_root.join(NODE_ID_FILE_NAME),
+        &target_root.join(NODE_ID_FILE_NAME),
+    )?;
+    migrate_file_if_missing(
+        &source_root.join(LEGACY_NODE_ID_FILE_NAME),
+        &target_root.join(LEGACY_NODE_ID_FILE_NAME),
+    )?;
+
+    merge_directory_into(
+        &source_root.join(JOBS_ROOT_DIR_NAME),
+        &target_root.join(JOBS_ROOT_DIR_NAME),
+        None,
+    )?;
+    merge_directory_into(
+        &source_root.join(LEGACY_LOGS_DIR_NAME),
+        &target_root.join(LEGACY_LOGS_DIR_NAME),
+        None,
+    )?;
+    Ok(())
+}
+
+fn migrate_file_if_missing(source: &Path, target: &Path) -> Result<()> {
+    if !source.exists() || target.exists() {
+        return Ok(());
+    }
+
+    move_file_replace(source, target)
+}
+
+fn migrate_database_files(source_root: &Path, target_root: &Path) -> Result<()> {
+    for file_name in [
+        DB_FILE_NAME.to_string(),
+        format!("{DB_FILE_NAME}-wal"),
+        format!("{DB_FILE_NAME}-shm"),
+        format!("{DB_FILE_NAME}-journal"),
+    ] {
+        migrate_file_if_missing(&source_root.join(&file_name), &target_root.join(&file_name))?;
+    }
     Ok(())
 }
 
@@ -86,7 +233,10 @@ pub fn job_logs_dir_name(job_number: i32, job_id: &str) -> String {
 }
 
 pub fn ffmpeg_job_logs_dir_name(job_number: i32, job_id: &str) -> String {
-    format!("ffmpeg_job_{job_number:04}_{}", ffmpeg_job_log_suffix(job_id))
+    format!(
+        "ffmpeg_job_{job_number:04}_{}",
+        ffmpeg_job_log_suffix(job_id)
+    )
 }
 
 pub fn legacy_job_logs_dir(job_number: i32) -> Result<PathBuf> {
@@ -153,8 +303,16 @@ pub fn ffmpeg_job_log_dir(job_number: i32, job_id: &str) -> Result<PathBuf> {
 fn ensure_blender_job_layout(job_number: i32, job_id: &str) -> Result<PathBuf> {
     let target = blender_job_dir_path(job_number, job_id)?;
     fs::create_dir_all(&target).context("failed to create blender job directory")?;
-    migrate_directory_into(&legacy_job_logs_dir_with_id(job_number, job_id)?, &target, Some(BLENDER_LOG_KIND))?;
-    migrate_directory_into(&legacy_job_logs_dir(job_number)?, &target, Some(BLENDER_LOG_KIND))?;
+    migrate_directory_into(
+        &legacy_job_logs_dir_with_id(job_number, job_id)?,
+        &target,
+        Some(BLENDER_LOG_KIND),
+    )?;
+    migrate_directory_into(
+        &legacy_job_logs_dir(job_number)?,
+        &target,
+        Some(BLENDER_LOG_KIND),
+    )?;
     normalize_job_layout(&target, BLENDER_LOG_KIND)?;
     Ok(target)
 }
@@ -162,7 +320,11 @@ fn ensure_blender_job_layout(job_number: i32, job_id: &str) -> Result<PathBuf> {
 fn ensure_ffmpeg_job_layout(job_number: i32, job_id: &str) -> Result<PathBuf> {
     let target = ffmpeg_job_dir_path(job_number, job_id)?;
     fs::create_dir_all(&target).context("failed to create ffmpeg job directory")?;
-    migrate_directory_into(&legacy_ffmpeg_job_logs_dir(job_number, job_id)?, &target, Some(FFMPEG_LOG_KIND))?;
+    migrate_directory_into(
+        &legacy_ffmpeg_job_logs_dir(job_number, job_id)?,
+        &target,
+        Some(FFMPEG_LOG_KIND),
+    )?;
     normalize_job_layout(&target, FFMPEG_LOG_KIND)?;
     Ok(target)
 }
@@ -173,9 +335,12 @@ fn migrate_known_legacy_logs() -> Result<()> {
         return Ok(());
     }
 
-    for entry in fs::read_dir(&legacy_root)
-        .with_context(|| format!("failed to read legacy logs directory {}", legacy_root.display()))?
-    {
+    for entry in fs::read_dir(&legacy_root).with_context(|| {
+        format!(
+            "failed to read legacy logs directory {}",
+            legacy_root.display()
+        )
+    })? {
         let entry = entry?;
         let source = entry.path();
         if !source.is_dir() {
@@ -266,7 +431,11 @@ fn normalize_job_layout(job_dir: &Path, kind: &str) -> Result<()> {
     Ok(())
 }
 
-fn migrate_directory_into(source: &Path, target: &Path, preferred_kind: Option<&str>) -> Result<()> {
+fn migrate_directory_into(
+    source: &Path,
+    target: &Path,
+    preferred_kind: Option<&str>,
+) -> Result<()> {
     if !source.exists() || source == target {
         return Ok(());
     }
@@ -283,8 +452,12 @@ fn migrate_directory_into(source: &Path, target: &Path, preferred_kind: Option<&
 
         if name == LOG_DIR_NAME && path.is_dir() {
             let target_log_dir = target.join(LOG_DIR_NAME);
-            fs::create_dir_all(&target_log_dir)
-                .with_context(|| format!("failed to create target log directory {}", target_log_dir.display()))?;
+            fs::create_dir_all(&target_log_dir).with_context(|| {
+                format!(
+                    "failed to create target log directory {}",
+                    target_log_dir.display()
+                )
+            })?;
             merge_directory_into(&path, &target_log_dir, preferred_kind)?;
             continue;
         }
@@ -367,8 +540,13 @@ fn move_file_replace(source: &Path, target: &Path) -> Result<()> {
     match fs::rename(source, target) {
         Ok(()) => Ok(()),
         Err(_) => {
-            fs::copy(source, target)
-                .with_context(|| format!("failed to copy file {} -> {}", source.display(), target.display()))?;
+            fs::copy(source, target).with_context(|| {
+                format!(
+                    "failed to copy file {} -> {}",
+                    source.display(),
+                    target.display()
+                )
+            })?;
             fs::remove_file(source)
                 .with_context(|| format!("failed to remove source file {}", source.display()))?;
             Ok(())
@@ -387,7 +565,8 @@ fn remove_dir_if_empty(path: &Path) -> Result<()> {
         .is_none();
 
     if is_empty {
-        fs::remove_dir(path).with_context(|| format!("failed to remove directory {}", path.display()))?;
+        fs::remove_dir(path)
+            .with_context(|| format!("failed to remove directory {}", path.display()))?;
     }
 
     Ok(())
@@ -452,14 +631,16 @@ pub fn create_job_log_file(job_number: i32, job_id: &str, kind: &str) -> Result<
     let timestamp = Local::now().format("%Y%m%d-%H%M%S");
     let path = job_log_dir(job_number, job_id)?.join(format!("{kind}_{timestamp}.log"));
     if !path.exists() {
-        fs::write(&path, "").with_context(|| format!("failed to create log file {}", path.display()))?;
+        fs::write(&path, "")
+            .with_context(|| format!("failed to create log file {}", path.display()))?;
     }
     Ok(path)
 }
 
 pub fn create_ffmpeg_job_log_file(job_number: i32, job_id: &str) -> Result<PathBuf> {
     let timestamp = Local::now().format("%Y%m%d-%H%M%S");
-    let path = ffmpeg_job_log_dir(job_number, job_id)?.join(format!("{FFMPEG_LOG_KIND}_{timestamp}.log"));
+    let path =
+        ffmpeg_job_log_dir(job_number, job_id)?.join(format!("{FFMPEG_LOG_KIND}_{timestamp}.log"));
     if !path.exists() {
         fs::write(&path, "")
             .with_context(|| format!("failed to create ffmpeg log file {}", path.display()))?;
@@ -474,11 +655,17 @@ pub fn append_log_line(path: &Path, line: &str) -> Result<()> {
         .open(path)
         .with_context(|| format!("failed to open log file {}", path.display()))?;
     let rendered = timestamped_log_line(line);
-    writeln!(file, "{rendered}").with_context(|| format!("failed to write log file {}", path.display()))?;
+    writeln!(file, "{rendered}")
+        .with_context(|| format!("failed to write log file {}", path.display()))?;
     Ok(())
 }
 
-pub fn append_job_log_event(job_number: i32, job_id: &str, kind: &str, line: &str) -> Result<PathBuf> {
+pub fn append_job_log_event(
+    job_number: i32,
+    job_id: &str,
+    kind: &str,
+    line: &str,
+) -> Result<PathBuf> {
     let dir = job_log_dir(job_number, job_id)?;
     let mut files = collect_log_files(&dir, kind)?;
 

@@ -7,7 +7,7 @@ use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, Manager};
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Child;
 use tokio::sync::Mutex;
@@ -98,6 +98,22 @@ pub struct RenderProgressEvent {
     pub time_elapsed: f32,
     pub memory_mb: f32,
     pub remaining_secs: Option<f32>,
+}
+
+fn emit_render_progress(app: &AppHandle, event: RenderProgressEvent) {
+    let _ = app.emit("render-progress", event.clone());
+    if let Some(state) = app.try_state::<crate::state::AppState>() {
+        let _ = state
+            .ws_broadcaster
+            .send(crate::network::types::WsMessage::Progress {
+                job_id: event.job_id,
+                frame: event.frame as i32,
+                total_frames: event.total_frames as i32,
+                time_elapsed: event.time_elapsed,
+                memory_mb: event.memory_mb,
+                remaining_secs: event.remaining_secs,
+            });
+    }
 }
 
 #[derive(Clone, serde::Serialize)]
@@ -437,8 +453,8 @@ pub async fn run_job(app: AppHandle, state: AppState, job: RenderJob) -> Result<
                 None,
             )
             .await;
-            let _ = app.emit(
-                "render-progress",
+            emit_render_progress(
+                &app,
                 RenderProgressEvent {
                     job_id: job.id.clone(),
                     frame: already_done,
@@ -537,8 +553,8 @@ pub async fn run_job(app: AppHandle, state: AppState, job: RenderJob) -> Result<
                         } else {
                             None
                         };
-                        let _ = poll_app.emit(
-                            "render-progress",
+                        emit_render_progress(
+                            &poll_app,
                             RenderProgressEvent {
                                 job_id: poll_job_id.clone(),
                                 frame: count.min(total_frames),
@@ -661,8 +677,8 @@ pub async fn run_job(app: AppHandle, state: AppState, job: RenderJob) -> Result<
                 )
                 .await;
                 mark_progress_timestamp(progress_started_at.as_ref(), &last_primary_progress_ms);
-                let _ = app.emit(
-                    "render-progress",
+                emit_render_progress(
+                    &app,
                     RenderProgressEvent {
                         job_id: job.id.clone(),
                         frame: completed,
@@ -693,8 +709,8 @@ pub async fn run_job(app: AppHandle, state: AppState, job: RenderJob) -> Result<
                 )
                 .await;
                 mark_progress_timestamp(progress_started_at.as_ref(), &last_primary_progress_ms);
-                let _ = app.emit(
-                    "render-progress",
+                emit_render_progress(
+                    &app,
                     RenderProgressEvent {
                         job_id: job.id.clone(),
                         frame: rel,

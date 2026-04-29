@@ -4,7 +4,7 @@ use crate::queue::job::{DbRenderJob, JobStatus, RenderJob};
 use crate::state::AppState;
 use chrono::Utc;
 use std::time::Duration;
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, Manager};
 
 #[derive(Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -76,9 +76,10 @@ async fn schedule_jobs(app: &AppHandle, state: &AppState) -> anyhow::Result<bool
 }
 
 async fn pause_queue_if_idle(app: &AppHandle, state: &AppState) -> anyhow::Result<()> {
-    let pending_jobs = sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM jobs WHERE status = 'pending'")
-        .fetch_one(&state.pool)
-        .await?;
+    let pending_jobs =
+        sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM jobs WHERE status = 'pending'")
+            .fetch_one(&state.pool)
+            .await?;
 
     if pending_jobs <= 0 && !state.is_queue_paused() {
         state.set_queue_paused(true);
@@ -88,7 +89,10 @@ async fn pause_queue_if_idle(app: &AppHandle, state: &AppState) -> anyhow::Resul
     Ok(())
 }
 
-async fn try_start_next_job(app: &AppHandle, state: &AppState) -> anyhow::Result<Option<RenderJob>> {
+async fn try_start_next_job(
+    app: &AppHandle,
+    state: &AppState,
+) -> anyhow::Result<Option<RenderJob>> {
     let next_job = sqlx::query_as::<_, DbRenderJob>(
         r#"
         SELECT
@@ -219,14 +223,13 @@ fn spawn_job_runner(app: AppHandle, state: AppState, running_job: RenderJob) {
                         &updated_job,
                         settings.as_ref(),
                     );
-                    if let Err(error) = crate::commands::transcode::enqueue_ffmpeg_job(
-                        &app,
-                        &state,
-                        payload,
-                    )
-                    .await
+                    if let Err(error) =
+                        crate::commands::transcode::enqueue_ffmpeg_job(&app, &state, payload).await
                     {
-                        log::error!("Auto FFmpeg job enqueue failed for job {}: {error}", updated_job.id);
+                        log::error!(
+                            "Auto FFmpeg job enqueue failed for job {}: {error}",
+                            updated_job.id
+                        );
                     }
                 }
             }
@@ -289,10 +292,20 @@ pub async fn load_job(pool: &sqlx::SqlitePool, id: &str) -> anyhow::Result<Rende
 
 pub fn emit_job_update(app: &AppHandle, job: &RenderJob) {
     let _ = app.emit("job-updated", JobUpdatedEvent { job: job.clone() });
+    if let Some(state) = app.try_state::<crate::state::AppState>() {
+        let _ = state
+            .ws_broadcaster
+            .send(crate::network::types::WsMessage::JobUpdated { job: job.clone() });
+    }
 }
 
 pub fn emit_queue_state_full(app: &AppHandle, paused: bool, paused_job: Option<String>) {
     let _ = app.emit("queue-state", QueueState { paused, paused_job });
+    if let Some(state) = app.try_state::<crate::state::AppState>() {
+        let _ = state
+            .ws_broadcaster
+            .send(crate::network::types::WsMessage::QueueState { paused });
+    }
 }
 
 pub fn emit_queue_state(app: &AppHandle, paused: bool) {

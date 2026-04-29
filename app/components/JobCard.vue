@@ -256,8 +256,8 @@ const completedAt = computed(() => {
 const previewText = computed(() => {
   if (props.job.renderMode === 'quick_mp4') {
     return props.job.status === 'done'
-      ? '快速 MP4 可直接预览视频'
-      : '快速 MP4 完成后可预览视频'
+      ? '已生成最终帧预览'
+      : '等待任务完成后可预览最终帧'
   }
   if (props.job.outputFormat === 'OPEN_EXR') return 'EXR 不支持预览'
   return props.job.status === 'running' ? '等待首帧输出' : '暂无已渲染帧'

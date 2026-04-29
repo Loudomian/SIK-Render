@@ -124,9 +124,7 @@ impl From<DbRenderJob> for RenderJob {
             auto_transcode_mp4: value.auto_transcode_mp4,
             transcode_name_override: value.transcode_name_override,
             transcode_fps_override: value.transcode_fps_override,
-            transcode_output_path_override: value
-                .transcode_output_path_override
-                .map(PathBuf::from),
+            transcode_output_path_override: value.transcode_output_path_override.map(PathBuf::from),
             transcode_crf_override: value.transcode_crf_override,
             transcode_preset_override: value.transcode_preset_override,
             transcode_frame_start_override: value.transcode_frame_start_override,

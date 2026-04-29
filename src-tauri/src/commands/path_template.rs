@@ -42,9 +42,7 @@ pub async fn preview_output_path_template(
             }
         }),
     };
-    let blend_file_name = blend_file
-        .as_deref()
-        .and_then(blend_file_name_from_path);
+    let blend_file_name = blend_file.as_deref().and_then(blend_file_name_from_path);
     let folder_name = source_path
         .as_deref()
         .and_then(folder_name_from_source_path);

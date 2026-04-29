@@ -173,11 +173,20 @@ pub fn preview_output_path(template: &str, context: &TemplateContext) -> Templat
     }
 }
 
-pub fn resolve_output_path(template: &str, context: &TemplateContext) -> Result<PathBuf, TemplateError> {
+pub fn resolve_output_path(
+    template: &str,
+    context: &TemplateContext,
+) -> Result<PathBuf, TemplateError> {
     match resolve_internal(template, context, false) {
         Ok(path) => Ok(path),
-        Err(ResolveOutcome::Errors(errors)) => Err(errors.into_iter().next().unwrap_or(TemplateError::MissingBaseDir)),
-        Err(ResolveOutcome::Notes(notes)) => Err(notes.into_iter().next().unwrap_or(TemplateError::MissingBaseDir)),
+        Err(ResolveOutcome::Errors(errors)) => Err(errors
+            .into_iter()
+            .next()
+            .unwrap_or(TemplateError::MissingBaseDir)),
+        Err(ResolveOutcome::Notes(notes)) => Err(notes
+            .into_iter()
+            .next()
+            .unwrap_or(TemplateError::MissingBaseDir)),
     }
 }
 
@@ -284,7 +293,10 @@ fn resolve_internal(
 
     let resolved = variable_pattern
         .replace_all(template, |captures: &Captures| {
-            let raw = captures.get(1).map(|value| value.as_str()).unwrap_or_default();
+            let raw = captures
+                .get(1)
+                .map(|value| value.as_str())
+                .unwrap_or_default();
             match parse_variable(raw) {
                 Some(ParsedVariable::Scalar("year")) => format!("{:04}", context.now.year()),
                 Some(ParsedVariable::Scalar("month")) => format!("{:02}", context.now.month()),
@@ -299,12 +311,14 @@ fn resolve_internal(
                 Some(ParsedVariable::Scalar("user")) => context.username.clone(),
                 Some(ParsedVariable::Scalar("frameStart")) => context.frame_start.to_string(),
                 Some(ParsedVariable::Scalar("frameEnd")) => context.frame_end.to_string(),
-                Some(ParsedVariable::Scalar("blendFileName")) => {
-                    context.blend_file_name.clone().unwrap_or_else(|| captures[0].to_string())
-                }
-                Some(ParsedVariable::Scalar("folderName")) => {
-                    context.folder_name.clone().unwrap_or_else(|| captures[0].to_string())
-                }
+                Some(ParsedVariable::Scalar("blendFileName")) => context
+                    .blend_file_name
+                    .clone()
+                    .unwrap_or_else(|| captures[0].to_string()),
+                Some(ParsedVariable::Scalar("folderName")) => context
+                    .folder_name
+                    .clone()
+                    .unwrap_or_else(|| captures[0].to_string()),
                 Some(ParsedVariable::Frame { padding }) => "#".repeat(padding),
                 _ => captures[0].to_string(),
             }

@@ -1,5 +1,7 @@
 use crate::blender::discovery::BlenderInstall;
-use crate::blender::project::{inspect_project_with_timeout, normalize_versions, BlendProjectSettings};
+use crate::blender::project::{
+    inspect_project_with_timeout, normalize_versions, BlendProjectSettings,
+};
 use crate::state::AppState;
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
@@ -160,18 +162,13 @@ pub fn open_path(path: String) {
     let target = if target.exists() {
         target.clone()
     } else {
-        target
-            .parent()
-            .map(|d| d.to_path_buf())
-            .unwrap_or(target)
+        target.parent().map(|d| d.to_path_buf()).unwrap_or(target)
     };
 
-#[cfg(target_os = "windows")]
+    #[cfg(target_os = "windows")]
     {
         let explorer = "explorer.exe";
-        let normalized = target
-            .canonicalize()
-            .unwrap_or_else(|_| target.clone());
+        let normalized = target.canonicalize().unwrap_or_else(|_| target.clone());
 
         let mut command = std::process::Command::new(explorer);
         if normalized.is_file() {
@@ -182,9 +179,13 @@ pub fn open_path(path: String) {
         let _ = command.spawn();
     }
     #[cfg(target_os = "macos")]
-    { let _ = std::process::Command::new("open").arg(&target).spawn(); }
+    {
+        let _ = std::process::Command::new("open").arg(&target).spawn();
+    }
     #[cfg(target_os = "linux")]
-    { let _ = std::process::Command::new("xdg-open").arg(&target).spawn(); }
+    {
+        let _ = std::process::Command::new("xdg-open").arg(&target).spawn();
+    }
 }
 
 async fn resolved_blender_versions(app: &AppHandle) -> Vec<BlenderInstall> {
@@ -243,9 +244,7 @@ pub async fn inspect_toolchain(app: AppHandle) -> ToolchainStatus {
     ToolchainStatus {
         blender_installs,
         ffmpeg_found: ffmpeg_lookup.executable.is_some(),
-        ffmpeg_executable: ffmpeg_lookup
-            .executable
-            .map(|path| display_path(&path)),
+        ffmpeg_executable: ffmpeg_lookup.executable.map(|path| display_path(&path)),
         ffmpeg_source: ffmpeg_lookup.source.map(str::to_string),
     }
 }
@@ -274,10 +273,10 @@ fn collect_rendered_frames(
     if frame_start.is_some()
         && frame_end.is_some()
         && output_path
-        .file_name()
-        .and_then(|name| name.to_str())
-        .map(|name| name.contains('#'))
-        .unwrap_or(false)
+            .file_name()
+            .and_then(|name| name.to_str())
+            .map(|name| name.contains('#'))
+            .unwrap_or(false)
     {
         for frame in frame_start.unwrap_or_default()..=frame_end.unwrap_or_default() {
             if let Some(file) = frame_filename(output_path, frame, format) {
@@ -313,10 +312,7 @@ fn collect_rendered_frames(
     let suffix_hint = template
         .find('#')
         .map(|idx| {
-            let hash_count = template[idx..]
-                .chars()
-                .take_while(|&ch| ch == '#')
-                .count();
+            let hash_count = template[idx..].chars().take_while(|&ch| ch == '#').count();
             let suffix_raw = &template[idx + hash_count..];
             if let Some(dot) = suffix_raw.rfind('.') {
                 suffix_raw[..dot].to_string()
@@ -337,7 +333,10 @@ fn collect_rendered_frames(
                     .unwrap_or(false)
             })
             .filter(|path| {
-                let stem = path.file_stem().and_then(|name| name.to_str()).unwrap_or_default();
+                let stem = path
+                    .file_stem()
+                    .and_then(|name| name.to_str())
+                    .unwrap_or_default();
                 (prefix_hint.is_empty() || stem.starts_with(&prefix_hint))
                     && (suffix_hint.is_empty() || stem.ends_with(&suffix_hint))
             })

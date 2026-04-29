@@ -409,12 +409,7 @@ pub fn scan_folder_frame_groups(folder_path: String) -> Result<FolderFrameGroups
             let name = raw_prefix
                 .trim_end_matches(|ch: char| ch == '_' || ch == '-')
                 .to_string();
-            let input_path = dir.join(format!(
-                "{}{}.{}",
-                raw_prefix,
-                "#".repeat(digits_len),
-                ext
-            ));
+            let input_path = dir.join(format!("{}{}.{}", raw_prefix, "#".repeat(digits_len), ext));
 
             Some(FolderFrameGroup {
                 name,
@@ -444,10 +439,7 @@ fn output_template_hints(output_path: &Path) -> (String, String) {
     let suffix_hint = template
         .find('#')
         .map(|idx| {
-            let hash_count = template[idx..]
-                .chars()
-                .take_while(|&ch| ch == '#')
-                .count();
+            let hash_count = template[idx..].chars().take_while(|&ch| ch == '#').count();
             let suffix_raw = &template[idx + hash_count..];
             if let Some(dot) = suffix_raw.rfind('.') {
                 suffix_raw[..dot].to_string()
@@ -554,7 +546,10 @@ fn collect_template_frame_files(
             }
         })
         .filter(|path| {
-            let stem = path.file_stem().and_then(|name| name.to_str()).unwrap_or_default();
+            let stem = path
+                .file_stem()
+                .and_then(|name| name.to_str())
+                .unwrap_or_default();
             (prefix_hint.is_empty() || stem.starts_with(&prefix_hint))
                 && (suffix_hint.is_empty() || stem.ends_with(&suffix_hint))
         })
@@ -581,9 +576,7 @@ fn collect_template_frame_files(
     Ok((frames, detected_format))
 }
 
-fn collect_input_frame_files(
-    job: &FfmpegJob,
-) -> Result<(Vec<FrameFile>, Option<String>), String> {
+fn collect_input_frame_files(job: &FfmpegJob) -> Result<(Vec<FrameFile>, Option<String>), String> {
     if job.input_path.is_dir() {
         let (frames, detected_format) = inspect_folder_frame_files(&job.input_path, None)?;
         let selected = frames
@@ -908,12 +901,11 @@ async fn persist_ffmpeg_progress(
 
 async fn resolve_blender_probe(state: &AppState, job: &FfmpegJob) -> PathBuf {
     if let Some(blender_job_id) = &job.source_blender_job_id {
-        if let Ok(Some(path)) = sqlx::query_scalar::<_, String>(
-            "SELECT blender_exec FROM jobs WHERE id = ?",
-        )
-        .bind(blender_job_id)
-        .fetch_optional(&state.pool)
-        .await
+        if let Ok(Some(path)) =
+            sqlx::query_scalar::<_, String>("SELECT blender_exec FROM jobs WHERE id = ?")
+                .bind(blender_job_id)
+                .fetch_optional(&state.pool)
+                .await
         {
             return PathBuf::from(path);
         }
@@ -985,7 +977,11 @@ pub async fn insert_ffmpeg_job(
                 .as_deref()
                 .map(str::trim)
                 .filter(|value| !value.is_empty())
-                .ok_or_else(|| String::from("source_blender_job_id is required for blender_job output templates"))?;
+                .ok_or_else(|| {
+                    String::from(
+                        "source_blender_job_id is required for blender_job output templates",
+                    )
+                })?;
             let (blend_file, render_mode, original_frame_start, original_frame_end) =
                 sqlx::query_as::<_, (String, crate::queue::job::RenderMode, i32, i32)>(
                 "SELECT blend_file, render_mode, original_frame_start, original_frame_end FROM jobs WHERE id = ?",
@@ -998,7 +994,8 @@ pub async fn insert_ffmpeg_job(
             if render_mode.is_quick_mp4() {
                 return Err("quick_mp4 render jobs cannot create FFmpeg jobs".into());
             }
-            if payload.frame_start < original_frame_start || payload.frame_end > original_frame_end {
+            if payload.frame_start < original_frame_start || payload.frame_end > original_frame_end
+            {
                 return Err(format!(
                     "transcode frame range must stay within original render range {original_frame_start}-{original_frame_end}"
                 ));
@@ -1021,13 +1018,11 @@ pub async fn insert_ffmpeg_job(
             payload.output_path.trim(),
             &default_context(
                 PathKind::StandaloneFfmpeg,
-                Some(
-                    if input_path.is_dir() {
-                        input_path.clone()
-                    } else {
-                        input_path.parent().unwrap_or(&input_path).to_path_buf()
-                    },
-                ),
+                Some(if input_path.is_dir() {
+                    input_path.clone()
+                } else {
+                    input_path.parent().unwrap_or(&input_path).to_path_buf()
+                }),
                 None,
                 folder_name_from_source_path(&input_path),
                 payload.frame_start,
@@ -1062,7 +1057,11 @@ pub async fn insert_ffmpeg_job(
         return Err("name cannot be empty".into());
     }
 
-    let mut tx = state.pool.begin().await.map_err(|error| error.to_string())?;
+    let mut tx = state
+        .pool
+        .begin()
+        .await
+        .map_err(|error| error.to_string())?;
     let job_number: i64 =
         sqlx::query_scalar("SELECT COALESCE(MAX(job_number), 0) + 1 FROM ffmpeg_jobs")
             .fetch_one(&mut *tx)
@@ -1184,12 +1183,11 @@ pub async fn finalize_ffmpeg_shutdown_jobs(state: &AppState) {
 
     let line = "[cancelled] Reason: app shutdown. The app closed while FFmpeg was transcoding, so this FFmpeg Job was cancelled.";
     for (job_id, pid) in &running_jobs {
-        if let Ok(Some(job_number)) = sqlx::query_scalar::<_, i32>(
-            "SELECT job_number FROM ffmpeg_jobs WHERE id = ?",
-        )
-        .bind(job_id)
-        .fetch_optional(&state.pool)
-        .await
+        if let Ok(Some(job_number)) =
+            sqlx::query_scalar::<_, i32>("SELECT job_number FROM ffmpeg_jobs WHERE id = ?")
+                .bind(job_id)
+                .fetch_optional(&state.pool)
+                .await
         {
             let _ = crate::app_paths::append_ffmpeg_job_log_event(job_number, job_id, line);
         }
@@ -1197,7 +1195,10 @@ pub async fn finalize_ffmpeg_shutdown_jobs(state: &AppState) {
     }
 
     if !running_jobs.is_empty() {
-        let ids = running_jobs.iter().map(|(job_id, _)| job_id.clone()).collect::<Vec<_>>();
+        let ids = running_jobs
+            .iter()
+            .map(|(job_id, _)| job_id.clone())
+            .collect::<Vec<_>>();
         let placeholders = vec!["?"; ids.len()].join(", ");
         let query = format!(
             "UPDATE ffmpeg_jobs SET status = 'cancelled', finished_at = ? WHERE status = 'running' AND id IN ({placeholders})"
@@ -1224,7 +1225,9 @@ pub async fn run_ffmpeg_job(
     let total_frames = job.total_frames().max(0) as u32;
     let (frames, detected_format) = collect_input_frame_files(&job)?;
     if frames.is_empty() {
-        return Err(String::from("No matching frames found for this FFmpeg Job."));
+        return Err(String::from(
+            "No matching frames found for this FFmpeg Job.",
+        ));
     }
 
     if let Some(parent) = job.output_path.parent() {
@@ -1241,7 +1244,10 @@ pub async fn run_ffmpeg_job(
     std::fs::create_dir_all(&temp_root).map_err(|error| error.to_string())?;
     let _temp_root_guard = TempDirGuard(temp_root.clone());
     let concat_index_path = temp_root.join("ffmpeg-input.txt");
-    let files = frames.iter().map(|frame| frame.path.clone()).collect::<Vec<_>>();
+    let files = frames
+        .iter()
+        .map(|frame| frame.path.clone())
+        .collect::<Vec<_>>();
     write_ffmpeg_concat_index(&concat_index_path, &files, job.fps)?;
 
     append_ffmpeg_log_line(
@@ -1498,10 +1504,7 @@ pub async fn list_ffmpeg_jobs(state: State<'_, AppState>) -> Result<Vec<FfmpegJo
 }
 
 #[tauri::command]
-pub async fn get_ffmpeg_job(
-    id: String,
-    state: State<'_, AppState>,
-) -> Result<FfmpegJob, String> {
+pub async fn get_ffmpeg_job(id: String, state: State<'_, AppState>) -> Result<FfmpegJob, String> {
     load_ffmpeg_job(&state.pool, &id)
         .await
         .map_err(|error| error.to_string())
@@ -1522,29 +1525,31 @@ pub async fn cancel_ffmpeg_job(
     state: State<'_, AppState>,
     app: tauri::AppHandle,
 ) -> Result<(), String> {
-    let status = sqlx::query_scalar::<_, FfmpegJobStatus>(
-        "SELECT status FROM ffmpeg_jobs WHERE id = ?",
-    )
-    .bind(&id)
-    .fetch_optional(&state.pool)
-    .await
-    .map_err(|error| error.to_string())?;
+    let status =
+        sqlx::query_scalar::<_, FfmpegJobStatus>("SELECT status FROM ffmpeg_jobs WHERE id = ?")
+            .bind(&id)
+            .fetch_optional(&state.pool)
+            .await
+            .map_err(|error| error.to_string())?;
 
     match status {
         None => Ok(()),
         Some(FfmpegJobStatus::Pending) => {
-            sqlx::query("UPDATE ffmpeg_jobs SET status = 'cancelled', finished_at = ? WHERE id = ?")
-                .bind(Utc::now().timestamp_millis())
-                .bind(&id)
-                .execute(&state.pool)
-                .await
-                .map_err(|error| error.to_string())?;
+            sqlx::query(
+                "UPDATE ffmpeg_jobs SET status = 'cancelled', finished_at = ? WHERE id = ?",
+            )
+            .bind(Utc::now().timestamp_millis())
+            .bind(&id)
+            .execute(&state.pool)
+            .await
+            .map_err(|error| error.to_string())?;
 
-            if let Ok(Some((job_number, resolved_job_id))) =
-                sqlx::query_as::<_, (i32, String)>("SELECT job_number, id FROM ffmpeg_jobs WHERE id = ?")
-                    .bind(&id)
-                    .fetch_optional(&state.pool)
-                    .await
+            if let Ok(Some((job_number, resolved_job_id))) = sqlx::query_as::<_, (i32, String)>(
+                "SELECT job_number, id FROM ffmpeg_jobs WHERE id = ?",
+            )
+            .bind(&id)
+            .fetch_optional(&state.pool)
+            .await
             {
                 let _ = crate::app_paths::append_ffmpeg_job_log_event(
                     job_number,
@@ -1561,11 +1566,12 @@ pub async fn cancel_ffmpeg_job(
         }
         Some(FfmpegJobStatus::Running) => {
             state.cancelled_ffmpeg_jobs.lock().await.insert(id.clone());
-            if let Ok(Some((job_number, resolved_job_id))) =
-                sqlx::query_as::<_, (i32, String)>("SELECT job_number, id FROM ffmpeg_jobs WHERE id = ?")
-                    .bind(&id)
-                    .fetch_optional(&state.pool)
-                    .await
+            if let Ok(Some((job_number, resolved_job_id))) = sqlx::query_as::<_, (i32, String)>(
+                "SELECT job_number, id FROM ffmpeg_jobs WHERE id = ?",
+            )
+            .bind(&id)
+            .fetch_optional(&state.pool)
+            .await
             {
                 let _ = crate::app_paths::append_ffmpeg_job_log_event(
                     job_number,
@@ -1658,7 +1664,11 @@ pub async fn reorder_ffmpeg_jobs(
         })
         .collect::<Result<Vec<_>, _>>()?;
 
-    let mut tx = state.pool.begin().await.map_err(|error| error.to_string())?;
+    let mut tx = state
+        .pool
+        .begin()
+        .await
+        .map_err(|error| error.to_string())?;
     for (index, id) in final_order.iter().enumerate() {
         sqlx::query("UPDATE ffmpeg_jobs SET priority = ? WHERE id = ?")
             .bind((index as i32) + 1)

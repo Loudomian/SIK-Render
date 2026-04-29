@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core'
-import type { AddFfmpegJobPayload, AddJobPayload, AppSettings, BlenderInstall, BlendProjectSettings, FfmpegJob, FolderFrameGroup, FolderFramesInspection, JobLogSummary, OutputPathTemplatePreview, PathTemplateKind, QueueState, RenderJob, RenderedFramesStatus, ToolchainStatus } from '~/types'
+import type { AddFfmpegJobPayload, AddJobPayload, AppSettings, BlenderInstall, BlendProjectSettings, FfmpegJob, FolderFrameGroup, FolderFramesInspection, JobLogSummary, NodeInfo, NodeInterfaceInfo, OutputPathTemplatePreview, PathTemplateKind, PeerInfo, QueueState, RenderJob, RenderedFramesStatus, ToolchainStatus } from '~/types'
 
 // Typed wrappers around Tauri IPC commands
 
@@ -9,6 +9,15 @@ const tauriApi = {
 
   getQueueState: () =>
     invoke<QueueState>('get_queue_state'),
+
+  getNodeInfo: () =>
+    invoke<NodeInfo>('get_node_info'),
+
+  getPeers: () =>
+    invoke<PeerInfo[]>('get_peers'),
+
+  listNodeInterfaces: () =>
+    invoke<NodeInterfaceInfo[]>('list_node_interfaces'),
 
   startQueue: () =>
     invoke<QueueState>('start_queue'),

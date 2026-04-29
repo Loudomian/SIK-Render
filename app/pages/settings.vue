@@ -120,6 +120,19 @@
         <UCard variant="subtle" class="settings-card" :ui="{ body: 'settings-card-body' }">
           <div class="settings-card-header">
             <div>
+              <h3 class="settings-card-title">节点网络参数</h3>
+              <p class="hint-text">端口、网段参考与设备备注。</p>
+            </div>
+          </div>
+
+          <div class="settings-card-actions">
+            <UButton icon="i-lucide-network" label="编辑" color="neutral" variant="outline" size="sm" @click="networkModalOpen = true" />
+          </div>
+        </UCard>
+
+        <UCard variant="subtle" class="settings-card" :ui="{ body: 'settings-card-body' }">
+          <div class="settings-card-header">
+            <div>
               <h3 class="settings-card-title">界面与外观</h3>
               <p class="hint-text">直接切换浅色、深色或跟随系统。</p>
             </div>
@@ -184,6 +197,7 @@
     <BlenderOutputSettingsModal v-model:open="blenderOutputModalOpen" />
     <FfmpegSettingsModal v-model:open="ffmpegModalOpen" />
     <OutputPathTemplateSettingsModal v-model:open="outputPathTemplateModalOpen" />
+    <NetworkSettingsModal v-model:open="networkModalOpen" />
   </div>
 </template>
 
@@ -198,6 +212,7 @@ const blenderModalOpen = ref(false)
 const blenderOutputModalOpen = ref(false)
 const ffmpegModalOpen = ref(false)
 const outputPathTemplateModalOpen = ref(false)
+const networkModalOpen = ref(false)
 const appVersion = ref(String(runtimeConfig.public.appVersion ?? '0.0.0'))
 
 const blenderVersionItems = computed(() => {

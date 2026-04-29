@@ -162,7 +162,8 @@ fn spawn_job_runner(app: AppHandle, state: AppState, running_job: FfmpegJob) {
             running_job.id
         );
 
-        let result = transcode::run_ffmpeg_job(app.clone(), state.clone(), running_job.clone()).await;
+        let result =
+            transcode::run_ffmpeg_job(app.clone(), state.clone(), running_job.clone()).await;
         let final_status = match result {
             Ok(status) => status,
             Err(error) => {
@@ -177,7 +178,9 @@ fn spawn_job_runner(app: AppHandle, state: AppState, running_job: FfmpegJob) {
         } else {
             None
         };
-        let output_size_bytes = output_metadata.as_ref().map(|metadata| metadata.len() as i64);
+        let output_size_bytes = output_metadata
+            .as_ref()
+            .map(|metadata| metadata.len() as i64);
         let output_duration_secs = if final_status == FfmpegJobStatus::Done {
             Some((running_job.total_frames().max(0) as f32) / running_job.fps.max(0.001))
         } else {

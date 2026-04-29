@@ -1,9 +1,10 @@
 use crate::commands::settings::AppSettings;
+use crate::network::types::{PeerInfo, WsMessage};
 use chrono::Utc;
 use sqlx::SqlitePool;
 use std::collections::{HashMap, HashSet};
-use std::sync::RwLock;
 use std::sync::Arc;
+use std::sync::RwLock;
 use tokio::sync::{Mutex, Notify};
 
 #[derive(Clone)]
@@ -19,10 +20,19 @@ pub struct AppState {
     pub settings: Arc<RwLock<Option<AppSettings>>>,
     pub queue_paused: Arc<RwLock<bool>>,
     pub paused_job_id: Arc<Mutex<Option<String>>>,
+    pub ws_broadcaster: Arc<tokio::sync::broadcast::Sender<WsMessage>>,
+    pub peers: Arc<Mutex<HashMap<String, PeerInfo>>>,
+    pub node_id: Arc<String>,
 }
 
 impl AppState {
     pub fn new(pool: SqlitePool, settings: Option<AppSettings>) -> Self {
+        let (ws_tx, _) = tokio::sync::broadcast::channel(256);
+        let node_id = crate::app_paths::read_or_create_node_id().unwrap_or_else(|error| {
+            log::error!("Failed to persist node id, using temporary id: {error}");
+            uuid::Uuid::new_v4().to_string()
+        });
+
         Self {
             pool,
             scheduler_notify: Arc::new(Notify::new()),
@@ -35,11 +45,17 @@ impl AppState {
             settings: Arc::new(RwLock::new(settings)),
             queue_paused: Arc::new(RwLock::new(true)),
             paused_job_id: Arc::new(Mutex::new(None)),
+            ws_broadcaster: Arc::new(ws_tx),
+            peers: Arc::new(Mutex::new(HashMap::new())),
+            node_id: Arc::new(node_id),
         }
     }
 
     pub fn cached_settings(&self) -> Option<AppSettings> {
-        self.settings.read().ok().and_then(|settings| settings.clone())
+        self.settings
+            .read()
+            .ok()
+            .and_then(|settings| settings.clone())
     }
 
     pub fn set_cached_settings(&self, settings: AppSettings) {
@@ -49,7 +65,10 @@ impl AppState {
     }
 
     pub fn is_queue_paused(&self) -> bool {
-        self.queue_paused.read().map(|paused| *paused).unwrap_or(true)
+        self.queue_paused
+            .read()
+            .map(|paused| *paused)
+            .unwrap_or(true)
     }
 
     pub fn set_queue_paused(&self, paused: bool) {

@@ -3,7 +3,6 @@ use anyhow::{Context, Result};
 use chrono::Utc;
 use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions, SqliteSynchronous};
 use std::fs;
-use std::path::PathBuf;
 use tauri::{AppHandle, Manager};
 
 pub fn app_data_dir(app: &AppHandle) -> Result<std::path::PathBuf> {
@@ -15,12 +14,8 @@ pub fn app_data_dir(app: &AppHandle) -> Result<std::path::PathBuf> {
     Ok(dir)
 }
 
-fn tool_root_db_path() -> Result<PathBuf> {
-    Ok(crate::app_paths::tool_root_dir()?.join("sik-render.sqlite3"))
-}
-
 pub async fn init(_app: &AppHandle) -> Result<AppState> {
-    let db_path = tool_root_db_path()?;
+    let db_path = crate::app_paths::database_path()?;
 
     let connect_options = SqliteConnectOptions::new()
         .filename(&db_path)
@@ -39,10 +34,11 @@ pub async fn init(_app: &AppHandle) -> Result<AppState> {
 
     sqlx::migrate!("./src/db/migrations").run(&pool).await?;
 
-    let interrupted_jobs =
-        sqlx::query_as::<_, (String, i32)>("SELECT id, job_number FROM jobs WHERE status = 'running'")
-            .fetch_all(&pool)
-            .await?;
+    let interrupted_jobs = sqlx::query_as::<_, (String, i32)>(
+        "SELECT id, job_number FROM jobs WHERE status = 'running'",
+    )
+    .fetch_all(&pool)
+    .await?;
     if !interrupted_jobs.is_empty() {
         let line = "[interrupted] Reason: startup recovery. This job was still marked running when the app started, which means the previous app session ended while rendering was in progress. It was marked interrupted and will not auto-resume; continue it manually from the last recorded frame.";
         for (job_id, job_number) in &interrupted_jobs {

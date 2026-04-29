@@ -2,41 +2,53 @@ mod app_paths;
 mod blender;
 mod commands;
 mod db;
+mod network;
 mod path_template;
 mod queue;
 mod state;
 
+use std::path::PathBuf;
+use chrono::Local;
 use tauri::Manager;
+use tauri_plugin_log::{Target, TargetKind};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    env_logger::init();
-
     let app = tauri::Builder::default()
+        .plugin(
+            tauri_plugin_log::Builder::new()
+                .level(log::LevelFilter::Info)
+                .targets([
+                    Target::new(TargetKind::Stdout),
+                    Target::new(TargetKind::Folder {
+                        path: sikfilm_log_dir(),
+                        file_name: Some(sikfilm_log_file_name()),
+                    }),
+                    Target::new(TargetKind::Webview),
+                ])
+                .build(),
+        )
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_store::Builder::default().build())
         .plugin(tauri_plugin_notification::init())
         .setup(|app| {
-            crate::app_paths::ensure_runtime_layout()
-                .expect("failed to initialize runtime layout");
+            crate::app_paths::ensure_runtime_layout().expect("failed to initialize runtime layout");
             let app_handle = app.handle().clone();
             let state = tauri::async_runtime::block_on(db::init(&app_handle))
                 .expect("failed to initialize database");
             app.manage(state);
             crate::commands::settings::get_settings(app_handle.clone())
                 .expect("failed to initialize settings file");
-            let state = app_handle
-                .state::<state::AppState>()
-                .inner()
-                .clone();
+            let state = app_handle.state::<state::AppState>().inner().clone();
             queue::scheduler::start(app_handle, state);
             let app_handle = app.handle().clone();
-            let state = app_handle
-                .state::<state::AppState>()
-                .inner()
-                .clone();
+            let state = app_handle.state::<state::AppState>().inner().clone();
             queue::transcode_scheduler::start(app_handle, state);
+            let app_handle = app.handle().clone();
+            let state = app_handle.state::<state::AppState>().inner().clone();
+            network::server::start(app_handle.clone(), state.clone());
+            network::discovery::start(app_handle, state);
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -56,6 +68,9 @@ pub fn run() {
             commands::jobs::get_job_log_summary,
             commands::jobs::reset_job,
             commands::jobs::update_job_preview_dimensions,
+            commands::nodes::get_node_info,
+            commands::nodes::get_peers,
+            commands::nodes::list_node_interfaces,
             commands::path_template::preview_output_path_template,
             commands::app::app_ready,
             commands::app::path_exists,
@@ -93,4 +108,26 @@ pub fn run() {
             }
         }
     });
+}
+
+fn sikfilm_log_dir() -> PathBuf {
+    #[cfg(target_os = "windows")]
+    if let Some(app_data) = std::env::var_os("APPDATA") {
+        return PathBuf::from(app_data)
+            .join("SIKFilm")
+            .join("Render")
+            .join("Logs")
+            .join(env!("CARGO_PKG_VERSION"));
+    }
+
+    std::env::temp_dir()
+        .join("SIKFilm")
+        .join("Render")
+        .join("Logs")
+        .join(env!("CARGO_PKG_VERSION"))
+}
+
+fn sikfilm_log_file_name() -> String {
+    let timestamp = Local::now().format("%Y%m%d_%H%M%S_%3f");
+    format!("sikrender_{timestamp}")
 }

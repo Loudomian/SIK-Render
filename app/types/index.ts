@@ -247,4 +247,56 @@ export interface AppSettings {
   extraBlenderPaths: string[]
   excludedBlenderPaths: string[]
   maxCrashRetries: number
+  nodePort: number
+  nodeInterfaceAddress: string
+  nodeNote: string
+}
+
+export interface NodeInfo {
+  id: string
+  hostname: string
+  note: string
+  version: string
+  ipAddress: string
+  port: number
+}
+
+export interface NodeInterfaceInfo {
+  name: string
+  ipAddress: string
+}
+
+export interface PeerInfo {
+  node: NodeInfo
+  jobs: RenderJob[]
+  queuePaused: boolean
+  connected: boolean
+}
+
+export interface PeerDiscoveredEvent {
+  peer: PeerInfo
+}
+
+export interface PeerLostEvent {
+  nodeId: string
+}
+
+export interface PeerJobUpdatedEvent {
+  nodeId: string
+  job: RenderJob
+}
+
+export interface PeerQueueStateEvent {
+  nodeId: string
+  paused: boolean
+}
+
+export interface PeerProgressEvent {
+  nodeId: string
+  jobId: string
+  frame: number
+  totalFrames: number
+  timeElapsed: number
+  memoryMb: number
+  remainingSecs: number | null
 }

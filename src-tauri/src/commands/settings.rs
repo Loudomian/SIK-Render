@@ -42,6 +42,12 @@ pub struct AppSettings {
     pub excluded_blender_paths: Vec<String>,
     #[serde(default = "default_max_crash_retries")]
     pub max_crash_retries: u32,
+    #[serde(default = "default_node_port")]
+    pub node_port: u16,
+    #[serde(default = "default_node_interface_address")]
+    pub node_interface_address: String,
+    #[serde(default)]
+    pub node_note: String,
 }
 
 impl Default for AppSettings {
@@ -54,8 +60,8 @@ impl Default for AppSettings {
             transcode_preset: default_transcode_preset(),
             ffmpeg_max_concurrent: default_ffmpeg_max_concurrent(),
             render_output_path_template: default_render_output_path_template(),
-            blender_transcode_output_path_template:
-                default_blender_transcode_output_path_template(),
+            blender_transcode_output_path_template: default_blender_transcode_output_path_template(
+            ),
             standalone_transcode_output_path_template:
                 default_standalone_transcode_output_path_template(),
             png_color_mode: default_png_color_mode(),
@@ -69,6 +75,9 @@ impl Default for AppSettings {
             extra_blender_paths: Vec::new(),
             excluded_blender_paths: Vec::new(),
             max_crash_retries: default_max_crash_retries(),
+            node_port: default_node_port(),
+            node_interface_address: default_node_interface_address(),
+            node_note: String::new(),
         }
     }
 }
@@ -85,6 +94,8 @@ struct SettingsFile {
     output_paths: OutputPathSettings,
     #[serde(default)]
     blender_output: BlenderOutputSettings,
+    #[serde(default)]
+    network: NetworkSettings,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -155,6 +166,16 @@ struct BlenderSettings {
     excluded_blender_paths: Vec<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+struct NetworkSettings {
+    #[serde(default = "default_node_port")]
+    port: u16,
+    #[serde(default = "default_node_interface_address")]
+    interface_address: String,
+    #[serde(default)]
+    note: String,
+}
+
 #[derive(Debug, Clone, Deserialize)]
 #[serde(untagged)]
 enum SettingsFileCompat {
@@ -168,6 +189,14 @@ fn default_blend_inspect_timeout_seconds() -> u64 {
 
 fn default_max_crash_retries() -> u32 {
     3
+}
+
+fn default_node_port() -> u16 {
+    47878
+}
+
+fn default_node_interface_address() -> String {
+    String::from("192.168.1.1")
 }
 
 fn default_transcode_crf() -> u32 {
@@ -246,6 +275,27 @@ fn normalize_ffmpeg_max_concurrent(value: u32) -> u32 {
     value.clamp(1, 8)
 }
 
+fn normalize_node_port(port: u16) -> u16 {
+    if port == 0 {
+        default_node_port()
+    } else {
+        port
+    }
+}
+
+fn normalize_node_interface_address(address: String) -> String {
+    let trimmed = address.trim();
+    if trimmed.is_empty() {
+        default_node_interface_address()
+    } else {
+        trimmed.to_string()
+    }
+}
+
+fn normalize_node_note(note: String) -> String {
+    note.trim().chars().take(80).collect()
+}
+
 fn normalize_png_color_mode(mode: &str) -> String {
     match mode {
         "BW" | "RGB" | "RGBA" => mode.to_string(),
@@ -280,8 +330,9 @@ fn normalize_exr_color_depth(depth: u32) -> u32 {
 
 fn normalize_exr_codec(codec: &str) -> String {
     match codec {
-        "NONE" | "ZIP" | "PIZ" | "DWAA" | "DWAB" | "ZIPS" | "RLE" | "PXR24" | "B44"
-        | "B44A" => codec.to_string(),
+        "NONE" | "ZIP" | "PIZ" | "DWAA" | "DWAB" | "ZIPS" | "RLE" | "PXR24" | "B44" | "B44A" => {
+            codec.to_string()
+        }
         _ => default_exr_codec(),
     }
 }
@@ -343,6 +394,11 @@ impl From<SettingsFile> for AppSettings {
             extra_blender_paths: value.blender.extra_blender_paths,
             excluded_blender_paths: value.blender.excluded_blender_paths,
             max_crash_retries: normalize_max_crash_retries(value.tools.max_crash_retries),
+            node_port: normalize_node_port(value.network.port),
+            node_interface_address: normalize_node_interface_address(
+                value.network.interface_address,
+            ),
+            node_note: normalize_node_note(value.network.note),
         }
     }
 }
@@ -358,9 +414,7 @@ impl From<AppSettings> for SettingsFile {
                 ),
                 transcode_crf: value.transcode_crf.min(51),
                 transcode_preset: value.transcode_preset.clone(),
-                ffmpeg_max_concurrent: normalize_ffmpeg_max_concurrent(
-                    value.ffmpeg_max_concurrent,
-                ),
+                ffmpeg_max_concurrent: normalize_ffmpeg_max_concurrent(value.ffmpeg_max_concurrent),
                 max_crash_retries: normalize_max_crash_retries(value.max_crash_retries),
             },
             ui: UiSettings { theme: value.theme },
@@ -390,6 +444,11 @@ impl From<AppSettings> for SettingsFile {
                 exr_color_depth: normalize_exr_color_depth(value.exr_color_depth),
                 exr_codec: normalize_exr_codec(&value.exr_codec),
                 exr_quality: normalize_exr_quality(value.exr_quality),
+            },
+            network: NetworkSettings {
+                port: normalize_node_port(value.node_port),
+                interface_address: normalize_node_interface_address(value.node_interface_address),
+                note: normalize_node_note(value.node_note),
             },
         }
     }
@@ -432,7 +491,11 @@ fn read_settings_from_disk(app: &AppHandle) -> Result<AppSettings, String> {
             Ok(settings)
         }
         Err(error) => {
-            log::error!("failed to parse settings file {}: {}", path.display(), error);
+            log::error!(
+                "failed to parse settings file {}: {}",
+                path.display(),
+                error
+            );
             let fallback = AppSettings::default();
             save_settings(app.clone(), fallback.clone())?;
             Ok(fallback)
@@ -526,6 +589,10 @@ pub fn save_settings(app: AppHandle, settings: AppSettings) -> Result<(), String
     settings.exr_codec = normalize_exr_codec(&settings.exr_codec);
     settings.exr_quality = normalize_exr_quality(settings.exr_quality);
     settings.max_crash_retries = normalize_max_crash_retries(settings.max_crash_retries);
+    settings.node_port = normalize_node_port(settings.node_port);
+    settings.node_interface_address =
+        normalize_node_interface_address(settings.node_interface_address);
+    settings.node_note = normalize_node_note(settings.node_note);
     let content = toml::to_string_pretty(&SettingsFile::from(settings.clone()))
         .map_err(|error| error.to_string())?;
     let tmp_path = path.with_extension("toml.tmp");

@@ -26,6 +26,9 @@ export const useSettingsStore = defineStore('settings', () => {
     extraBlenderPaths: [],
     excludedBlenderPaths: [],
     maxCrashRetries: 3,
+    nodePort: 47878,
+    nodeInterfaceAddress: '192.168.1.1',
+    nodeNote: '',
   })
   const blenderVersions = ref<BlenderInstall[]>([])
   const { getSettings, saveSettings, addBlenderByPath, getBlenderVersions } = useTauri()
@@ -55,6 +58,9 @@ export const useSettingsStore = defineStore('settings', () => {
       ...loaded,
       extraBlenderPaths: loaded.extraBlenderPaths ?? [],
       excludedBlenderPaths: loaded.excludedBlenderPaths ?? [],
+      nodePort: loaded.nodePort ?? 47878,
+      nodeInterfaceAddress: loaded.nodeInterfaceAddress || '192.168.1.1',
+      nodeNote: loaded.nodeNote ?? '',
     }
     persistThemePreference(settings.value.theme)
     blenderVersions.value = mergeInstalls(await getBlenderVersions())

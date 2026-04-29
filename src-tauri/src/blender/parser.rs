@@ -12,16 +12,12 @@ static RENDERING_FRAME_RE: OnceLock<Regex> = OnceLock::new();
 static TIME_RE: OnceLock<Regex> = OnceLock::new();
 
 pub fn parse_frame(line: &str) -> Option<u32> {
-    let re = FRAME_RE.get_or_init(|| {
-        Regex::new(r"Fra:\s*(\d+)").unwrap()
-    });
+    let re = FRAME_RE.get_or_init(|| Regex::new(r"Fra:\s*(\d+)").unwrap());
     if let Some(caps) = re.captures(line) {
         return caps[1].parse().ok();
     }
 
-    let re = RENDERING_FRAME_RE.get_or_init(|| {
-        Regex::new(r"Rendering frame\s+(\d+)").unwrap()
-    });
+    let re = RENDERING_FRAME_RE.get_or_init(|| Regex::new(r"Rendering frame\s+(\d+)").unwrap());
     let caps = re.captures(line)?;
     caps[1].parse().ok()
 }

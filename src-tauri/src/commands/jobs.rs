@@ -1,9 +1,9 @@
-use crate::queue::job::{DbRenderJob, JobStatus, RenderJob, RenderMode};
-use crate::queue::scheduler;
-use crate::state::AppState;
 use crate::path_template::{
     blend_file_name_from_path, default_context, resolve_output_path, PathKind,
 };
+use crate::queue::job::{DbRenderJob, JobStatus, RenderJob, RenderMode};
+use crate::queue::scheduler;
+use crate::state::AppState;
 use chrono::Utc;
 use serde::Deserialize;
 use serde::Serialize;
@@ -93,11 +93,12 @@ async fn append_manual_cancel_log(
     job_id: &str,
     line: &str,
 ) -> Result<(), String> {
-    let (job_number, job_id) = sqlx::query_as::<_, (i32, String)>("SELECT job_number, id FROM jobs WHERE id = ?")
-        .bind(job_id)
-        .fetch_one(&state.pool)
-        .await
-        .map_err(|error| error.to_string())?;
+    let (job_number, job_id) =
+        sqlx::query_as::<_, (i32, String)>("SELECT job_number, id FROM jobs WHERE id = ?")
+            .bind(job_id)
+            .fetch_one(&state.pool)
+            .await
+            .map_err(|error| error.to_string())?;
 
     crate::app_paths::append_job_log_event(
         job_number,
@@ -189,7 +190,10 @@ fn normalize_optional_text(value: Option<String>) -> Option<String> {
     })
 }
 
-fn normalize_optional_positive_f32(value: Option<f32>, field_name: &str) -> Result<Option<f32>, String> {
+fn normalize_optional_positive_f32(
+    value: Option<f32>,
+    field_name: &str,
+) -> Result<Option<f32>, String> {
     match value {
         Some(current) if current > 0.0 => Ok(Some(current)),
         Some(_) => Err(format!("{field_name} must be greater than 0")),
@@ -225,7 +229,9 @@ fn normalize_transcode_frame_range_override(
         (None, None) => Ok((None, None)),
         (Some(start), Some(end)) => {
             if start > end {
-                return Err("transcode_frame_start_override must be <= transcode_frame_end_override".into());
+                return Err(
+                    "transcode_frame_start_override must be <= transcode_frame_end_override".into(),
+                );
             }
             if start < job_frame_start || end > job_frame_end {
                 return Err(format!(
@@ -244,7 +250,9 @@ fn normalize_transcode_frame_range_override(
 
 #[tauri::command]
 pub async fn list_jobs(state: State<'_, AppState>) -> Result<Vec<RenderJob>, String> {
-    fetch_jobs(&state.pool).await.map_err(|error| error.to_string())
+    fetch_jobs(&state.pool)
+        .await
+        .map_err(|error| error.to_string())
 }
 
 #[tauri::command]
@@ -415,26 +423,32 @@ pub async fn add_job(
     job.auto_transcode_mp4 = transcode_allowed && payload.auto_transcode_mp4;
     if transcode_allowed {
         job.transcode_name_override = normalize_optional_text(payload.transcode_name_override);
-        job.transcode_fps_override =
-            normalize_optional_positive_f32(payload.transcode_fps_override, "transcode_fps_override")?;
-        job.transcode_output_path_override = normalize_optional_text(payload.transcode_output_path_override)
-            .map(|template| {
-                resolve_output_path(
-                    &template,
-                    &default_context(
-                        PathKind::BlenderFfmpeg,
-                        blend_file.parent().map(|value| value.to_path_buf()),
-                        blend_file_name_from_path(&blend_file),
-                        None,
-                        payload.frame_start,
-                        payload.frame_end,
-                    ),
-                )
-                .map_err(|error| error.to_string())
-            })
-            .transpose()?;
-        job.transcode_crf_override = payload.transcode_crf_override.map(|value| value.min(51) as i32);
-        job.transcode_preset_override = normalize_optional_preset(payload.transcode_preset_override);
+        job.transcode_fps_override = normalize_optional_positive_f32(
+            payload.transcode_fps_override,
+            "transcode_fps_override",
+        )?;
+        job.transcode_output_path_override =
+            normalize_optional_text(payload.transcode_output_path_override)
+                .map(|template| {
+                    resolve_output_path(
+                        &template,
+                        &default_context(
+                            PathKind::BlenderFfmpeg,
+                            blend_file.parent().map(|value| value.to_path_buf()),
+                            blend_file_name_from_path(&blend_file),
+                            None,
+                            payload.frame_start,
+                            payload.frame_end,
+                        ),
+                    )
+                    .map_err(|error| error.to_string())
+                })
+                .transpose()?;
+        job.transcode_crf_override = payload
+            .transcode_crf_override
+            .map(|value| value.min(51) as i32);
+        job.transcode_preset_override =
+            normalize_optional_preset(payload.transcode_preset_override);
         let (transcode_frame_start_override, transcode_frame_end_override) =
             normalize_transcode_frame_range_override(
                 payload.transcode_frame_start_override,
@@ -458,12 +472,16 @@ pub async fn add_job(
             .initial_total_frames
             .map(|value| value.clamp(0, total_frames))
             .or(Some(total_frames));
-        job.last_rendered_frame = payload.initial_last_rendered_frame.map(|value| {
-            value.clamp(resume_floor, job.frame_end)
-        });
+        job.last_rendered_frame = payload
+            .initial_last_rendered_frame
+            .map(|value| value.clamp(resume_floor, job.frame_end));
     }
 
-    let mut tx = state.pool.begin().await.map_err(|error| error.to_string())?;
+    let mut tx = state
+        .pool
+        .begin()
+        .await
+        .map_err(|error| error.to_string())?;
     let job_number: i64 = sqlx::query_scalar("SELECT COALESCE(MAX(job_number), 0) + 1 FROM jobs")
         .fetch_one(&mut *tx)
         .await
@@ -684,19 +702,19 @@ pub async fn update_job_transcode_settings(
              transcode_frame_end_override = ?
          WHERE id = ?",
     )
-        .bind(auto_transcode_mp4)
-        .bind(transcode_name_override)
-        .bind(transcode_fps_override)
-        .bind(transcode_output_path_override)
-        .bind(transcode_crf_override)
-        .bind(transcode_preset_override)
-        .bind(transcode_frame_start_override)
-        .bind(transcode_frame_end_override)
-        .bind(&payload.id)
-        .execute(&state.pool)
-        .await
-        .map_err(|error| error.to_string())?
-        .rows_affected();
+    .bind(auto_transcode_mp4)
+    .bind(transcode_name_override)
+    .bind(transcode_fps_override)
+    .bind(transcode_output_path_override)
+    .bind(transcode_crf_override)
+    .bind(transcode_preset_override)
+    .bind(transcode_frame_start_override)
+    .bind(transcode_frame_end_override)
+    .bind(&payload.id)
+    .execute(&state.pool)
+    .await
+    .map_err(|error| error.to_string())?
+    .rows_affected();
 
     if rows_affected == 0 {
         return Err(format!("job {} was not found", payload.id));
@@ -764,11 +782,13 @@ pub async fn update_job_preview_dimensions(
 
 #[tauri::command]
 pub async fn remove_job(id: String, state: State<'_, AppState>) -> Result<(), String> {
-    let row = sqlx::query_as::<_, (i32, String, JobStatus)>("SELECT job_number, id, status FROM jobs WHERE id = ?")
-        .bind(&id)
-        .fetch_optional(&state.pool)
-        .await
-        .map_err(|error| error.to_string())?;
+    let row = sqlx::query_as::<_, (i32, String, JobStatus)>(
+        "SELECT job_number, id, status FROM jobs WHERE id = ?",
+    )
+    .bind(&id)
+    .fetch_optional(&state.pool)
+    .await
+    .map_err(|error| error.to_string())?;
 
     let Some((job_number, job_id, status)) = row else {
         log::warn!("remove_job called for missing id: {id}");
@@ -842,14 +862,12 @@ pub async fn cancel_job(
                 // No active child: process is between retries or already dead.
                 // Update the DB immediately so the UI reflects the cancellation
                 // without waiting for the scheduler loop to wake up.
-                sqlx::query(
-                    "UPDATE jobs SET status = 'cancelled', finished_at = ? WHERE id = ?",
-                )
-                .bind(Utc::now().timestamp_millis())
-                .bind(&id)
-                .execute(&state.pool)
-                .await
-                .map_err(|error| error.to_string())?;
+                sqlx::query("UPDATE jobs SET status = 'cancelled', finished_at = ? WHERE id = ?")
+                    .bind(Utc::now().timestamp_millis())
+                    .bind(&id)
+                    .execute(&state.pool)
+                    .await
+                    .map_err(|error| error.to_string())?;
 
                 if let Ok(job) = scheduler::load_job(&state.pool, &id).await {
                     scheduler::emit_job_update(&app, &job);
@@ -867,11 +885,12 @@ pub async fn get_job_logs(
     job_id: String,
     state: State<'_, AppState>,
 ) -> Result<Vec<String>, String> {
-    let (job_number, job_id) = sqlx::query_as::<_, (i32, String)>("SELECT job_number, id FROM jobs WHERE id = ?")
-    .bind(&job_id)
-    .fetch_one(&state.pool)
-    .await
-    .map_err(|e| e.to_string())?;
+    let (job_number, job_id) =
+        sqlx::query_as::<_, (i32, String)>("SELECT job_number, id FROM jobs WHERE id = ?")
+            .bind(&job_id)
+            .fetch_one(&state.pool)
+            .await
+            .map_err(|e| e.to_string())?;
 
     crate::app_paths::read_job_log_lines(job_number, &job_id, crate::app_paths::BLENDER_LOG_KIND)
         .map_err(|e| e.to_string())
@@ -882,14 +901,19 @@ pub async fn get_job_latest_logs(
     job_id: String,
     state: State<'_, AppState>,
 ) -> Result<Vec<String>, String> {
-    let (job_number, job_id) = sqlx::query_as::<_, (i32, String)>("SELECT job_number, id FROM jobs WHERE id = ?")
-        .bind(&job_id)
-        .fetch_one(&state.pool)
-        .await
-        .map_err(|e| e.to_string())?;
+    let (job_number, job_id) =
+        sqlx::query_as::<_, (i32, String)>("SELECT job_number, id FROM jobs WHERE id = ?")
+            .bind(&job_id)
+            .fetch_one(&state.pool)
+            .await
+            .map_err(|e| e.to_string())?;
 
-    crate::app_paths::read_latest_job_log_lines(job_number, &job_id, crate::app_paths::BLENDER_LOG_KIND)
-        .map_err(|e| e.to_string())
+    crate::app_paths::read_latest_job_log_lines(
+        job_number,
+        &job_id,
+        crate::app_paths::BLENDER_LOG_KIND,
+    )
+    .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -897,16 +921,21 @@ pub async fn get_job_log_summary(
     job_id: String,
     state: State<'_, AppState>,
 ) -> Result<JobLogSummary, String> {
-    let (job_number, job_id) = sqlx::query_as::<_, (i32, String)>("SELECT job_number, id FROM jobs WHERE id = ?")
-        .bind(&job_id)
-        .fetch_one(&state.pool)
-        .await
-        .map_err(|e| e.to_string())?;
+    let (job_number, job_id) =
+        sqlx::query_as::<_, (i32, String)>("SELECT job_number, id FROM jobs WHERE id = ?")
+            .bind(&job_id)
+            .fetch_one(&state.pool)
+            .await
+            .map_err(|e| e.to_string())?;
 
-    let directory = crate::app_paths::job_log_dir(job_number, &job_id)
-        .map_err(|e| e.to_string())?;
-    let blender_count = crate::app_paths::count_job_log_files(job_number, &job_id, crate::app_paths::BLENDER_LOG_KIND)
-        .map_err(|e| e.to_string())?;
+    let directory =
+        crate::app_paths::job_log_dir(job_number, &job_id).map_err(|e| e.to_string())?;
+    let blender_count = crate::app_paths::count_job_log_files(
+        job_number,
+        &job_id,
+        crate::app_paths::BLENDER_LOG_KIND,
+    )
+    .map_err(|e| e.to_string())?;
     let ffmpeg_count = 0;
 
     Ok(JobLogSummary {
@@ -1045,12 +1074,18 @@ pub async fn reorder_job(
             if status == JobStatus::Running {
                 Ok(id)
             } else {
-                ordered_iter.next().ok_or_else(|| "job order is out of date, please refresh and try again".to_string())
+                ordered_iter.next().ok_or_else(|| {
+                    "job order is out of date, please refresh and try again".to_string()
+                })
             }
         })
         .collect::<Result<Vec<_>, _>>()?;
 
-    let mut tx = state.pool.begin().await.map_err(|error| error.to_string())?;
+    let mut tx = state
+        .pool
+        .begin()
+        .await
+        .map_err(|error| error.to_string())?;
     for (index, id) in final_order.iter().enumerate() {
         sqlx::query("UPDATE jobs SET priority = ? WHERE id = ?")
             .bind((index as i32) + 1)
@@ -1062,5 +1097,7 @@ pub async fn reorder_job(
     tx.commit().await.map_err(|error| error.to_string())?;
 
     state.scheduler_notify.notify_one();
-    fetch_jobs(&state.pool).await.map_err(|error| error.to_string())
+    fetch_jobs(&state.pool)
+        .await
+        .map_err(|error| error.to_string())
 }

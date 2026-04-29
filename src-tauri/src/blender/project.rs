@@ -37,25 +37,27 @@ payload = {
     "fps": float(scene.render.fps / scene.render.fps_base),
 }
 print("__SIK_PROJECT_SETTINGS__" + json.dumps(payload))
-"#.trim();
+"#
+    .trim();
 
     let output = tokio::time::timeout(
         std::time::Duration::from_secs(timeout_seconds.max(1)),
-        crate::blender::command::inspect_project_command(
-            blender_executable,
-            blend_file,
-            script,
-        )
-        .output()
+        crate::blender::command::inspect_project_command(blender_executable, blend_file, script)
+            .output(),
     )
     .await
-    .map_err(|_| anyhow!("Blender inspect timed out after {}s", timeout_seconds.max(1)))?
+    .map_err(|_| {
+        anyhow!(
+            "Blender inspect timed out after {}s",
+            timeout_seconds.max(1)
+        )
+    })?
     .with_context(|| {
-            format!(
-                "failed to launch Blender at {}",
-                blender_executable.display()
-            )
-        })?;
+        format!(
+            "failed to launch Blender at {}",
+            blender_executable.display()
+        )
+    })?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
