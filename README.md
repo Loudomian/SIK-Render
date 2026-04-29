@@ -68,4 +68,4 @@ Key files:
 Licensed under either of:
 
 - MIT License, see `LICENSE-MIT`
-- Apache License, Version 2.0, see `LICENSE-APACHE`
+- Apache License, Version 2.0, see `LICENSE-APACHE-2.0`
