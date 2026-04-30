@@ -15,9 +15,9 @@ const increment = process.argv[3]?.trim()
 
 function usage() {
   console.error('Usage:')
-  console.error('  bun run scripts/version.mjs sync')
-  console.error('  bun run scripts/version.mjs bump <patch|minor|major|prepatch|preminor|premajor|prerelease>')
-  console.error('  bun run scripts/version.mjs release <patch|minor|major|prepatch|preminor|premajor|prerelease>')
+  console.error('  bun run version:sync')
+  console.error('  bun run version:bump <patch|minor|major|prepatch|preminor|premajor|prerelease>')
+  console.error('  bun run version:release <patch|minor|major|prepatch|preminor|premajor|prerelease>')
 }
 
 function assertSemver(version) {

@@ -51,8 +51,27 @@ jobs:
           releaseBody: |
             ## SIK Render ${{ github.ref_name }}
 
-            ### 安装
-            下载下方 Assets 中的 `.msi` 或 `.exe` 安装包。
+            Local Blender render queue, FFmpeg transcode manager, and LAN render node monitor for SIKFilm workflows.
+
+            ### Download
+
+            Choose one installer from the Assets section below:
+
+            - `SIK Render_*_x64-setup.exe` - recommended for normal installation.
+            - `SIK Render_*_x64_en-US.msi` - recommended for managed or scripted installation.
+
+            ### Requirements
+
+            - Windows 10 or Windows 11.
+            - Blender installed locally for render jobs.
+
+            ### App Data
+
+            Runtime data is stored under:
+
+            ```text
+            %APPDATA%\SIKFilm\Render\
+            ```
           releaseDraft: true
           prerelease: ${{ contains(github.ref_name, '-rc') || contains(github.ref_name, '-beta') || contains(github.ref_name, '-alpha') }}
           tauriScript: bunx tauri
