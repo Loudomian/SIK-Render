@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core'
-import type { AddFfmpegJobPayload, AddJobPayload, AppSettings, BlenderInstall, BlendProjectSettings, FfmpegJob, FolderFrameGroup, FolderFramesInspection, JobLogSummary, NodeInfo, NodeInterfaceInfo, OutputPathTemplatePreview, PathTemplateKind, PeerInfo, QueueState, RenderJob, RenderedFramesStatus, ToolchainStatus } from '~/types'
+import type { AddFfmpegJobPayload, AddJobPayload, AppSettings, BlenderInstall, BlendProjectSettings, FfmpegJob, FolderFrameGroup, FolderFramesInspection, JobLogSummary, NodeInfo, NodeInterfaceInfo, OutputPathTemplatePreview, PathTemplateKind, PeerInfo, QueueState, RenderJob, RenderedFramesStatus, ShadowRecoveryResponse, ToolchainStatus } from '~/types'
 
 // Typed wrappers around Tauri IPC commands
 
@@ -24,6 +24,9 @@ const tauriApi = {
 
   pauseQueue: () =>
     invoke<QueueState>('pause_queue'),
+
+  applyShadowResolutionRecovery: (id: string) =>
+    invoke<ShadowRecoveryResponse>('apply_shadow_resolution_recovery', { id }),
 
   addJob: (payload: AddJobPayload) =>
     invoke<RenderJob>('add_job', { payload }),

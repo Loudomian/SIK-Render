@@ -211,10 +211,6 @@
   pointer-events: none;
 }
 
-.job-preview-empty {
-  border-style: dashed;
-}
-
 .job-preview-image {
   grid-area: 1 / 1;
   width: 100%;

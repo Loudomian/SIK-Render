@@ -201,6 +201,7 @@ import type { DropdownMenuItem, TabsItem } from '@nuxt/ui'
 import type { AddFfmpegJobPayload, FfmpegJob } from '~/types'
 
 const router = useRouter()
+const route = useRoute()
 const toast = useToast()
 const settingsStore = useSettingsStore()
 const transcodeStore = useTranscodeStore()
@@ -339,6 +340,8 @@ let lastClickTime = 0
 const DBLCLICK_MAX_DELAY = 400
 
 async function addFolderToQueue(folderPath: string) {
+  if (folderPath.toLowerCase().endsWith('.blend')) return
+
   try {
     const result = await scanFolderFrameGroups(folderPath)
     if (result.groups.length === 0) {
@@ -620,6 +623,7 @@ onMounted(async () => {
   unlisteners.push(await onFfmpegJobUpdated(event => transcodeStore.applyFfmpegJobUpdate(event)))
 
   const unlistenDrop = await getCurrentWindow().onDragDropEvent(async (event) => {
+    if (route.path !== '/transcode') return
     if (draggedJobId.value) return
     if (event.payload.type === 'enter' || event.payload.type === 'over') {
       isDragging.value = true

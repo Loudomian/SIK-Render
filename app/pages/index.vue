@@ -95,17 +95,6 @@
         </div>
         <div class="empty-state-title">还没有渲染任务</div>
         <div class="empty-state-note">拖拽 .blend 工程到窗口，或点击“新建任务”按钮创建渲染任务。</div>
-        <div class="empty-state-actions">
-          <UButton
-            v-if="showInitializeTools"
-            icon="i-lucide-scan-search"
-            label="初始化工具"
-            color="neutral"
-            variant="outline"
-            :loading="initializingTools"
-            @click="handleInitializeTools"
-          />
-        </div>
       </UCard>
 
       <UCard
@@ -798,6 +787,7 @@ import type { AddJobPayload, BlendProjectSettings, OutputPathTemplatePreview, Re
 import { buildTranscodeOutputPath, normalizeTranscodeDirectory, sanitizeTranscodeStemPart, splitTranscodeOutputPath } from '~/composables/useTranscodeConfig'
 
 const router = useRouter()
+const route = useRoute()
 const jobsStore = useJobsStore()
 const settingsStore = useSettingsStore()
 const toast = useToast()
@@ -807,42 +797,15 @@ const initializingTools = ref(false)
 const clearingCompletedRenderJobs = ref(false)
 const showClearCompletedConfirm = ref(false)
 
-function formatToolSource(source: string | null | undefined) {
-  switch (source) {
-    case 'bundled resource':
-      return '打包资源'
-    case 'workspace bin':
-      return '内置工具'
-    case 'settings':
-      return '设置指定'
-    case 'blender directory':
-      return 'Blender 目录'
-    case 'blender parent directory':
-      return 'Blender 上级目录'
-    case 'system PATH':
-      return '系统 PATH'
-    default:
-      return source ?? ''
-  }
-}
-
-function shortenPath(path: string | null | undefined) {
-  if (!path) return ''
-  const normalized = path.replace(/^\\\\\?\\/, '')
-  const parts = normalized.split(/[\\/]/).filter(Boolean)
-  if (parts.length <= 3 || normalized.length <= 48) {
-    return normalized
-  }
-  return `${parts.slice(0, 2).join('\\')}\\...\\${parts.slice(-2).join('\\')}`
-}
-
 async function initializeTools(options?: { silent?: boolean }) {
   const silent = options?.silent ?? false
   if (initializingTools.value) return
   initializingTools.value = true
   try {
     const toolchain = await inspectToolchain()
+    const hadDefaultBlender = Boolean(settingsStore.settings.defaultBlender)
     await settingsStore.refreshBlenderVersions()
+    const blenderAutoFilled = !hadDefaultBlender && Boolean(settingsStore.settings.defaultBlender)
 
     let ffmpegAutoFilled = false
     if (
@@ -851,61 +814,66 @@ async function initializeTools(options?: { silent?: boolean }) {
       && toolchain.ffmpegExecutable
     ) {
       settingsStore.settings.ffmpegExecutable = toolchain.ffmpegExecutable
-      await settingsStore.save()
       ffmpegAutoFilled = true
+    }
+    if (blenderAutoFilled || ffmpegAutoFilled) {
+      await settingsStore.save()
     }
 
     const blenderCount = toolchain.blenderInstalls.length
-    const blenderVersions = toolchain.blenderInstalls.map((b) => b.version).join('、')
-    const ffmpegSource = formatToolSource(toolchain.ffmpegSource)
-    const ffmpegPath = shortenPath(toolchain.ffmpegExecutable)
-    const ffmpegLabel = toolchain.ffmpegFound
-      ? [
-          ffmpegPath ? `FFmpeg：${ffmpegPath}` : 'FFmpeg 已找到',
-          ffmpegSource ? `来源：${ffmpegSource}` : '',
-        ].filter(Boolean).join('，')
-      : 'FFmpeg 未找到，请前往设置页指定路径或检查打包资源 / PATH。'
 
     if (silent) {
       return
     }
 
     if (blenderCount > 0 && toolchain.ffmpegFound) {
+      const autoFilledDescription = blenderAutoFilled && ffmpegAutoFilled
+        ? '已自动补全 Blender 和 FFmpeg 路径。'
+        : blenderAutoFilled
+          ? '已自动设置默认 Blender。'
+          : ffmpegAutoFilled
+            ? '已自动补全 FFmpeg 路径。'
+            : 'Blender 和 FFmpeg 都可用。'
       toast.add({
-        title: `工具已就绪：Blender ${blenderCount} 个，FFmpeg 已找到`,
-        description: `${blenderVersions}；${ffmpegLabel}${ffmpegAutoFilled ? '；已自动写入 FFmpeg 路径' : ''}`,
+        title: '渲染工具已就绪',
+        description: autoFilledDescription,
         color: 'success',
+        icon: 'i-lucide-check',
       })
     } else if (blenderCount > 0) {
       toast.add({
-        title: `找到 ${blenderCount} 个 Blender，未找到 FFmpeg`,
-        description: `${blenderVersions}；${ffmpegLabel}`,
+        title: '已找到 Blender',
+        description: '未找到 FFmpeg，可在设置页补充路径。',
         color: 'warning',
+        icon: 'i-lucide-triangle-alert',
       })
     } else if (toolchain.ffmpegFound) {
       toast.add({
-        title: '已找到 FFmpeg，未找到 Blender',
-        description: `${ffmpegLabel}${ffmpegAutoFilled ? '；已自动写入 FFmpeg 路径' : ''}；Blender 未检测到安装，请前往设置页手动添加路径。`,
+        title: '已找到 FFmpeg',
+        description: '未找到 Blender，请在设置页添加 Blender 路径。',
         color: 'warning',
+        icon: 'i-lucide-triangle-alert',
       })
     } else {
       toast.add({
-        title: '未找到 Blender 和 FFmpeg',
-        description: 'Blender 未检测到安装，FFmpeg 也不可用，请前往设置页补充路径。',
+        title: '需要配置渲染工具',
+        description: '未找到 Blender 和 FFmpeg，请前往设置页补充路径。',
         color: 'warning',
+        icon: 'i-lucide-triangle-alert',
       })
     }
   } catch {
     if (!silent) {
-      toast.add({ title: '扫描失败', description: '初始化工具时出错，请检查设置。', color: 'error' })
+      toast.add({
+        title: '工具初始化失败',
+        description: '请检查设置页中的工具路径。',
+        color: 'error',
+        icon: 'i-lucide-circle-alert',
+      })
     }
   } finally {
     initializingTools.value = false
   }
-}
-
-function handleInitializeTools() {
-  return initializeTools()
 }
 
 async function handleStartQueue() {
@@ -950,7 +918,7 @@ function handleQueueToggle() {
 }
 
 const showInitializeTools = computed(() => {
-  const hasBlender = Boolean(settingsStore.settings.defaultBlender || settingsStore.blenderVersions[0]?.executable)
+  const hasBlender = Boolean(settingsStore.settings.defaultBlender)
   const hasFfmpeg = Boolean(settingsStore.settings.ffmpegExecutable)
   return !(hasBlender && hasFfmpeg)
 })
@@ -1027,9 +995,10 @@ let unlistenDrop: (() => void) | null = null
 onMounted(async () => {
   await settingsStore.load()
   if (showInitializeTools.value) {
-    await initializeTools({ silent: true })
+    await initializeTools()
   }
   unlistenDrop = await getCurrentWindow().onDragDropEvent((event) => {
+    if (route.path !== '/') return
     if (draggedJobId.value) return
     if (event.payload.type === 'enter' || event.payload.type === 'over') {
       isDragging.value = true

@@ -1,4 +1,11 @@
-# SIK Render
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="app/assets/app-icon-dark.png">
+    <img src="app/assets/app-icon-light.png" alt="SIK Render logo" width="96" height="96">
+  </picture>
+</p>
+
+<h1 align="center">SIK Render</h1>
 
 ![License](https://img.shields.io/badge/license-MIT%20%2F%20Apache--2.0-blue.svg)
 ![Rust](https://img.shields.io/badge/Rust-stable-orange.svg)

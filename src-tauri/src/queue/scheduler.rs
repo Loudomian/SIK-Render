@@ -115,6 +115,7 @@ async fn try_start_next_job(
             output_path,
             output_format,
             render_mode,
+            shadow_resolution_scale_override,
             original_frame_start,
             original_frame_end,
             frame_start,
@@ -169,6 +170,49 @@ fn spawn_job_runner(app: AppHandle, state: AppState, running_job: RenderJob) {
     tauri::async_runtime::spawn(async move {
         log::info!("Starting job: {} ({})", running_job.name, running_job.id);
         let result = process::run_job(app.clone(), state.clone(), running_job.clone()).await;
+
+        if let Some(request) = state
+            .shadow_recovery_requests
+            .lock()
+            .await
+            .remove(&running_job.id)
+        {
+            if let Err(error) = sqlx::query(
+                "UPDATE jobs \
+                 SET status = 'pending', \
+                     started_at = NULL, \
+                     finished_at = NULL, \
+                     frame_start = ?, \
+                     shadow_resolution_scale_override = ?, \
+                     resume_from_existing = 0, \
+                     current_frame = NULL, \
+                     total_frames = NULL, \
+                     last_rendered_frame = NULL, \
+                     time_elapsed = NULL, \
+                     remaining_secs = NULL \
+                 WHERE id = ?",
+            )
+            .bind(request.frame_start)
+            .bind(request.scale)
+            .bind(&running_job.id)
+            .execute(&state.pool)
+            .await
+            {
+                log::error!(
+                    "Failed to queue shadow recovery for job {}: {error}",
+                    running_job.id
+                );
+                state.scheduler_notify.notify_one();
+                return;
+            }
+
+            match load_job(&state.pool, &running_job.id).await {
+                Ok(updated_job) => emit_job_update(&app, &updated_job),
+                Err(error) => log::error!("Failed to reload job {}: {error}", running_job.id),
+            }
+            state.scheduler_notify.notify_one();
+            return;
+        }
 
         let final_status = {
             let mut interrupted_jobs = state.interrupted_jobs.lock().await;
@@ -262,6 +306,7 @@ pub async fn load_job(pool: &sqlx::SqlitePool, id: &str) -> anyhow::Result<Rende
             output_path,
             output_format,
             render_mode,
+            shadow_resolution_scale_override,
             original_frame_start,
             original_frame_end,
             frame_start,

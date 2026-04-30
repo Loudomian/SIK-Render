@@ -25,6 +25,7 @@ export interface RenderJob {
   outputPath: string
   outputFormat: string
   renderMode: RenderMode
+  shadowResolutionScaleOverride?: number | null
   originalFrameStart: number
   originalFrameEnd: number
   frameStart: number
@@ -85,6 +86,15 @@ export interface RenderProgressEvent {
 
 export interface JobUpdatedEvent {
   job: RenderJob
+}
+
+export interface ShadowRecoveryResponse {
+  job: RenderJob
+  scale: number
+  frameStart: number
+  frameEnd: number
+  markerName: string | null
+  cameraName: string | null
 }
 
 export interface RenderLogEvent {

@@ -323,7 +323,7 @@ async fn load_all_jobs(state: &AppState) -> anyhow::Result<Vec<RenderJob>> {
                 transcode_output_path_override, transcode_crf_override,
                 transcode_preset_override, transcode_frame_start_override,
                 transcode_frame_end_override, fps, blend_file, blender_exec,
-                output_path, output_format, render_mode,
+                output_path, output_format, render_mode, shadow_resolution_scale_override,
                 original_frame_start, original_frame_end, frame_start, frame_end,
                 preview_width, preview_height, resume_from_existing,
                 status, priority, created_at, started_at, finished_at,

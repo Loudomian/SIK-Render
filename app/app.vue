@@ -72,6 +72,7 @@ import appIconDarkUrl from '~/assets/app-icon-dark.png'
 const jobsStore = useJobsStore()
 const settingsStore = useSettingsStore()
 const { onProgress, onJobUpdated, onLog, onQueueState } = useRenderEvents()
+const shadowRecoveryToast = useShadowRecoveryToast()
 const CONTEXT_MENU_ALLOW_SELECTOR = '[data-context-menu]'
 
 const navItems = computed(() => [
@@ -179,7 +180,10 @@ onMounted(async () => {
   ])
   unlisteners.push(await onProgress(jobsStore.applyProgress))
   unlisteners.push(await onJobUpdated(jobsStore.applyJobUpdate))
-  unlisteners.push(await onLog(jobsStore.applyLog))
+  unlisteners.push(await onLog((event) => {
+    jobsStore.applyLog(event)
+    shadowRecoveryToast.handleLogEvent(event)
+  }))
   unlisteners.push(await onQueueState(jobsStore.applyQueueState))
 })
 

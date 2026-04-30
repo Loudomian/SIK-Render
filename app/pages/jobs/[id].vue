@@ -553,18 +553,6 @@
         </UCard>
       </div>
 
-      <div v-if="warnings.length" class="detail-warnings">
-        <UAlert
-          v-for="(w, i) in warnings"
-          :key="i"
-          icon="i-lucide-triangle-alert"
-          color="warning"
-          variant="subtle"
-          title="渲染警告"
-          :description="w"
-        />
-      </div>
-
       <p v-if="retryActionError" class="form-error">{{ retryActionError }}</p>
     </section>
 
@@ -848,13 +836,7 @@ const updatingAutoTranscode = ref(false)
 const logSummary = ref<JobLogSummary | null>(null)
 const detailUnlisteners: Array<() => void> = []
 let logSummaryTimer: ReturnType<typeof setTimeout> | null = null
-
-const LOG_WARNINGS: Array<{ pattern: RegExp; message: string }> = [
-  {
-    pattern: /Shadow buffer full/i,
-    message: '阴影缓冲区已满（Shadow buffer full）：部分阴影可能缺失，光照结果不准确，建议在渲染属性中增大阴影贴图分辨率或减少灯光数量。',
-  },
-]
+const shadowRecoveryToast = useShadowRecoveryToast()
 
 const crashCount = computed(() => job.value?.crashCount ?? 0)
 
@@ -907,17 +889,6 @@ const transcodeActionItems = computed<DropdownMenuItem[][]>(() => {
   }
 
   return items
-})
-
-const warnings = computed(() => {
-  const found: string[] = []
-  const logs = jobLogs.value
-  for (const { pattern, message } of LOG_WARNINGS) {
-    if (logs.some((line) => pattern.test(line))) {
-      found.push(message)
-    }
-  }
-  return found
 })
 
 // ── Frame preview ──────────────────────────────────────────────────────────
@@ -1261,6 +1232,9 @@ onMounted(async () => {
     jobsStore.loadJobLogs(jobId.value),
     refreshLogSummary(),
   ])
+  if (job.value) {
+    shadowRecoveryToast.handleExistingLogs(job.value, jobLogs.value)
+  }
   await refreshPreview()
 })
 

@@ -69,6 +69,21 @@ fn build_render_settings_script(job: &RenderJob, settings: &AppSettings) -> Stri
         "r.use_file_extension = True".to_string(),
     ];
 
+    if let Some(scale) = job.shadow_resolution_scale_override {
+        let scale = scale.clamp(0.0, 1.0);
+        lines.extend([
+            "eevee = getattr(scene, 'eevee', None)".to_string(),
+            format!(
+                "eevee and hasattr(eevee, 'shadow_resolution_scale') and setattr(eevee, 'shadow_resolution_scale', {:.3})",
+                scale
+            ),
+            format!(
+                "print('[sik-render] EEVEE shadow_resolution_scale override: {:.0}%')",
+                scale * 100.0
+            ),
+        ]);
+    }
+
     if job.render_mode.is_quick_mp4() {
         lines.extend([
             "r.use_file_extension = False".to_string(),

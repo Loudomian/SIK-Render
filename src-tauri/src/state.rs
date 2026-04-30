@@ -7,6 +7,12 @@ use std::sync::Arc;
 use std::sync::RwLock;
 use tokio::sync::{Mutex, Notify};
 
+#[derive(Debug, Clone, Copy)]
+pub struct ShadowRecoveryRequest {
+    pub frame_start: i32,
+    pub scale: f32,
+}
+
 #[derive(Clone)]
 pub struct AppState {
     pub pool: SqlitePool,
@@ -16,6 +22,7 @@ pub struct AppState {
     pub active_ffmpeg_jobs: Arc<Mutex<HashMap<String, u32>>>,
     pub cancelled_jobs: Arc<Mutex<HashSet<String>>>,
     pub interrupted_jobs: Arc<Mutex<HashSet<String>>>,
+    pub shadow_recovery_requests: Arc<Mutex<HashMap<String, ShadowRecoveryRequest>>>,
     pub cancelled_ffmpeg_jobs: Arc<Mutex<HashSet<String>>>,
     pub settings: Arc<RwLock<Option<AppSettings>>>,
     pub queue_paused: Arc<RwLock<bool>>,
@@ -41,6 +48,7 @@ impl AppState {
             active_ffmpeg_jobs: Arc::new(Mutex::new(HashMap::new())),
             cancelled_jobs: Arc::new(Mutex::new(HashSet::new())),
             interrupted_jobs: Arc::new(Mutex::new(HashSet::new())),
+            shadow_recovery_requests: Arc::new(Mutex::new(HashMap::new())),
             cancelled_ffmpeg_jobs: Arc::new(Mutex::new(HashSet::new())),
             settings: Arc::new(RwLock::new(settings)),
             queue_paused: Arc::new(RwLock::new(true)),

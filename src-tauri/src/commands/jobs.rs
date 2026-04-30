@@ -3,7 +3,7 @@ use crate::path_template::{
 };
 use crate::queue::job::{DbRenderJob, JobStatus, RenderJob, RenderMode};
 use crate::queue::scheduler;
-use crate::state::AppState;
+use crate::state::{AppState, ShadowRecoveryRequest};
 use chrono::Utc;
 use serde::Deserialize;
 use serde::Serialize;
@@ -83,6 +83,17 @@ pub struct QueueState {
     pub paused_job: Option<String>,
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShadowRecoveryResponse {
+    pub job: RenderJob,
+    pub scale: f32,
+    pub frame_start: i32,
+    pub frame_end: i32,
+    pub marker_name: Option<String>,
+    pub camera_name: Option<String>,
+}
+
 fn default_render_mode_payload() -> String {
     String::from("image_sequence")
 }
@@ -142,6 +153,7 @@ async fn fetch_jobs(pool: &sqlx::SqlitePool) -> Result<Vec<RenderJob>, sqlx::Err
             output_path,
             output_format,
             render_mode,
+            shadow_resolution_scale_override,
             original_frame_start,
             original_frame_end,
             frame_start,
@@ -215,6 +227,40 @@ fn normalize_render_mode(value: &str) -> Result<RenderMode, String> {
     }
 }
 
+fn next_shadow_resolution_scale(current: Option<f32>) -> Option<f32> {
+    // Keep in sync with SCALE_STEPS in app/composables/useShadowRecoveryToast.ts.
+    const STEPS: [f32; 3] = [0.75, 0.5, 0.3];
+    match current {
+        None => Some(STEPS[0]),
+        Some(value) if value > 0.75 => Some(STEPS[0]),
+        Some(value) if value > 0.5 => Some(STEPS[1]),
+        Some(value) if value > 0.3 => Some(STEPS[2]),
+        Some(_) => None,
+    }
+}
+
+fn shadow_recovery_log_line(
+    scale: f32,
+    range: &crate::blender::project::CameraMarkerRange,
+) -> String {
+    let marker = range
+        .marker_name
+        .as_deref()
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or("camera marker");
+    let camera = range
+        .camera_name
+        .as_deref()
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or("camera");
+    format!(
+        "[shadow-recovery] Apply EEVEE shadow_resolution_scale {:.0}% and rerender shot {}-{} from {marker} ({camera}).",
+        scale * 100.0,
+        range.frame_start,
+        range.frame_end
+    )
+}
+
 fn output_format_disables_transcode(format: &str) -> bool {
     format.eq_ignore_ascii_case("OPEN_EXR") || format.eq_ignore_ascii_case("EXR")
 }
@@ -261,6 +307,92 @@ pub async fn get_queue_state(state: State<'_, AppState>) -> Result<QueueState, S
     Ok(QueueState {
         paused: state.is_queue_paused(),
         paused_job,
+    })
+}
+
+#[tauri::command]
+pub async fn apply_shadow_resolution_recovery(
+    id: String,
+    state: State<'_, AppState>,
+    app: tauri::AppHandle,
+) -> Result<ShadowRecoveryResponse, String> {
+    let job = scheduler::load_job(&state.pool, &id)
+        .await
+        .map_err(|error| error.to_string())?;
+
+    if job.render_mode.is_quick_mp4() {
+        return Err("quick_mp4 jobs do not support shot-level shadow recovery".into());
+    }
+
+    if job.status != JobStatus::Running {
+        return Err("shadow recovery can only be applied to a running job".into());
+    }
+
+    let Some(scale) = next_shadow_resolution_scale(job.shadow_resolution_scale_override) else {
+        return Err("shadow_resolution_scale is already at the lowest automatic step".into());
+    };
+
+    let active_frame = job
+        .current_frame
+        .map(|frame| job.frame_start + frame - 1)
+        .or(job.last_rendered_frame)
+        .unwrap_or(job.frame_start)
+        .clamp(job.frame_start, job.frame_end);
+
+    let settings = state.cached_settings().unwrap_or_default();
+    let range = crate::blender::project::inspect_camera_marker_range_with_timeout(
+        &job.blender_executable,
+        &job.blend_file,
+        active_frame,
+        job.frame_start,
+        job.frame_end,
+        settings.blend_inspect_timeout_seconds,
+    )
+    .await
+    .unwrap_or_else(|error| {
+        log::warn!(
+            "Failed to inspect camera marker range for job {}: {error}; using active frame {}",
+            job.id,
+            active_frame
+        );
+        crate::blender::project::CameraMarkerRange {
+            frame_start: active_frame,
+            frame_end: job.frame_end,
+            marker_name: None,
+            camera_name: None,
+        }
+    });
+
+    state.shadow_recovery_requests.lock().await.insert(
+        id.clone(),
+        ShadowRecoveryRequest {
+            frame_start: range.frame_start,
+            scale,
+        },
+    );
+
+    let line = shadow_recovery_log_line(scale, &range);
+    let _ = append_manual_cancel_log(&app, &state, &id, &line).await;
+
+    let pid = {
+        let active_jobs = state.active_jobs.lock().await;
+        active_jobs.get(&id).copied()
+    };
+    if let Some(pid) = pid {
+        let _ = AppState::kill_process_tree(pid);
+    }
+
+    let mut updated = job.clone();
+    updated.shadow_resolution_scale_override = Some(scale);
+    updated.frame_start = range.frame_start;
+
+    Ok(ShadowRecoveryResponse {
+        job: updated,
+        scale,
+        frame_start: range.frame_start,
+        frame_end: range.frame_end,
+        marker_name: range.marker_name,
+        camera_name: range.camera_name,
     })
 }
 
@@ -513,6 +645,7 @@ pub async fn add_job(
             output_path,
             output_format,
             render_mode,
+            shadow_resolution_scale_override,
             original_frame_start,
             original_frame_end,
             frame_start,
@@ -530,7 +663,7 @@ pub async fn add_job(
             last_rendered_frame,
             time_elapsed,
             remaining_secs
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         "#,
     )
     .bind(&job.id)
@@ -556,6 +689,7 @@ pub async fn add_job(
     .bind(job.output_path.to_string_lossy().to_string())
     .bind(&job.output_format)
     .bind(job.render_mode)
+    .bind(job.shadow_resolution_scale_override)
     .bind(job.original_frame_start)
     .bind(job.original_frame_end)
     .bind(job.frame_start)

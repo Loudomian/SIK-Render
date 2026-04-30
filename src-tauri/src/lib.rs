@@ -7,8 +7,8 @@ mod path_template;
 mod queue;
 mod state;
 
-use std::path::PathBuf;
 use chrono::Local;
+use std::path::PathBuf;
 use tauri::Manager;
 use tauri_plugin_log::{Target, TargetKind};
 
@@ -54,6 +54,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::jobs::list_jobs,
             commands::jobs::get_queue_state,
+            commands::jobs::apply_shadow_resolution_recovery,
             commands::jobs::start_queue,
             commands::jobs::pause_queue,
             commands::jobs::add_job,

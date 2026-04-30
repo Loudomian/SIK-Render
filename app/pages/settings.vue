@@ -1,6 +1,6 @@
 <template>
   <div class="settings-page">
-    <section class="page-hero">
+    <section class="page-hero settings-header">
       <div class="page-hero-copy">
         <UBadge label="Settings" color="neutral" variant="subtle" class="page-eyebrow" />
         <h1>设置</h1>
@@ -8,57 +8,58 @@
       </div>
     </section>
 
-    <section class="settings-section">
-      <div class="settings-section-heading">
-        <h2 class="settings-section-title">路径管理</h2>
-        <p class="hint-text">集中管理 Blender 与 FFmpeg 的可执行文件和默认版本。</p>
-      </div>
+    <section class="settings-content">
+      <section class="settings-section">
+        <div class="settings-section-heading">
+          <h2 class="settings-section-title">路径管理</h2>
+          <p class="hint-text">集中管理 Blender 与 FFmpeg 的可执行文件和默认版本。</p>
+        </div>
 
-      <UCard variant="subtle" class="settings-card" :ui="{ body: 'settings-card-body' }">
-        <div class="settings-card-header">
-          <div>
-            <h3 class="settings-card-title">工具路径</h3>
+        <UCard variant="subtle" class="settings-card" :ui="{ body: 'settings-card-body' }">
+          <div class="settings-card-header">
+            <div>
+              <h3 class="settings-card-title">工具路径</h3>
+            </div>
           </div>
-        </div>
 
-        <div class="settings-path-grid">
-          <section class="surface-panel settings-path-panel">
-            <div class="settings-path-copy">
-              <p class="settings-field-title">
-                Blender
-                <span v-if="blenderVersionItems.length" class="settings-inline-versions">
-                  <template v-for="(item, index) in blenderVersionItems" :key="item.executable">
-                    <span class="job-meta-divider settings-inline-separator" v-if="index > 0" aria-hidden="true" />
-                    <span
-                      class="settings-inline-version"
-                      :class="{ 'settings-inline-version-muted': !item.isDefault }"
-                    >
-                      {{ item.version }}
-                    </span>
-                  </template>
-                </span>
-              </p>
-              <p class="hint-text">{{ blenderPathNote }}</p>
-            </div>
-            <div class="settings-card-actions">
-              <UButton icon="i-lucide-folder-open" label="管理路径" color="neutral" variant="outline" size="sm" @click="blenderPathModalOpen = true" />
-            </div>
-          </section>
+          <div class="settings-path-grid">
+            <section class="surface-panel settings-path-panel">
+              <div class="settings-path-copy">
+                <p class="settings-field-title">
+                  Blender
+                  <span v-if="blenderVersionItems.length" class="settings-inline-versions">
+                    <template v-for="(item, index) in blenderVersionItems" :key="item.executable">
+                      <span class="job-meta-divider settings-inline-separator" v-if="index > 0" aria-hidden="true" />
+                      <span
+                        class="settings-inline-version"
+                        :class="{ 'settings-inline-version-muted': !item.isDefault }"
+                      >
+                        {{ item.version }}
+                      </span>
+                    </template>
+                  </span>
+                </p>
+                <p class="hint-text">{{ blenderPathNote }}</p>
+              </div>
+              <div class="settings-card-actions">
+                <UButton icon="i-lucide-folder-open" label="管理路径" color="neutral" variant="outline" size="sm" @click="blenderPathModalOpen = true" />
+              </div>
+            </section>
 
-          <section class="surface-panel settings-path-panel">
-            <div class="settings-path-copy">
-              <p class="settings-field-title">FFmpeg</p>
-              <p class="hint-text">{{ ffmpegPathNote }}</p>
-            </div>
-            <div class="settings-card-actions">
-              <UButton icon="i-lucide-folder-open" label="管理路径" color="neutral" variant="outline" size="sm" @click="ffmpegPathModalOpen = true" />
-            </div>
-          </section>
-        </div>
-      </UCard>
-    </section>
+            <section class="surface-panel settings-path-panel">
+              <div class="settings-path-copy">
+                <p class="settings-field-title">FFmpeg</p>
+                <p class="hint-text">{{ ffmpegPathNote }}</p>
+              </div>
+              <div class="settings-card-actions">
+                <UButton icon="i-lucide-folder-open" label="管理路径" color="neutral" variant="outline" size="sm" @click="ffmpegPathModalOpen = true" />
+              </div>
+            </section>
+          </div>
+        </UCard>
+      </section>
 
-    <section class="settings-section">
+      <section class="settings-section">
       <div class="settings-section-heading">
         <h2 class="settings-section-title">参数管理</h2>
         <p class="hint-text">按功能查看当前摘要，需要修改时进入对应弹窗。</p>
@@ -166,9 +167,9 @@
           </div>
         </UCard>
       </div>
-    </section>
+      </section>
 
-    <section class="settings-section">
+      <section class="settings-section">
       <div class="settings-section-heading">
         <h2 class="settings-section-title">关于</h2>
       </div>
@@ -189,6 +190,7 @@
           </div>
         </section>
       </div>
+      </section>
     </section>
 
     <BlenderPathSettingsModal v-model:open="blenderPathModalOpen" />
