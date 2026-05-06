@@ -1,5 +1,5 @@
 use crate::network::server::{build_node_info, list_node_interfaces as load_interfaces};
-use crate::network::types::{NodeInfo, NodeInterfaceInfo, PeerInfo};
+use crate::network::types::{NodeInfo, NodeInterfaceInfo, NodeJobEvent, PeerInfo};
 use crate::state::AppState;
 use tauri::{AppHandle, State};
 
@@ -11,10 +11,66 @@ pub async fn get_node_info(app: AppHandle, state: State<'_, AppState>) -> Result
 #[tauri::command]
 pub async fn get_peers(state: State<'_, AppState>) -> Result<Vec<PeerInfo>, String> {
     let peers = state.peers.lock().await;
-    Ok(peers.values().cloned().collect())
+    let mut records = crate::network::peers::load_peer_records()
+        .map_err(|error| error.to_string())?
+        .into_iter()
+        .map(|peer| (peer.node.id.clone(), peer))
+        .collect::<std::collections::HashMap<_, _>>();
+
+    for peer in peers.values().cloned() {
+        records.insert(peer.node.id.clone(), peer);
+    }
+
+    let mut peers = records.into_values().collect::<Vec<_>>();
+    peers.sort_by(|a, b| {
+        b.connected
+            .cmp(&a.connected)
+            .then_with(|| {
+                b.last_seen_at
+                    .unwrap_or_default()
+                    .cmp(&a.last_seen_at.unwrap_or_default())
+            })
+            .then_with(|| a.node.hostname.cmp(&b.node.hostname))
+    });
+
+    Ok(peers)
 }
 
 #[tauri::command]
 pub fn list_node_interfaces() -> Result<Vec<NodeInterfaceInfo>, String> {
     Ok(load_interfaces())
+}
+
+#[tauri::command]
+pub fn get_node_job_events(node_id: String, job_id: String) -> Result<Vec<NodeJobEvent>, String> {
+    crate::network::events::load_node_job_events(&node_id, &job_id)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub async fn forget_peer(node_id: String, state: State<'_, AppState>) -> Result<(), String> {
+    let removed = {
+        let mut peers = state.peers.lock().await;
+        if peers
+            .get(&node_id)
+            .map(|peer| peer.connected)
+            .unwrap_or(false)
+        {
+            return Err("cannot forget a connected node".to_string());
+        }
+        peers.remove(&node_id)
+    };
+
+    crate::network::events::delete_node_events(&node_id).map_err(|error| error.to_string())?;
+    if removed.is_some() || crate::network::peers::load_peer_record(&node_id).map_err(|error| error.to_string())?.is_some() {
+        crate::network::peers::delete_peer_record(&node_id).map_err(|error| error.to_string())?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub fn get_node_events_dir() -> Result<String, String> {
+    crate::app_paths::node_events_dir()
+        .map(|p| p.to_string_lossy().to_string())
+        .map_err(|error| error.to_string())
 }

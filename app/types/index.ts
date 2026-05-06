@@ -281,6 +281,10 @@ export interface PeerInfo {
   jobs: RenderJob[]
   queuePaused: boolean
   connected: boolean
+  firstSeenAt?: number | null
+  lastSeenAt?: number | null
+  lastConnectedAt?: number | null
+  lastDisconnectedAt?: number | null
 }
 
 export interface PeerDiscoveredEvent {
@@ -309,4 +313,31 @@ export interface PeerProgressEvent {
   timeElapsed: number
   memoryMb: number
   remainingSecs: number | null
+}
+
+export type NodeJobEventKind =
+  | 'job_discovered'
+  | 'status_changed'
+  | 'crash_retry'
+  | 'shadow_recovery'
+  | 'range_changed'
+  | 'node_connected'
+  | 'node_disconnected'
+  | 'progress'
+
+export type NodeJobEventLevel = 'info' | 'success' | 'warning' | 'error'
+
+export interface NodeJobEvent {
+  id: string
+  nodeId: string
+  jobId: string
+  timestamp: number
+  kind: NodeJobEventKind
+  level: NodeJobEventLevel
+  title: string
+  message: string
+}
+
+export interface PeerJobEventPayload {
+  event: NodeJobEvent
 }

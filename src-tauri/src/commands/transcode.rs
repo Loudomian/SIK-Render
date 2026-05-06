@@ -521,6 +521,7 @@ fn collect_template_frame_files(
     let ext_hint = output_path
         .extension()
         .and_then(|ext| ext.to_str())
+        .filter(|ext| !ext.contains('#'))
         .map(|value| value.to_ascii_lowercase());
     let (prefix_hint, suffix_hint) = output_template_hints(output_path);
 
@@ -1223,11 +1224,54 @@ pub async fn run_ffmpeg_job(
     job: FfmpegJob,
 ) -> Result<FfmpegJobStatus, String> {
     let total_frames = job.total_frames().max(0) as u32;
-    let (frames, detected_format) = collect_input_frame_files(&job)?;
+    let log_file_path = crate::app_paths::create_ffmpeg_job_log_file(job.job_number, &job.id)
+        .map_err(|error| error.to_string())?;
+    let log_write_lock = Arc::new(Mutex::new(()));
+
+    append_ffmpeg_log_line(
+        &app,
+        &job.id,
+        &log_file_path,
+        &log_write_lock,
+        format!(
+            "[ffmpeg] preparing input: {} (frames {}-{})",
+            job.input_path.display(),
+            job.frame_start,
+            job.frame_end
+        ),
+    )
+    .await;
+
+    let (frames, detected_format) = match collect_input_frame_files(&job) {
+        Ok(result) => result,
+        Err(error) => {
+            append_ffmpeg_log_line(
+                &app,
+                &job.id,
+                &log_file_path,
+                &log_write_lock,
+                format!("[ffmpeg] failed to inspect input frames: {error}"),
+            )
+            .await;
+            return Err(error);
+        }
+    };
     if frames.is_empty() {
-        return Err(String::from(
-            "No matching frames found for this FFmpeg Job.",
-        ));
+        let message = format!(
+            "No matching frames found for this FFmpeg Job. input={} range={}-{}",
+            job.input_path.display(),
+            job.frame_start,
+            job.frame_end
+        );
+        append_ffmpeg_log_line(
+            &app,
+            &job.id,
+            &log_file_path,
+            &log_write_lock,
+            format!("[ffmpeg] {message}"),
+        )
+        .await;
+        return Err(message);
     }
 
     if let Some(parent) = job.output_path.parent() {
@@ -1236,9 +1280,6 @@ pub async fn run_ffmpeg_job(
 
     let (ffmpeg_executable, ffmpeg_source, configured_ffmpeg) =
         resolve_ffmpeg_executable(&app, &state, &job).await?;
-    let log_file_path = crate::app_paths::create_ffmpeg_job_log_file(job.job_number, &job.id)
-        .map_err(|error| error.to_string())?;
-    let log_write_lock = Arc::new(Mutex::new(()));
 
     let temp_root = std::env::temp_dir().join(format!("sik-ffmpeg-job-{}", uuid::Uuid::new_v4()));
     std::fs::create_dir_all(&temp_root).map_err(|error| error.to_string())?;

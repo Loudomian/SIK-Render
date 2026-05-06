@@ -21,6 +21,14 @@ pub struct PeerInfo {
     pub jobs: Vec<RenderJob>,
     pub queue_paused: bool,
     pub connected: bool,
+    #[serde(default)]
+    pub first_seen_at: Option<i64>,
+    #[serde(default)]
+    pub last_seen_at: Option<i64>,
+    #[serde(default)]
+    pub last_connected_at: Option<i64>,
+    #[serde(default)]
+    pub last_disconnected_at: Option<i64>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -90,4 +98,45 @@ pub struct PeerProgressEvent {
     pub time_elapsed: f32,
     pub memory_mb: f32,
     pub remaining_secs: Option<f32>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum NodeJobEventKind {
+    JobDiscovered,
+    StatusChanged,
+    CrashRetry,
+    ShadowRecovery,
+    RangeChanged,
+    NodeConnected,
+    NodeDisconnected,
+    Progress,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum NodeJobEventLevel {
+    Info,
+    Success,
+    Warning,
+    Error,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NodeJobEvent {
+    pub id: String,
+    pub node_id: String,
+    pub job_id: String,
+    pub timestamp: i64,
+    pub kind: NodeJobEventKind,
+    pub level: NodeJobEventLevel,
+    pub title: String,
+    pub message: String,
+}
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PeerJobEventPayload {
+    pub event: NodeJobEvent,
 }

@@ -18,14 +18,7 @@ pub fn run() {
         .plugin(
             tauri_plugin_log::Builder::new()
                 .level(log::LevelFilter::Info)
-                .targets([
-                    Target::new(TargetKind::Stdout),
-                    Target::new(TargetKind::Folder {
-                        path: sikfilm_log_dir(),
-                        file_name: Some(sikfilm_log_file_name()),
-                    }),
-                    Target::new(TargetKind::Webview),
-                ])
+                .targets(log_targets())
                 .build(),
         )
         .plugin(tauri_plugin_shell::init())
@@ -71,6 +64,9 @@ pub fn run() {
             commands::jobs::update_job_preview_dimensions,
             commands::nodes::get_node_info,
             commands::nodes::get_peers,
+            commands::nodes::get_node_job_events,
+            commands::nodes::forget_peer,
+            commands::nodes::get_node_events_dir,
             commands::nodes::list_node_interfaces,
             commands::path_template::preview_output_path_template,
             commands::app::app_ready,
@@ -117,18 +113,35 @@ fn sikfilm_log_dir() -> PathBuf {
         return PathBuf::from(app_data)
             .join("SIKFilm")
             .join("Render")
-            .join("Logs")
+            .join("logs")
             .join(env!("CARGO_PKG_VERSION"));
     }
 
     std::env::temp_dir()
         .join("SIKFilm")
         .join("Render")
-        .join("Logs")
+        .join("logs")
         .join(env!("CARGO_PKG_VERSION"))
 }
 
 fn sikfilm_log_file_name() -> String {
     let timestamp = Local::now().format("%Y%m%d_%H%M%S_%3f");
     format!("sikrender_{timestamp}")
+}
+
+fn log_targets() -> Vec<Target> {
+    #[allow(unused_mut)]
+    let mut targets: Vec<Target> = vec![
+        Target::new(TargetKind::Folder {
+            path: sikfilm_log_dir(),
+            file_name: Some(sikfilm_log_file_name()),
+        }),
+        Target::new(TargetKind::Webview),
+    ];
+
+    // Windows release 版无控制台窗口，写 Stdout 会导致进程无法启动
+    #[cfg(any(debug_assertions, not(target_os = "windows")))]
+    targets.push(Target::new(TargetKind::Stdout));
+
+    targets
 }

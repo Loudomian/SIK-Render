@@ -1300,6 +1300,12 @@ async function autoFillOutputPath(blendPath: string) {
   }
 }
 
+function isAutoResolvedRenderOutputPath(path: string) {
+  const trimmed = path.trim()
+  if (!trimmed || !form.blend_file) return false
+  return trimmed === (outputPathPreview.value?.resolvedPath ?? '')
+}
+
 function buildOutputPatternForDirectory(directory: string) {
   const normalizedDirectory = directory.replace(/[\\/]+$/, '')
   if (!normalizedDirectory) return ''
@@ -1642,6 +1648,7 @@ async function inspectProjectSettings(showErrors = false) {
   inspectingProject.value = true
 
   try {
+    const shouldRefreshAutoOutputPath = !form.output_path || isAutoResolvedRenderOutputPath(form.output_path)
     const settings = await inspectBlendFile(form.blender_executable, form.blend_file)
     projectSettings.value = settings
     projectSettingsMessage.value = '已从工程读取渲染参数。'
@@ -1653,7 +1660,7 @@ async function inspectProjectSettings(showErrors = false) {
     }
 
     // Always default to blend-file-adjacent renders folder; ignore project's configured output path
-    if (!form.output_path && form.blend_file) {
+    if (shouldRefreshAutoOutputPath && form.blend_file) {
       await autoFillOutputPath(form.blend_file)
     }
   } catch (error) {

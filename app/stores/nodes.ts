@@ -1,9 +1,11 @@
 import { defineStore } from 'pinia'
 import { listen } from '@tauri-apps/api/event'
 import type {
+  NodeJobEvent,
   NodeInfo,
   PeerDiscoveredEvent,
   PeerInfo,
+  PeerJobEventPayload,
   PeerJobUpdatedEvent,
   PeerLostEvent,
   PeerProgressEvent,
@@ -12,15 +14,17 @@ import type {
 
 export const useNodesStore = defineStore('nodes', () => {
   const peers = ref<Record<string, PeerInfo>>({})
+  const jobEvents = ref<Record<string, NodeJobEvent[]>>({})
   const localNode = ref<NodeInfo | null>(null)
   const initialized = ref(false)
   const unlisteners: Array<() => void> = []
-  const { getNodeInfo, getPeers } = useTauri()
+  const { forgetPeer, getNodeInfo, getNodeJobEvents, getPeers } = useTauri()
+  const toast = useToast()
 
   async function init() {
     localNode.value = await getNodeInfo()
     const list = await getPeers()
-    peers.value = Object.fromEntries(list.map(peer => [peer.node.id, peer]))
+    peers.value = mergePeerList(peers.value, list)
 
     if (initialized.value) return
     initialized.value = true
@@ -30,7 +34,11 @@ export const useNodesStore = defineStore('nodes', () => {
     }))
 
     unlisteners.push(await listen<PeerLostEvent>('peer-lost', ({ payload }) => {
-      delete peers.value[payload.nodeId]
+      const peer = peers.value[payload.nodeId]
+      if (!peer) return
+      peer.connected = false
+      peer.lastSeenAt = Date.now()
+      peer.lastDisconnectedAt = peer.lastSeenAt
     }))
 
     unlisteners.push(await listen<PeerJobUpdatedEvent>('peer-job-updated', ({ payload }) => {
@@ -69,6 +77,10 @@ export const useNodesStore = defineStore('nodes', () => {
         job.remainingSecs = 0
       }
     }))
+
+    unlisteners.push(await listen<PeerJobEventPayload>('peer-job-event', ({ payload }) => {
+      pushJobEvent(payload.event)
+    }))
   }
 
   function dispose() {
@@ -80,6 +92,53 @@ export const useNodesStore = defineStore('nodes', () => {
 
   const peerList = computed(() => Object.values(peers.value))
   const connectedCount = computed(() => peerList.value.filter(peer => peer.connected).length)
+
+  function mergePeerList(current: Record<string, PeerInfo>, incoming: PeerInfo[]) {
+    const next = { ...current }
+    for (const peer of incoming) {
+      const existing = next[peer.node.id]
+      if (!existing) {
+        next[peer.node.id] = peer
+        continue
+      }
+
+      const jobs = peer.jobs.map((incomingJob) => {
+        const existingJob = existing.jobs.find(job => job.id === incomingJob.id)
+        return existingJob ? mergePeerJobSnapshot(existingJob, incomingJob) : incomingJob
+      })
+      for (const existingJob of existing.jobs) {
+        if (!jobs.some(job => job.id === existingJob.id)) {
+          jobs.push(existingJob)
+        }
+      }
+
+      next[peer.node.id] = {
+        node: peer.node,
+        queuePaused: peer.queuePaused,
+        connected: peer.connected,
+        firstSeenAt: peer.firstSeenAt ?? existing.firstSeenAt ?? null,
+        lastSeenAt: peer.lastSeenAt ?? existing.lastSeenAt ?? null,
+        lastConnectedAt: peer.lastConnectedAt ?? existing.lastConnectedAt ?? null,
+        lastDisconnectedAt: peer.lastDisconnectedAt ?? existing.lastDisconnectedAt ?? null,
+        jobs,
+      }
+    }
+    return next
+  }
+
+  function jobEventKey(nodeId: string, jobId: string) {
+    return `${nodeId}:${jobId}`
+  }
+
+  function pushJobEvent(event: NodeJobEvent) {
+    const key = jobEventKey(event.nodeId, event.jobId)
+    const existing = jobEvents.value[key] ?? []
+    const index = existing.findIndex(item => item.id === event.id)
+    const next = index === -1
+      ? [...existing, event]
+      : existing.map(item => item.id === event.id ? event : item)
+    jobEvents.value[key] = next.sort((a, b) => a.timestamp - b.timestamp).slice(-200)
+  }
 
   function mergePeerJobSnapshot(current: PeerInfo['jobs'][number], incoming: PeerInfo['jobs'][number]) {
     const isRunning = incoming.status === 'running'
@@ -106,11 +165,54 @@ export const useNodesStore = defineStore('nodes', () => {
     }
   }
 
+  function getJobEvents(nodeId: string, jobId: string): NodeJobEvent[] {
+    return jobEvents.value[jobEventKey(nodeId, jobId)] ?? []
+  }
+
+  async function loadJobEvents(nodeId: string, jobId: string) {
+    const events = await getNodeJobEvents(nodeId, jobId)
+    jobEvents.value[jobEventKey(nodeId, jobId)] = events.slice(-200)
+  }
+
+  async function forgetNode(nodeId: string) {
+    try {
+      await forgetPeer(nodeId)
+    } catch (error) {
+      toast.add({
+        title: '忘记节点失败',
+        description: errorMessage(error),
+        color: 'error',
+        icon: 'i-lucide-circle-alert',
+      })
+      throw error
+    }
+
+    const nextPeers = { ...peers.value }
+    delete nextPeers[nodeId]
+    peers.value = nextPeers
+
+    const nextEvents = { ...jobEvents.value }
+    for (const key of Object.keys(nextEvents)) {
+      if (key.startsWith(`${nodeId}:`)) {
+        delete nextEvents[key]
+      }
+    }
+    jobEvents.value = nextEvents
+  }
+
+  function errorMessage(error: unknown) {
+    return error instanceof Error ? error.message : String(error)
+  }
+
   return {
     peers,
+    jobEvents,
     peerList,
     localNode,
     connectedCount,
+    forgetNode,
+    getJobEvents,
+    loadJobEvents,
     init,
     dispose,
   }

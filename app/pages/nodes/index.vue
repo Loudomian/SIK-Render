@@ -5,7 +5,7 @@
         <div class="page-hero-copy">
           <UBadge label="Nodes" color="neutral" variant="subtle" class="page-eyebrow" />
           <h1>渲染节点</h1>
-          <p class="page-note">局域网内已发现 {{ nodesStore.connectedCount }} 个节点。</p>
+          <p class="page-note">当前在线 {{ nodesStore.connectedCount }} 个节点，已记录 {{ nodesStore.peerList.length }} 个节点。</p>
         </div>
       </section>
     </section>
@@ -26,7 +26,7 @@
       <section class="node-section">
         <div class="settings-section-heading">
           <h2 class="settings-section-title">局域网节点</h2>
-          <p class="hint-text">同网段放行后自动显示。</p>
+          <p class="hint-text">在线节点实时同步；离线节点保留最后一次记录。</p>
         </div>
 
         <div v-if="nodesStore.peerList.length" class="node-list">
@@ -37,6 +37,7 @@
             :jobs="peer.jobs"
             :queue-paused="peer.queuePaused"
             :connected="peer.connected"
+            :last-seen-at="peer.lastSeenAt"
           />
         </div>
 

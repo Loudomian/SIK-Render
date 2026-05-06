@@ -61,29 +61,65 @@ async fn handle_message(app: AppHandle, state: AppState, peer_id: &str, msg: WsM
             jobs,
             queue_paused,
         } => {
-            let peer = PeerInfo {
+            let incoming_peer = PeerInfo {
                 node: node.clone(),
                 jobs,
                 queue_paused,
                 connected: true,
+                first_seen_at: None,
+                last_seen_at: None,
+                last_connected_at: None,
+                last_disconnected_at: None,
             };
-            state
-                .peers
-                .lock()
-                .await
-                .insert(peer_id.to_string(), peer.clone());
+            let peer = {
+                let mut peers = state.peers.lock().await;
+                let previous = peers.get(peer_id);
+                let peer = crate::network::peers::peer_record_for_connect(incoming_peer, previous);
+                peers.insert(peer_id.to_string(), peer.clone());
+                peer
+            };
+            if let Err(error) = crate::network::peers::save_peer_record(&peer) {
+                log::warn!("Failed to persist peer {peer_id}: {error}");
+            }
+            crate::network::events::record_node_connected_events(&app, peer_id, &peer.jobs);
+            for job in &peer.jobs {
+                crate::network::events::seed_job_events(&app, peer_id, job);
+            }
             let _ = app.emit("peer-discovered", PeerDiscoveredEvent { peer });
         }
         WsMessage::JobUpdated { job } => {
+            let mut updated_peer = None;
+            let mut previous_job = None;
+            let mut should_persist = false;
             let mut peers = state.peers.lock().await;
             if let Some(peer) = peers.get_mut(peer_id) {
                 if let Some(index) = peer.jobs.iter().position(|item| item.id == job.id) {
+                    previous_job = Some(peer.jobs[index].clone());
+                    should_persist = previous_job
+                        .as_ref()
+                        .map(|previous| previous.status != job.status)
+                        .unwrap_or(false);
                     peer.jobs[index] = job.clone();
                 } else {
                     peer.jobs.push(job.clone());
                 }
+                peer.last_seen_at = Some(chrono::Utc::now().timestamp_millis());
+                updated_peer = Some(peer.clone());
             }
             drop(peers);
+            crate::network::events::record_job_snapshot_events(
+                &app,
+                peer_id,
+                previous_job.as_ref(),
+                &job,
+            );
+            if should_persist {
+                if let Some(peer) = updated_peer {
+                    if let Err(error) = crate::network::peers::save_peer_record(&peer) {
+                        log::warn!("Failed to persist peer {peer_id}: {error}");
+                    }
+                }
+            }
             let _ = app.emit(
                 "peer-job-updated",
                 PeerJobUpdatedEvent {
@@ -131,6 +167,13 @@ async fn handle_message(app: AppHandle, state: AppState, peer_id: &str, msg: WsM
 }
 
 pub async fn remove(app: AppHandle, state: AppState, peer_id: String) {
-    state.peers.lock().await.remove(&peer_id);
+    let removed = state.peers.lock().await.remove(&peer_id);
+    if let Some(peer) = removed {
+        let peer = crate::network::peers::peer_record_for_disconnect(peer);
+        crate::network::events::record_node_disconnected_events(&app, &peer_id, &peer.jobs);
+        if let Err(error) = crate::network::peers::save_peer_record(&peer) {
+            log::warn!("Failed to persist peer disconnect {peer_id}: {error}");
+        }
+    }
     let _ = app.emit("peer-lost", PeerLostEvent { node_id: peer_id });
 }

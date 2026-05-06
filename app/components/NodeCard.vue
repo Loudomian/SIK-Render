@@ -2,7 +2,11 @@
   <UCard
     variant="subtle"
     class="node-card"
+    :class="{ 'node-card-openable': !!activeJobDetailPath }"
     :ui="{ body: 'node-card-body' }"
+    :tabindex="activeJobDetailPath ? 0 : undefined"
+    @click="openActiveJobDetails"
+    @keydown.enter="openActiveJobDetails"
   >
     <div class="node-card-layout">
       <div ref="cardInfoEl" class="node-card-info">
@@ -27,10 +31,22 @@
                 color="neutral"
                 variant="subtle"
               />
+              <UBadge
+                v-if="activeJob && activeJob.crashCount > 0"
+                :label="`崩溃 ${activeJob.crashCount} 次`"
+                color="warning"
+                variant="subtle"
+              />
+              <UBadge
+                v-if="activeJob?.shadowResolutionScaleOverride != null"
+                :label="`阴影 ${Math.round(activeJob.shadowResolutionScaleOverride * 100)}%`"
+                color="warning"
+                variant="subtle"
+              />
             </div>
             <span class="node-name">{{ node.hostname }}</span>
             <p v-if="node.note" class="node-device-note">{{ node.note }}</p>
-            <p class="node-note">{{ node.ipAddress }}:{{ node.port }} · v{{ node.version }}</p>
+            <p class="node-note">{{ nodeAddressLabel }}</p>
           </div>
         </div>
 
@@ -52,16 +68,39 @@
             </span>
             <span class="job-meta-divider" aria-hidden="true" />
             <span class="job-meta-item">
-              <span class="job-meta-label">当前任务</span>
+              <span class="job-meta-label">{{ activeJob ? '当前任务' : '最近任务' }}</span>
               <strong>{{ activeJobLabel }}</strong>
             </span>
-            <template v-if="activeJob">
+            <template v-if="detailJob">
               <span class="job-meta-divider" aria-hidden="true" />
               <span class="job-meta-item">
-                <span class="job-meta-label">当前执行</span>
+                <span class="job-meta-label">{{ activeJob ? '当前执行' : '执行范围' }}</span>
                 <strong>{{ executionRangeLabel }}</strong>
               </span>
             </template>
+          </div>
+          <div v-if="activeJobDetailPath || showForgetAction" class="job-actions" data-no-drag @dblclick.stop>
+            <UTooltip v-if="activeJobDetailPath" text="查看节点任务详情" arrow :content="{ side: 'bottom', sideOffset: 8 }">
+              <UButton
+                icon="i-lucide-external-link"
+                :label="activeJob ? '当前详情' : '最近任务'"
+                color="neutral"
+                variant="outline"
+                size="sm"
+                @click="goToActiveJobDetails"
+              />
+            </UTooltip>
+            <UTooltip v-if="showForgetAction" text="忘记离线节点" arrow :content="{ side: 'bottom', sideOffset: 8 }">
+              <UButton
+                icon="i-lucide-trash-2"
+                color="error"
+                variant="outline"
+                size="sm"
+                square
+                :loading="forgetting"
+                @click.stop="forgetNode"
+              />
+            </UTooltip>
           </div>
         </div>
       </div>
@@ -113,6 +152,7 @@
 
 <script setup lang="ts">
 import type { NodeInfo, RenderJob } from '~/types'
+import { formatShortTimestamp } from '~/utils/date-format'
 
 const props = withDefaults(defineProps<{
   node: NodeInfo
@@ -120,14 +160,28 @@ const props = withDefaults(defineProps<{
   queuePaused: boolean
   connected?: boolean
   isLocal?: boolean
+  lastSeenAt?: number | null
 }>(), {
   connected: true,
   isLocal: false,
+  lastSeenAt: null,
 })
+const router = useRouter()
+const nodesStore = useNodesStore()
 
 const runningJobs = computed(() => props.jobs.filter(job => job.status === 'running'))
 const activeJob = computed(() => runningJobs.value[0] ?? null)
-const previewJob = computed(() => activeJob.value)
+const latestJob = computed(() => {
+  let latest: RenderJob | null = null
+  for (const job of props.jobs) {
+    if (!latest || jobSortTime(job) > jobSortTime(latest)) {
+      latest = job
+    }
+  }
+  return latest
+})
+const detailJob = computed(() => activeJob.value ?? latestJob.value)
+const previewJob = computed(() => activeJob.value ?? latestJob.value)
 const pendingCount = computed(() => props.jobs.filter(job => job.status === 'pending').length)
 const doneCount = computed(() => props.jobs.filter(job => job.status === 'done').length)
 const currentFrame = computed(() => activeJob.value?.currentFrame ?? 0)
@@ -135,11 +189,49 @@ const totalFrames = computed(() => {
   const job = activeJob.value
   return job?.totalFrames ?? (job ? job.frameEnd - job.frameStart + 1 : 0)
 })
-const activeJobLabel = computed(() => activeJob.value?.name ?? '空闲')
+const activeJobLabel = computed(() => detailJob.value?.name ?? '空闲')
+const nodeAddressLabel = computed(() => {
+  const base = `${props.node.ipAddress}:${props.node.port} · v${props.node.version}`
+  if (props.connected || !props.lastSeenAt) return base
+  return `${base} · 上次在线 ${formatShortTimestamp(props.lastSeenAt)}`
+})
+const activeJobDetailPath = computed(() => {
+  const job = detailJob.value
+  if (!job) return null
+  return props.isLocal
+    ? `/jobs/${job.id}`
+    : `/nodes/${encodeURIComponent(props.node.id)}/jobs/${encodeURIComponent(job.id)}`
+})
 const executionRangeLabel = computed(() => {
-  const job = activeJob.value
+  const job = detailJob.value
   return job ? `${job.frameStart}-${job.frameEnd}` : '无'
 })
+
+function openActiveJobDetails(event?: Event) {
+  const target = event?.target as HTMLElement | null
+  if (target?.closest('a, button, [data-no-drag]')) return
+  goToActiveJobDetails()
+}
+
+function goToActiveJobDetails() {
+  if (!activeJobDetailPath.value) return
+  void router.push(activeJobDetailPath.value)
+}
+
+function jobSortTime(job: RenderJob) {
+  return job.startedAt ?? job.finishedAt ?? job.createdAt
+}
+
+async function forgetNode() {
+  if (!showForgetAction.value || forgetting.value) return
+  try {
+    forgetting.value = true
+    await nodesStore.forgetNode(props.node.id)
+  } finally {
+    forgetting.value = false
+  }
+}
+
 const absoluteCurrentFrame = computed(() => {
   const job = activeJob.value
   if (!job || currentFrame.value <= 0) return null
@@ -182,6 +274,8 @@ const previewBadge = computed(() => {
 const showPreviewBadge = computed(() => !!previewJob.value && previewJob.value.renderMode !== 'quick_mp4')
 const cardInfoEl = ref<HTMLElement | null>(null)
 const cardInfoHeight = ref<number | null>(null)
+const forgetting = ref(false)
+const showForgetAction = computed(() => !props.isLocal && !props.connected)
 let cardInfoResizeObserver: ResizeObserver | null = null
 const previewStyle = computed(() =>
   cardInfoHeight.value ? { '--node-preview-height': `${cardInfoHeight.value}px` } : {},
