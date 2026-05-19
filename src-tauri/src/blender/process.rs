@@ -396,12 +396,16 @@ pub async fn run_job(app: AppHandle, state: AppState, job: RenderJob) -> Result<
     let quick_mp4 = job.render_mode.is_quick_mp4();
 
     let job_result: Result<JobStatus> = loop {
-        // Before each attempt check cancellation.
+        // Before each attempt check cancellation and queue state.
         if state.interrupted_jobs.lock().await.contains(&job.id) {
             break Err(anyhow::anyhow!("interrupted"));
         }
         if state.cancelled_jobs.lock().await.contains(&job.id) {
             break Err(anyhow::anyhow!("cancelled"));
+        }
+        if state.is_queue_paused() {
+            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+            continue;
         }
 
         let actual_start = if quick_mp4 {

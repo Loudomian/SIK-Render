@@ -186,7 +186,7 @@
         <section class="surface-panel settings-field-panel">
           <div class="settings-field-copy">
             <p class="settings-field-title">当前版本</p>
-            <p class="settings-version-value">v{{ appVersion }}</p>
+            <p class="settings-version-value">v{{ appVersion }}<span v-if="commitHash" class="settings-commit-hash"> ({{ commitHash }})</span></p>
           </div>
         </section>
       </div>
@@ -205,6 +205,7 @@
 
 <script setup lang="ts">
 import { getVersion } from '@tauri-apps/api/app'
+import { invoke } from '@tauri-apps/api/core'
 
 const settingsStore = useSettingsStore()
 const runtimeConfig = useRuntimeConfig()
@@ -216,6 +217,7 @@ const ffmpegModalOpen = ref(false)
 const outputPathTemplateModalOpen = ref(false)
 const networkModalOpen = ref(false)
 const appVersion = ref(String(runtimeConfig.public.appVersion ?? '0.0.0'))
+const commitHash = ref('')
 
 const blenderVersionItems = computed(() => {
   const defaultPath = settingsStore.settings.defaultBlender
@@ -247,6 +249,12 @@ onMounted(async () => {
     appVersion.value = await getVersion()
   } catch {
     // Browser dev mode falls back to the package version from runtime config.
+  }
+  try {
+    const info = await invoke<{ version: string; commit: string }>('get_app_version_info')
+    commitHash.value = info.commit
+  } catch {
+    // Browser dev mode — no commit info available.
   }
 })
 </script>

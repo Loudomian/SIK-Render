@@ -229,13 +229,12 @@ fn normalize_render_mode(value: &str) -> Result<RenderMode, String> {
 
 fn next_shadow_resolution_scale(current: Option<f32>) -> Option<f32> {
     // Keep in sync with SCALE_STEPS in app/composables/useShadowRecoveryToast.ts.
+    // Blender default is 1.0; each recovery step picks the highest scale still
+    // below the current value, stepping 1.0 → 0.75 → 0.5 → 0.3 → none.
     const STEPS: [f32; 3] = [0.75, 0.5, 0.3];
     match current {
         None => Some(STEPS[0]),
-        Some(value) if value > 0.75 => Some(STEPS[0]),
-        Some(value) if value > 0.5 => Some(STEPS[1]),
-        Some(value) if value > 0.3 => Some(STEPS[2]),
-        Some(_) => None,
+        Some(v) => STEPS.iter().find(|&&s| s < v).copied(),
     }
 }
 

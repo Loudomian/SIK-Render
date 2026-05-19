@@ -6,10 +6,9 @@ const SCALE_STEPS = [0.75, 0.5, 0.3]
 const activeToastIds = new Set<string>()
 
 function nextScale(current?: number | null) {
-  if (current == null || current > 0.75) return SCALE_STEPS[0]
-  if (current > 0.5) return SCALE_STEPS[1]
-  if (current > 0.3) return SCALE_STEPS[2]
-  return null
+  // Blender default is 1.0; step 1.0 → 0.75 → 0.5 → 0.3 → none.
+  if (current == null) return SCALE_STEPS[0]
+  return SCALE_STEPS.find((s) => s < current) ?? null
 }
 
 export function isShadowBufferWarningLine(line: string) {

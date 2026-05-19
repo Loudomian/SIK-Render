@@ -136,10 +136,11 @@ pub fn render_command(
     let render_settings_script = build_render_settings_script(job, settings);
     let mut command = BlenderCliCommand::new(&job.blender_executable)
         .arg_before("--background")
-        .blend_file(&job.blend_file)
-        .arg("--python-expr")
-        .arg(render_settings_script);
+        .blend_file(&job.blend_file);
 
+    // --render-output / --render-format (or -F FFMPEG) must precede --python-expr
+    // so the format is already set when the Python script configures image settings.
+    // Otherwise a .blend saved in FFMPEG mode will reject `image.file_format = 'PNG'`.
     if job.render_mode.is_quick_mp4() {
         command = command.arg("-F").arg("FFMPEG");
     } else {
@@ -151,6 +152,8 @@ pub fn render_command(
     }
 
     command
+        .arg("--python-expr")
+        .arg(render_settings_script)
         .arg("-s")
         .arg(frame_start_actual.to_string())
         .arg("-e")

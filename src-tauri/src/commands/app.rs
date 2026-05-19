@@ -1,4 +1,20 @@
+use serde::Serialize;
 use tauri::{AppHandle, Manager};
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AppVersionInfo {
+    pub version: String,
+    pub commit: String,
+}
+
+#[tauri::command]
+pub fn get_app_version_info() -> AppVersionInfo {
+    AppVersionInfo {
+        version: env!("CARGO_PKG_VERSION").to_string(),
+        commit: env!("GIT_COMMIT_HASH").to_string(),
+    }
+}
 
 #[tauri::command]
 pub fn app_ready(app: AppHandle) -> Result<(), String> {

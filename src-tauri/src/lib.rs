@@ -69,6 +69,7 @@ pub fn run() {
             commands::nodes::get_node_events_dir,
             commands::nodes::list_node_interfaces,
             commands::path_template::preview_output_path_template,
+            commands::app::get_app_version_info,
             commands::app::app_ready,
             commands::app::path_exists,
             commands::blender::get_blender_versions,
