@@ -55,7 +55,7 @@ jobs:
           } else {
             $range = "$prevTag..$currentTag"
           }
-          $commits = git log $range --no-merges --format="- %s (%h)" 2>&1
+          $commits = (git log $range --no-merges --format="- %s (%h)" 2>&1) -join "`n"
           if (-not $commits) { $commits = "- Initial release" }
           $body = @"
           ## SIK Render $currentTag
@@ -68,11 +68,8 @@ jobs:
 
           ### Download
 
-          Choose one installer from the Assets section below:
-
-          - `SIK Render_*_x64-setup.exe` - recommended for normal installation.
-          - `SIK Render_*_x64_en-US.msi` - recommended for managed or scripted installation.
-          - `SIK Render_*_portable.zip` - unzip and run, no installation required.
+          - `sik-render-setup-x64.exe` — recommended installer.
+          - `sik-render-windows.zip` — portable, unzip and run.
 
           ### Requirements
 
@@ -103,10 +100,8 @@ jobs:
 
             ### Download
 
-            Choose one installer from the Assets section below:
-
-            - `SIK Render_*_x64-setup.exe` - recommended for normal installation.
-            - `SIK Render_*_x64_en-US.msi` - recommended for managed or scripted installation.
+            - `sik-render-setup-x64.exe` — recommended installer.
+            - `sik-render-windows.zip` — portable, unzip and run.
 
             ### Requirements
 
@@ -123,6 +118,7 @@ jobs:
           releaseDraft: true
           prerelease: ${{ contains(github.ref_name, '-rc') || contains(github.ref_name, '-beta') || contains(github.ref_name, '-alpha') }}
           tauriScript: bunx tauri
+          args: --bundles nsis
 
       - name: Create portable ZIP
         shell: pwsh
@@ -136,14 +132,30 @@ jobs:
           Copy-Item $exe.FullName "$portable/"
           Get-ChildItem $exe.Directory -Filter *.dll -ErrorAction SilentlyContinue |
             Copy-Item -Destination "$portable/" -ErrorAction SilentlyContinue
-          Compress-Archive -Path "$portable/*" -DestinationPath "SIK Render_${{ github.ref_name }}_portable.zip"
+          if (Test-Path src-tauri/bin/ffmpeg.exe) {
+            Copy-Item src-tauri/bin/ffmpeg.exe "$portable/"
+          }
+          Compress-Archive -Path "$portable/*" -DestinationPath "sik-render-windows.zip"
 
-      - name: Upload portable ZIP to release
+      - name: Upload fixed-name artifacts
         shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release upload ${{ github.ref_name }} "SIK Render_${{ github.ref_name }}_portable.zip"
+          $setup = Get-ChildItem -Recurse -Path src-tauri/target/release/bundle/nsis -Filter "*_x64-setup.exe" |
+            Select-Object -First 1
+          if ($setup) {
+            Copy-Item $setup.FullName "sik-render-setup-x64.exe"
+            gh release upload ${{ github.ref_name }} "sik-render-setup-x64.exe" --clobber
+          }
+          gh release upload ${{ github.ref_name }} "sik-render-windows.zip" --clobber
+          # Remove versioned assets uploaded by tauri-action
+          $assets = gh release view ${{ github.ref_name }} --json assets -q '.assets[].name'
+          foreach ($name in $assets) {
+            if ($name -match '^SIK Render_.*_x64-setup\.exe$') {
+              gh release delete-asset ${{ github.ref_name }} $name -y
+            }
+          }
 
       - name: Update release notes with changelog
         shell: pwsh
