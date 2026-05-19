@@ -15,6 +15,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -70,6 +72,7 @@ jobs:
 
           - `SIK Render_*_x64-setup.exe` - recommended for normal installation.
           - `SIK Render_*_x64_en-US.msi` - recommended for managed or scripted installation.
+          - `SIK Render_*_portable.zip` - unzip and run, no installation required.
 
           ### Requirements
 
@@ -120,6 +123,27 @@ jobs:
           releaseDraft: true
           prerelease: ${{ contains(github.ref_name, '-rc') || contains(github.ref_name, '-beta') || contains(github.ref_name, '-alpha') }}
           tauriScript: bunx tauri
+
+      - name: Create portable ZIP
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem -Recurse -Path src-tauri/target/release -Filter sik-render.exe |
+            Where-Object { $_.FullName -notmatch 'deps|build|\.cargo' } |
+            Select-Object -First 1
+          if (-not $exe) { Write-Error "Release binary not found"; exit 1 }
+          $portable = "sik-render-portable"
+          New-Item -ItemType Directory -Force $portable
+          Copy-Item $exe.FullName "$portable/"
+          Get-ChildItem $exe.Directory -Filter *.dll -ErrorAction SilentlyContinue |
+            Copy-Item -Destination "$portable/" -ErrorAction SilentlyContinue
+          Compress-Archive -Path "$portable/*" -DestinationPath "SIK Render_${{ github.ref_name }}_portable.zip"
+
+      - name: Upload portable ZIP to release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload ${{ github.ref_name }} "SIK Render_${{ github.ref_name }}_portable.zip"
 
       - name: Update release notes with changelog
         shell: pwsh
