@@ -61,4 +61,8 @@ const localPort = computed(() => nodesStore.localNode?.port ?? 47878)
 onMounted(async () => {
   await nodesStore.init()
 })
+
+onUnmounted(() => {
+  nodesStore.dispose()
+})
 </script>

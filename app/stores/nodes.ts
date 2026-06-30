@@ -7,6 +7,7 @@ import type {
   PeerInfo,
   PeerJobEventPayload,
   PeerJobUpdatedEvent,
+  PeerLogEvent,
   PeerLostEvent,
   PeerProgressEvent,
   PeerQueueStateEvent,
@@ -15,6 +16,7 @@ import type {
 export const useNodesStore = defineStore('nodes', () => {
   const peers = ref<Record<string, PeerInfo>>({})
   const jobEvents = ref<Record<string, NodeJobEvent[]>>({})
+  const peerLogs = ref<Record<string, string[]>>({})
   const localNode = ref<NodeInfo | null>(null)
   const initialized = ref(false)
   const unlisteners: Array<() => void> = []
@@ -81,6 +83,10 @@ export const useNodesStore = defineStore('nodes', () => {
     unlisteners.push(await listen<PeerJobEventPayload>('peer-job-event', ({ payload }) => {
       pushJobEvent(payload.event)
     }))
+
+    unlisteners.push(await listen<PeerLogEvent>('peer-log', ({ payload }) => {
+      pushPeerLog(payload)
+    }))
   }
 
   function dispose() {
@@ -88,6 +94,7 @@ export const useNodesStore = defineStore('nodes', () => {
       unlisteners.pop()?.()
     }
     initialized.value = false
+    peerLogs.value = {}
   }
 
   const peerList = computed(() => Object.values(peers.value))
@@ -130,6 +137,10 @@ export const useNodesStore = defineStore('nodes', () => {
     return `${nodeId}:${jobId}`
   }
 
+  function peerLogKey(nodeId: string, jobId: string) {
+    return `${nodeId}:${jobId}`
+  }
+
   function pushJobEvent(event: NodeJobEvent) {
     const key = jobEventKey(event.nodeId, event.jobId)
     const existing = jobEvents.value[key] ?? []
@@ -138,6 +149,14 @@ export const useNodesStore = defineStore('nodes', () => {
       ? [...existing, event]
       : existing.map(item => item.id === event.id ? event : item)
     jobEvents.value[key] = next.sort((a, b) => a.timestamp - b.timestamp).slice(-200)
+  }
+
+  function pushPeerLog(event: PeerLogEvent) {
+    const key = peerLogKey(event.nodeId, event.jobId)
+    const existing = peerLogs.value[key] ?? []
+    peerLogs.value[key] = existing.length >= 2000
+      ? [...existing.slice(-1999), event.line]
+      : [...existing, event.line]
   }
 
   function mergePeerJobSnapshot(current: PeerInfo['jobs'][number], incoming: PeerInfo['jobs'][number]) {
@@ -167,6 +186,10 @@ export const useNodesStore = defineStore('nodes', () => {
 
   function getJobEvents(nodeId: string, jobId: string): NodeJobEvent[] {
     return jobEvents.value[jobEventKey(nodeId, jobId)] ?? []
+  }
+
+  function getPeerLogs(nodeId: string, jobId: string): string[] {
+    return peerLogs.value[peerLogKey(nodeId, jobId)] ?? []
   }
 
   async function loadJobEvents(nodeId: string, jobId: string) {
@@ -207,11 +230,13 @@ export const useNodesStore = defineStore('nodes', () => {
   return {
     peers,
     jobEvents,
+    peerLogs,
     peerList,
     localNode,
     connectedCount,
     forgetNode,
     getJobEvents,
+    getPeerLogs,
     loadJobEvents,
     init,
     dispose,

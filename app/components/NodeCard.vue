@@ -151,12 +151,12 @@
 </template>
 
 <script setup lang="ts">
-import type { NodeInfo, RenderJob } from '~/types'
+import type { NodeInfo, RemoteJobSnapshot } from '~/types'
 import { formatShortTimestamp } from '~/utils/date-format'
 
 const props = withDefaults(defineProps<{
   node: NodeInfo
-  jobs: RenderJob[]
+  jobs: RemoteJobSnapshot[]
   queuePaused: boolean
   connected?: boolean
   isLocal?: boolean
@@ -172,7 +172,7 @@ const nodesStore = useNodesStore()
 const runningJobs = computed(() => props.jobs.filter(job => job.status === 'running'))
 const activeJob = computed(() => runningJobs.value[0] ?? null)
 const latestJob = computed(() => {
-  let latest: RenderJob | null = null
+  let latest: RemoteJobSnapshot | null = null
   for (const job of props.jobs) {
     if (!latest || jobSortTime(job) > jobSortTime(latest)) {
       latest = job
@@ -218,7 +218,7 @@ function goToActiveJobDetails() {
   void router.push(activeJobDetailPath.value)
 }
 
-function jobSortTime(job: RenderJob) {
+function jobSortTime(job: RemoteJobSnapshot) {
   return job.startedAt ?? job.finishedAt ?? job.createdAt
 }
 
@@ -272,11 +272,9 @@ const previewBadge = computed(() => {
   return absoluteCurrentFrame.value ? `第 ${absoluteCurrentFrame.value} 帧` : '预览'
 })
 const showPreviewBadge = computed(() => !!previewJob.value && previewJob.value.renderMode !== 'quick_mp4')
-const cardInfoEl = ref<HTMLElement | null>(null)
-const cardInfoHeight = ref<number | null>(null)
+const { cardInfoEl, cardInfoHeight, syncHeightAfterTick } = useCardInfoHeight()
 const forgetting = ref(false)
 const showForgetAction = computed(() => !props.isLocal && !props.connected)
-let cardInfoResizeObserver: ResizeObserver | null = null
 const previewStyle = computed(() =>
   cardInfoHeight.value ? { '--node-preview-height': `${cardInfoHeight.value}px` } : {},
 )
@@ -332,12 +330,6 @@ async function refreshPreview() {
   }
 }
 
-function syncCardInfoHeight() {
-  const el = cardInfoEl.value
-  if (!el) return
-  cardInfoHeight.value = Math.round(el.getBoundingClientRect().height)
-}
-
 watch(previewSourceUrl, () => { void refreshPreview() }, { immediate: true })
 
 watch(
@@ -353,26 +345,11 @@ watch(
     currentFrame.value,
     totalFrames.value,
   ] as const,
-  async () => {
-    await nextTick()
-    syncCardInfoHeight()
-  },
+  () => { void syncHeightAfterTick() },
   { flush: 'post' },
 )
 
-onMounted(() => {
-  if (!cardInfoEl.value) return
-  syncCardInfoHeight()
-  cardInfoResizeObserver = new ResizeObserver((entries) => {
-    const entry = entries[0]
-    if (!entry) return
-    cardInfoHeight.value = Math.round(entry.contentRect.height)
-  })
-  cardInfoResizeObserver.observe(cardInfoEl.value)
-})
-
 onUnmounted(() => {
-  cardInfoResizeObserver?.disconnect()
   window.clearTimeout(previewRevealTimer)
 })
 </script>

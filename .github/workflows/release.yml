@@ -4,10 +4,47 @@ on:
   push:
     tags:
       - 'v*.*.*'
-  workflow_dispatch:
+
+env:
+  CARGO_INCREMENTAL: 0
+  RUST_BACKTRACE: short
 
 jobs:
+  check-tag-version:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check tag and app versions
+        shell: bash
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          version="$(node -p "require('./package.json').version")"
+          tauri_version="$(node -p "require('./src-tauri/tauri.conf.json').version")"
+          expected="v${version}"
+
+          echo "tag=${tag}"
+          echo "package=${version}"
+          echo "tauri=${tauri_version}"
+
+          if [[ "${tauri_version}" != "${version}" ]]; then
+            echo "::error::tauri.conf.json version ${tauri_version} does not match package.json version ${version}."
+            exit 1
+          fi
+
+          if [[ "${tag}" != "${expected}" ]]; then
+            echo "::error::Tag ${tag} does not match package version ${expected}."
+            exit 1
+          fi
+
   build-windows:
+    needs: [check-tag-version]
     runs-on: windows-latest
     permissions:
       contents: write
@@ -57,12 +94,22 @@ jobs:
           }
           $commits = (git log $range --no-merges --format="- %s (%h)" 2>&1) -join "`n"
           if (-not $commits) { $commits = "- Initial release" }
+          if ($prevTag) {
+            $changesTitle = "### Changes since $prevTag"
+          } else {
+            $changesTitle = "### Changes"
+          }
+          $updaterNotes = @"
+          $changesTitle
+
+          $commits
+          "@
           $body = @"
           ## SIK Render $currentTag
 
           Local Blender render queue, FFmpeg transcode manager, and LAN render node monitor for SIKFilm workflows.
 
-          ### Changes since $prevTag
+          $changesTitle
 
           $commits
 
@@ -84,41 +131,26 @@ jobs:
           %APPDATA%\SIKFilm\Render\
           ```
           "@
+          "updater_notes<<SIK_RENDER_UPDATER_NOTES" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          $updaterNotes | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "SIK_RENDER_UPDATER_NOTES" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
           $body | Out-File -FilePath changelog.md -Encoding utf8
 
       - name: Build and release
-        uses: tauri-apps/tauri-action@v0
+        uses: tauri-apps/tauri-action@v0.6.2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           tagName: ${{ github.ref_name }}
           releaseName: 'SIK Render ${{ github.ref_name }}'
-          releaseBody: |
-            ## SIK Render ${{ github.ref_name }}
-
-            Local Blender render queue, FFmpeg transcode manager, and LAN render node monitor for SIKFilm workflows.
-
-            ### Download
-
-            - `sik-render-setup-x64.exe` — recommended installer.
-            - `sik-render-windows.zip` — portable, unzip and run.
-
-            ### Requirements
-
-            - Windows 10 or Windows 11.
-            - Blender installed locally for render jobs.
-
-            ### App Data
-
-            Runtime data is stored under:
-
-            ```text
-            %APPDATA%\SIKFilm\Render\
-            ```
+          releaseBody: ${{ steps.changelog.outputs.updater_notes }}
           releaseDraft: true
           prerelease: ${{ contains(github.ref_name, '-rc') || contains(github.ref_name, '-beta') || contains(github.ref_name, '-alpha') }}
           tauriScript: bunx tauri
           args: --bundles nsis
+          includeUpdaterJson: true
 
       - name: Create portable ZIP
         shell: pwsh
@@ -149,13 +181,6 @@ jobs:
             gh release upload ${{ github.ref_name }} "sik-render-setup-x64.exe" --clobber
           }
           gh release upload ${{ github.ref_name }} "sik-render-windows.zip" --clobber
-          # Remove versioned assets uploaded by tauri-action
-          $assets = gh release view ${{ github.ref_name }} --json assets -q '.assets[].name'
-          foreach ($name in $assets) {
-            if ($name -match '^SIK Render_.*_x64-setup\.exe$') {
-              gh release delete-asset ${{ github.ref_name }} $name -y
-            }
-          }
 
       - name: Update release notes with changelog
         shell: pwsh

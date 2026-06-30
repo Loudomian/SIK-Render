@@ -692,10 +692,6 @@ async function submit() {
     errorMessage.value = '输出 FPS 必须大于 0。'
     return
   }
-  if (!props.blenderJobId && !folderSource) {
-    errorMessage.value = '请先选择序列帧目录。'
-    return
-  }
 
   saving.value = true
   errorMessage.value = ''
@@ -713,6 +709,11 @@ async function submit() {
       })
       emit('update:open', false)
       emit('close')
+      return
+    }
+
+    if (!props.blenderJobId && !folderSource) {
+      errorMessage.value = '请先选择序列帧目录。'
       return
     }
 

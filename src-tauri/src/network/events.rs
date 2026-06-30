@@ -1,295 +1,85 @@
-use crate::network::types::{NodeJobEvent, NodeJobEventKind, NodeJobEventLevel, PeerJobEventPayload};
-use crate::queue::job::{JobStatus, RenderJob};
-use anyhow::{Context, Result};
+use crate::network::types::{
+    NodeJobEvent, NodeJobEventKind, NodeJobEventLevel, PeerJobEventPayload, RemoteJobSnapshot,
+};
+use crate::queue::job::JobStatus;
+use anyhow::Result;
 use chrono::Utc;
-use std::collections::{HashMap, HashSet};
-use std::fs::{self, OpenOptions};
-use std::io::Write;
-use std::path::PathBuf;
-use std::sync::{Mutex, OnceLock};
+use sqlx::{Row, SqlitePool};
 use tauri::{AppHandle, Emitter};
 
-const MAX_EVENTS_PER_JOB: usize = 1_000;
-const MAX_STORED_EVENTS_PER_FILE: usize = 5_000;
-const COMPACT_AFTER_EVENTS: usize = 6_000;
+const MAX_EVENTS_PER_JOB: i64 = 1_000;
+const MAX_EVENTS_PER_NODE: i64 = 5_000;
 
-#[derive(Default)]
-struct EventIndex {
-    ids: HashSet<String>,
-    semantic_keys: HashSet<String>,
-    event_count: usize,
+pub async fn load_node_job_events(
+    pool: &SqlitePool,
+    node_id: &str,
+    job_id: &str,
+) -> Result<Vec<NodeJobEvent>> {
+    let rows = sqlx::query(
+        "SELECT id, node_id, job_id, timestamp, kind, level, title, message
+         FROM node_job_events
+         WHERE node_id = ? AND job_id = ?
+         ORDER BY timestamp ASC
+         LIMIT ?",
+    )
+    .bind(node_id)
+    .bind(job_id)
+    .bind(MAX_EVENTS_PER_JOB)
+    .fetch_all(pool)
+    .await?;
+
+    rows.into_iter().map(node_event_from_row).collect()
 }
 
-fn node_file_path(node_id: &str) -> Result<PathBuf> {
-    let dir = crate::app_paths::node_events_dir()?;
-    if let Some(peer) = peer_record(node_id) {
-        return Ok(crate::network::file_names::node_file_path_for_info(
-            &dir,
-            &peer.node.hostname,
-            &peer.node.ip_address,
-            &peer.node.id,
-            "jsonl",
-        ));
-    }
+async fn append_event_if_missing(pool: &SqlitePool, event: &NodeJobEvent) -> Result<bool> {
+    let result = sqlx::query(
+        "INSERT OR IGNORE INTO node_job_events
+            (id, node_id, job_id, timestamp, kind, level, title, message)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+    )
+    .bind(&event.id)
+    .bind(&event.node_id)
+    .bind(&event.job_id)
+    .bind(event.timestamp)
+    .bind(event_kind_key(&event.kind))
+    .bind(event_level_key(&event.level))
+    .bind(&event.title)
+    .bind(&event.message)
+    .execute(pool)
+    .await?;
 
-    Ok(crate::network::file_names::node_file_path(
-        &dir, node_id, "jsonl",
-    ))
+    Ok(result.rows_affected() > 0)
 }
 
-fn node_file_candidates(node_id: &str) -> Result<Vec<PathBuf>> {
-    let dir = crate::app_paths::node_events_dir()?;
-    if let Some(peer) = peer_record(node_id) {
-        return Ok(crate::network::file_names::node_file_candidates_for_info(
-            &dir,
-            &peer.node.hostname,
-            &peer.node.ip_address,
-            &peer.node.id,
-            "jsonl",
-        ));
-    }
-
-    Ok(crate::network::file_names::node_file_candidates(
-        &dir, node_id, "jsonl",
-    ))
-}
-
-fn event_indexes() -> &'static Mutex<HashMap<PathBuf, EventIndex>> {
-    static INDEXES: OnceLock<Mutex<HashMap<PathBuf, EventIndex>>> = OnceLock::new();
-    INDEXES.get_or_init(|| Mutex::new(HashMap::new()))
-}
-
-fn peer_record(node_id: &str) -> Option<crate::network::types::PeerInfo> {
-    match crate::network::peers::load_peer_record(node_id) {
-        Ok(peer) => peer,
-        Err(error) => {
-            log::warn!("Failed to resolve peer record for node events {node_id}: {error}");
-            None
-        }
-    }
-}
-
-pub fn load_node_job_events(node_id: &str, job_id: &str) -> Result<Vec<NodeJobEvent>> {
-    let mut seen = HashSet::new();
-    let mut events = read_node_events(node_id)?
-        .into_iter()
-        .filter(|event| event.node_id == node_id && event.job_id == job_id)
-        .filter(|event| event.kind != NodeJobEventKind::Progress)
-        .filter(|event| seen.insert(event_semantic_key(event)))
-        .collect::<Vec<_>>();
-
-    events.sort_by(|a, b| a.timestamp.cmp(&b.timestamp));
-    if events.len() > MAX_EVENTS_PER_JOB {
-        Ok(events.split_off(events.len() - MAX_EVENTS_PER_JOB))
-    } else {
-        Ok(events)
-    }
-}
-
-fn append_event_if_missing(event: &NodeJobEvent) -> Result<bool> {
-    let path = node_file_path(&event.node_id)?;
-    let event_key = event_semantic_key(event);
-    let should_compact = {
-        let mut indexes = event_indexes()
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
-        let index = indexes.entry(path.clone()).or_insert_with(|| {
-            build_event_index(&event.node_id).unwrap_or_else(|error| {
-                log::warn!(
-                    "Failed to build node event index {}: {error}",
-                    event.node_id
-                );
-                EventIndex::default()
-            })
-        });
-
-        if index.ids.contains(&event.id) || index.semantic_keys.contains(&event_key) {
-            return Ok(false);
-        }
-
-        index.event_count + 1 > COMPACT_AFTER_EVENTS
-    };
-
-    if should_compact {
-        compact_node_events(&event.node_id)?;
-    }
-
-    let mut file = OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(&path)
-        .with_context(|| format!("failed to open node events {}", path.display()))?;
-    let line = serde_json::to_string(event).context("failed to serialize node event")?;
-    writeln!(file, "{line}")
-        .with_context(|| format!("failed to write node events {}", path.display()))?;
-    let mut indexes = event_indexes()
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
-    let index = indexes.entry(path).or_insert_with(|| EventIndex::default());
-    index.ids.insert(event.id.clone());
-    index.semantic_keys.insert(event_key);
-    index.event_count += 1;
-    Ok(true)
-}
-
-pub fn delete_node_events(node_id: &str) -> Result<()> {
-    let primary = node_file_path(node_id)?;
-    for path in node_file_candidates(node_id)? {
-        if !path.exists() {
-            continue;
-        }
-
-        if path == primary {
-            fs::remove_file(&path)
-                .with_context(|| format!("failed to remove node events {}", path.display()))?;
-        } else {
-            rewrite_legacy_events_without_node(&path, node_id)?;
-        }
-    }
-
-    event_indexes()
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner())
-        .remove(&primary);
+pub async fn delete_node_events(pool: &SqlitePool, node_id: &str) -> Result<()> {
+    sqlx::query("DELETE FROM node_job_events WHERE node_id = ?")
+        .bind(node_id)
+        .execute(pool)
+        .await?;
     Ok(())
 }
 
-fn read_node_events(node_id: &str) -> Result<Vec<NodeJobEvent>> {
-    let mut events = Vec::new();
-    for path in node_file_candidates(node_id)? {
-        if !path.exists() {
-            continue;
-        }
-
-        let content = fs::read_to_string(&path)
-            .with_context(|| format!("failed to read node events {}", path.display()))?;
-        events.extend(content.lines().filter_map(|line| match parse_event(line) {
-            Some(event) => Some(event),
-            None => {
-                log::warn!("Failed to parse node event {}", path.display());
-                None
-            }
-        }));
-    }
-    Ok(events)
-}
-
-fn build_event_index(node_id: &str) -> Result<EventIndex> {
-    let mut index = EventIndex::default();
-    for event in read_node_events(node_id)?
-        .into_iter()
-        .filter(|event| event.node_id == node_id)
-    {
-        index.ids.insert(event.id.clone());
-        index.semantic_keys.insert(event_semantic_key(&event));
-        index.event_count += 1;
-    }
-    Ok(index)
-}
-
-fn compact_node_events(node_id: &str) -> Result<()> {
-    let path = node_file_path(node_id)?;
-    let mut seen = HashSet::new();
-    let mut events = read_node_events(node_id)?
-        .into_iter()
-        .filter(|event| event.node_id == node_id)
-        .filter(|event| seen.insert(event_semantic_key(event)))
-        .collect::<Vec<_>>();
-
-    events.sort_by(|a, b| a.timestamp.cmp(&b.timestamp).then_with(|| a.id.cmp(&b.id)));
-    if events.len() > MAX_STORED_EVENTS_PER_FILE {
-        events = events.split_off(events.len() - MAX_STORED_EVENTS_PER_FILE);
-    }
-
-    let mut content = String::new();
-    for event in &events {
-        let line = serde_json::to_string(event).context("failed to serialize node event")?;
-        content.push_str(&line);
-        content.push('\n');
-    }
-    fs::write(&path, content)
-        .with_context(|| format!("failed to compact node events {}", path.display()))?;
-    for candidate in node_file_candidates(node_id)? {
-        if candidate != path && candidate.exists() {
-            rewrite_legacy_events_without_node(&candidate, node_id)?;
-        }
-    }
-
-    let mut index = EventIndex::default();
-    for event in events {
-        index.ids.insert(event.id.clone());
-        index.semantic_keys.insert(event_semantic_key(&event));
-        index.event_count += 1;
-    }
-    event_indexes()
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner())
-        .insert(path, index);
+pub async fn trim_node_events(pool: &SqlitePool, node_id: &str) -> Result<()> {
+    sqlx::query(
+        "DELETE FROM node_job_events
+         WHERE node_id = ?
+           AND id NOT IN (
+             SELECT id FROM node_job_events
+             WHERE node_id = ?
+             ORDER BY timestamp DESC, id DESC
+             LIMIT ?
+           )",
+    )
+    .bind(node_id)
+    .bind(node_id)
+    .bind(MAX_EVENTS_PER_NODE)
+    .execute(pool)
+    .await?;
     Ok(())
 }
 
-fn rewrite_legacy_events_without_node(path: &PathBuf, node_id: &str) -> Result<()> {
-    let content = fs::read_to_string(path)
-        .with_context(|| format!("failed to read legacy node events {}", path.display()))?;
-    let mut retained = Vec::new();
-    let mut removed_any = false;
-
-    for line in content.lines() {
-        match parse_event(line) {
-            Some(event) if event.node_id == node_id => {
-                removed_any = true;
-            }
-            Some(_) => retained.push(line.to_string()),
-            None => retained.push(line.to_string()),
-        }
-    }
-
-    if !removed_any {
-        return Ok(());
-    }
-
-    if retained.is_empty() {
-        fs::remove_file(path)
-            .with_context(|| format!("failed to remove legacy node events {}", path.display()))?;
-    } else {
-        fs::write(path, format!("{}\n", retained.join("\n")))
-            .with_context(|| format!("failed to rewrite legacy node events {}", path.display()))?;
-    }
-    Ok(())
-}
-
-fn parse_event(line: &str) -> Option<NodeJobEvent> {
-    serde_json::from_str::<NodeJobEvent>(line).ok()
-}
-
-fn event_semantic_key(event: &NodeJobEvent) -> String {
-    match event.kind {
-        NodeJobEventKind::StatusChanged => format!(
-            "{}:{}:{}:{}",
-            event.node_id,
-            event.job_id,
-            event_kind_key(&event.kind),
-            event.id,
-        ),
-        _ => event.id.clone(),
-    }
-}
-
-fn event_kind_key(kind: &NodeJobEventKind) -> &'static str {
-    match kind {
-        NodeJobEventKind::JobDiscovered => "job_discovered",
-        NodeJobEventKind::StatusChanged => "status_changed",
-        NodeJobEventKind::CrashRetry => "crash_retry",
-        NodeJobEventKind::ShadowRecovery => "shadow_recovery",
-        NodeJobEventKind::RangeChanged => "range_changed",
-        NodeJobEventKind::NodeConnected => "node_connected",
-        NodeJobEventKind::NodeDisconnected => "node_disconnected",
-        NodeJobEventKind::Progress => "progress",
-    }
-}
-
-fn append_and_emit(app: &AppHandle, event: NodeJobEvent) {
-    match append_event_if_missing(&event) {
+async fn append_and_emit(pool: &SqlitePool, app: &AppHandle, event: NodeJobEvent) {
+    match append_event_if_missing(pool, &event).await {
         Ok(true) => {
             let _ = app.emit("peer-job-event", PeerJobEventPayload { event });
         }
@@ -300,11 +90,17 @@ fn append_and_emit(app: &AppHandle, event: NodeJobEvent) {
     }
 }
 
-pub fn seed_job_events(app: &AppHandle, node_id: &str, job: &RenderJob) {
-    append_and_emit(app, job_discovered_event(node_id, job));
+pub async fn seed_job_events(
+    pool: &SqlitePool,
+    app: &AppHandle,
+    node_id: &str,
+    job: &RemoteJobSnapshot,
+) {
+    append_and_emit(pool, app, job_discovered_event(node_id, job)).await;
 
     if job.status != JobStatus::Pending {
         append_and_emit(
+            pool,
             app,
             status_changed_event(
                 node_id,
@@ -313,11 +109,13 @@ pub fn seed_job_events(app: &AppHandle, node_id: &str, job: &RenderJob) {
                 job,
                 job.started_at.or(job.finished_at).unwrap_or(job.created_at),
             ),
-        );
+        )
+        .await;
     }
 
     if job.crash_count > 0 {
         append_and_emit(
+            pool,
             app,
             crash_retry_event(
                 node_id,
@@ -325,11 +123,13 @@ pub fn seed_job_events(app: &AppHandle, node_id: &str, job: &RenderJob) {
                 job.crash_count,
                 job.started_at.unwrap_or(job.created_at),
             ),
-        );
+        )
+        .await;
     }
 
     if let Some(scale) = job.shadow_resolution_scale_override {
         append_and_emit(
+            pool,
             app,
             shadow_recovery_event(
                 node_id,
@@ -337,23 +137,26 @@ pub fn seed_job_events(app: &AppHandle, node_id: &str, job: &RenderJob) {
                 scale,
                 job.started_at.unwrap_or(job.created_at),
             ),
-        );
+        )
+        .await;
     }
 }
 
-pub fn record_job_snapshot_events(
+pub async fn record_job_snapshot_events(
+    pool: &SqlitePool,
     app: &AppHandle,
     node_id: &str,
-    previous: Option<&RenderJob>,
-    incoming: &RenderJob,
+    previous: Option<&RemoteJobSnapshot>,
+    incoming: &RemoteJobSnapshot,
 ) {
     let Some(previous) = previous else {
-        seed_job_events(app, node_id, incoming);
+        seed_job_events(pool, app, node_id, incoming).await;
         return;
     };
 
     if previous.status != incoming.status {
         append_and_emit(
+            pool,
             app,
             status_changed_event(
                 node_id,
@@ -362,20 +165,24 @@ pub fn record_job_snapshot_events(
                 incoming,
                 incoming.finished_at.unwrap_or_else(now),
             ),
-        );
+        )
+        .await;
     }
 
     if incoming.crash_count > previous.crash_count {
         append_and_emit(
+            pool,
             app,
             crash_retry_event(node_id, incoming, incoming.crash_count, now()),
-        );
+        )
+        .await;
     }
 
     if incoming.shadow_resolution_scale_override.is_some()
         && incoming.shadow_resolution_scale_override != previous.shadow_resolution_scale_override
     {
         append_and_emit(
+            pool,
             app,
             shadow_recovery_event(
                 node_id,
@@ -385,29 +192,55 @@ pub fn record_job_snapshot_events(
                     .unwrap_or_default(),
                 now(),
             ),
-        );
+        )
+        .await;
     }
 
     if incoming.frame_start != previous.frame_start || incoming.frame_end != previous.frame_end {
-        append_and_emit(app, range_changed_event(node_id, previous, incoming));
+        append_and_emit(pool, app, range_changed_event(node_id, previous, incoming)).await;
     }
 }
 
-pub fn record_node_connected_events(app: &AppHandle, node_id: &str, jobs: &[RenderJob]) {
+pub async fn record_node_connected_events(
+    pool: &SqlitePool,
+    app: &AppHandle,
+    node_id: &str,
+    jobs: &[RemoteJobSnapshot],
+) {
     let timestamp = now();
     for job in jobs.iter().filter(|job| is_running_job(job)) {
-        append_and_emit(app, node_connected_event(node_id, job, timestamp));
+        append_and_emit(pool, app, node_connected_event(node_id, job, timestamp)).await;
     }
 }
 
-pub fn record_node_disconnected_events(app: &AppHandle, node_id: &str, jobs: &[RenderJob]) {
+pub async fn record_node_disconnected_events(
+    pool: &SqlitePool,
+    app: &AppHandle,
+    node_id: &str,
+    jobs: &[RemoteJobSnapshot],
+) {
     let timestamp = now();
     for job in jobs.iter().filter(|job| is_running_job(job)) {
-        append_and_emit(app, node_disconnected_event(node_id, job, timestamp));
+        append_and_emit(pool, app, node_disconnected_event(node_id, job, timestamp)).await;
     }
 }
 
-fn job_discovered_event(node_id: &str, job: &RenderJob) -> NodeJobEvent {
+fn node_event_from_row(row: sqlx::sqlite::SqliteRow) -> Result<NodeJobEvent> {
+    let kind: String = row.try_get("kind")?;
+    let level: String = row.try_get("level")?;
+    Ok(NodeJobEvent {
+        id: row.try_get("id")?,
+        node_id: row.try_get("node_id")?,
+        job_id: row.try_get("job_id")?,
+        timestamp: row.try_get("timestamp")?,
+        kind: parse_event_kind(&kind),
+        level: parse_event_level(&level),
+        title: row.try_get("title")?,
+        message: row.try_get("message")?,
+    })
+}
+
+fn job_discovered_event(node_id: &str, job: &RemoteJobSnapshot) -> NodeJobEvent {
     NodeJobEvent {
         id: format!("job_discovered:{node_id}:{}", job.id),
         node_id: node_id.to_string(),
@@ -424,7 +257,7 @@ fn status_changed_event(
     node_id: &str,
     previous: &JobStatus,
     next: &JobStatus,
-    job: &RenderJob,
+    job: &RemoteJobSnapshot,
     timestamp: i64,
 ) -> NodeJobEvent {
     NodeJobEvent {
@@ -452,7 +285,7 @@ fn status_changed_event(
 
 fn crash_retry_event(
     node_id: &str,
-    job: &RenderJob,
+    job: &RemoteJobSnapshot,
     crash_count: i32,
     timestamp: i64,
 ) -> NodeJobEvent {
@@ -478,7 +311,7 @@ fn crash_retry_event(
 
 fn shadow_recovery_event(
     node_id: &str,
-    job: &RenderJob,
+    job: &RemoteJobSnapshot,
     scale: f32,
     timestamp: i64,
 ) -> NodeJobEvent {
@@ -495,7 +328,11 @@ fn shadow_recovery_event(
     }
 }
 
-fn range_changed_event(node_id: &str, previous: &RenderJob, next: &RenderJob) -> NodeJobEvent {
+fn range_changed_event(
+    node_id: &str,
+    previous: &RemoteJobSnapshot,
+    next: &RemoteJobSnapshot,
+) -> NodeJobEvent {
     NodeJobEvent {
         id: format!(
             "range_changed:{node_id}:{}:{}:{}",
@@ -514,7 +351,11 @@ fn range_changed_event(node_id: &str, previous: &RenderJob, next: &RenderJob) ->
     }
 }
 
-fn node_connected_event(node_id: &str, job: &RenderJob, timestamp: i64) -> NodeJobEvent {
+fn node_connected_event(
+    node_id: &str,
+    job: &RemoteJobSnapshot,
+    timestamp: i64,
+) -> NodeJobEvent {
     NodeJobEvent {
         id: format!("node_connected:{node_id}:{}:{timestamp}", job.id),
         node_id: node_id.to_string(),
@@ -527,7 +368,11 @@ fn node_connected_event(node_id: &str, job: &RenderJob, timestamp: i64) -> NodeJ
     }
 }
 
-fn node_disconnected_event(node_id: &str, job: &RenderJob, timestamp: i64) -> NodeJobEvent {
+fn node_disconnected_event(
+    node_id: &str,
+    job: &RemoteJobSnapshot,
+    timestamp: i64,
+) -> NodeJobEvent {
     NodeJobEvent {
         id: format!("node_disconnected:{node_id}:{}:{timestamp}", job.id),
         node_id: node_id.to_string(),
@@ -543,7 +388,7 @@ fn node_disconnected_event(node_id: &str, job: &RenderJob, timestamp: i64) -> No
     }
 }
 
-fn is_running_job(job: &RenderJob) -> bool {
+fn is_running_job(job: &RemoteJobSnapshot) -> bool {
     matches!(job.status, JobStatus::Running)
 }
 
@@ -575,6 +420,50 @@ fn status_level(status: &JobStatus) -> NodeJobEventLevel {
         JobStatus::Failed => NodeJobEventLevel::Error,
         JobStatus::Cancelled | JobStatus::Interrupted => NodeJobEventLevel::Warning,
         JobStatus::Pending | JobStatus::Running => NodeJobEventLevel::Info,
+    }
+}
+
+fn event_kind_key(kind: &NodeJobEventKind) -> &'static str {
+    match kind {
+        NodeJobEventKind::JobDiscovered => "job_discovered",
+        NodeJobEventKind::StatusChanged => "status_changed",
+        NodeJobEventKind::CrashRetry => "crash_retry",
+        NodeJobEventKind::ShadowRecovery => "shadow_recovery",
+        NodeJobEventKind::RangeChanged => "range_changed",
+        NodeJobEventKind::NodeConnected => "node_connected",
+        NodeJobEventKind::NodeDisconnected => "node_disconnected",
+        NodeJobEventKind::Progress => "progress",
+    }
+}
+
+fn event_level_key(level: &NodeJobEventLevel) -> &'static str {
+    match level {
+        NodeJobEventLevel::Info => "info",
+        NodeJobEventLevel::Success => "success",
+        NodeJobEventLevel::Warning => "warning",
+        NodeJobEventLevel::Error => "error",
+    }
+}
+
+fn parse_event_kind(value: &str) -> NodeJobEventKind {
+    match value {
+        "status_changed" => NodeJobEventKind::StatusChanged,
+        "crash_retry" => NodeJobEventKind::CrashRetry,
+        "shadow_recovery" => NodeJobEventKind::ShadowRecovery,
+        "range_changed" => NodeJobEventKind::RangeChanged,
+        "node_connected" => NodeJobEventKind::NodeConnected,
+        "node_disconnected" => NodeJobEventKind::NodeDisconnected,
+        "progress" => NodeJobEventKind::Progress,
+        _ => NodeJobEventKind::JobDiscovered,
+    }
+}
+
+fn parse_event_level(value: &str) -> NodeJobEventLevel {
+    match value {
+        "success" => NodeJobEventLevel::Success,
+        "warning" => NodeJobEventLevel::Warning,
+        "error" => NodeJobEventLevel::Error,
+        _ => NodeJobEventLevel::Info,
     }
 }
 

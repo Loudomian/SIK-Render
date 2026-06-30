@@ -9,6 +9,7 @@ pub const FFMPEG_LOG_KIND: &str = "ffmpeg";
 
 const JOBS_ROOT_DIR_NAME: &str = "jobs";
 const LEGACY_LOGS_DIR_NAME: &str = "logs";
+const APP_LOGS_DIR_NAME: &str = "app";
 const BLENDER_ROOT_DIR_NAME: &str = "blender";
 const FFMPEG_ROOT_DIR_NAME: &str = "ffmpeg";
 const LOG_DIR_NAME: &str = "log";
@@ -18,7 +19,6 @@ const NODE_ID_FILE_NAME: &str = "node-id.toml";
 const LEGACY_NODE_ID_FILE_NAME: &str = "node-id.txt";
 const NODES_DIR_NAME: &str = "nodes";
 const NODE_PEERS_DIR_NAME: &str = "peers";
-const NODE_EVENTS_DIR_NAME: &str = "events";
 const DB_FILE_NAME: &str = "sik-render.sqlite3";
 const CONFIG_FILE_NAME: &str = "sik-render.toml";
 const APP_VENDOR_DIR_NAME: &str = "SIKFilm";
@@ -38,6 +38,89 @@ pub fn tool_root_dir() -> Result<PathBuf> {
     }
 
     roaming_app_dir()
+}
+
+pub fn runtime_reset_targets() -> Result<Vec<PathBuf>> {
+    let root = tool_root_dir()?;
+    let db_path = root.join(DB_FILE_NAME);
+    Ok(dedup_runtime_reset_targets(vec![
+        root.join(CONFIG_FILE_NAME),
+        db_path.clone(),
+        root.join(format!("{DB_FILE_NAME}-wal")),
+        root.join(format!("{DB_FILE_NAME}-shm")),
+        root.join(format!("{DB_FILE_NAME}-journal")),
+        root.join(NODE_ID_FILE_NAME),
+        root.join(LEGACY_NODE_ID_FILE_NAME),
+        root.join(JOBS_ROOT_DIR_NAME),
+        root.join(LEGACY_LOGS_DIR_NAME),
+        root.join("Logs"),
+        root.join(NODES_DIR_NAME),
+    ]))
+}
+
+fn dedup_runtime_reset_targets(targets: Vec<PathBuf>) -> Vec<PathBuf> {
+    let mut deduped = Vec::new();
+    for target in targets {
+        let key = if cfg!(windows) {
+            target.to_string_lossy().to_lowercase()
+        } else {
+            target.to_string_lossy().into_owned()
+        };
+        if deduped.iter().any(|existing: &PathBuf| {
+            let existing_key = if cfg!(windows) {
+                existing.to_string_lossy().to_lowercase()
+            } else {
+                existing.to_string_lossy().into_owned()
+            };
+            existing_key == key
+        }) {
+            continue;
+        }
+        deduped.push(target);
+    }
+    deduped
+}
+
+pub fn reset_runtime_data() -> Result<(PathBuf, Vec<PathBuf>, Vec<(PathBuf, String)>)> {
+    let root = tool_root_dir()?;
+    let root = root
+        .canonicalize()
+        .unwrap_or_else(|_| root.to_path_buf());
+    let mut removed = Vec::new();
+    let mut failed = Vec::new();
+
+    for target in runtime_reset_targets()? {
+        if !target.exists() {
+            continue;
+        }
+
+        let resolved = target
+            .canonicalize()
+            .unwrap_or_else(|_| target.to_path_buf());
+        if !resolved.starts_with(&root) {
+            failed.push((
+                target,
+                format!("refusing to remove path outside runtime root {}", root.display()),
+            ));
+            continue;
+        }
+
+        let result = if resolved.is_dir() {
+            fs::remove_dir_all(&resolved)
+        } else {
+            fs::remove_file(&resolved)
+        };
+
+        match result {
+            Ok(()) => removed.push(resolved),
+            Err(error) => failed.push((resolved, error.to_string())),
+        }
+    }
+
+    ensure_runtime_layout()?;
+    let _ = read_or_create_node_id()?;
+
+    Ok((root, removed, failed))
 }
 
 fn roaming_app_dir() -> Result<PathBuf> {
@@ -132,19 +215,20 @@ pub fn logs_dir() -> Result<PathBuf> {
     Ok(tool_root_dir()?.join(LEGACY_LOGS_DIR_NAME))
 }
 
+pub fn app_logs_dir() -> Result<PathBuf> {
+    let dir = logs_dir()?
+        .join(APP_LOGS_DIR_NAME)
+        .join(env!("CARGO_PKG_VERSION"));
+    fs::create_dir_all(&dir)
+        .with_context(|| format!("failed to create app log directory {}", dir.display()))?;
+    Ok(dir)
+}
+
 pub fn node_peers_dir() -> Result<PathBuf> {
     let dir = tool_root_dir()?
         .join(NODES_DIR_NAME)
         .join(NODE_PEERS_DIR_NAME);
     fs::create_dir_all(&dir).context("failed to create node peers directory")?;
-    Ok(dir)
-}
-
-pub fn node_events_dir() -> Result<PathBuf> {
-    let dir = tool_root_dir()?
-        .join(NODES_DIR_NAME)
-        .join(NODE_EVENTS_DIR_NAME);
-    fs::create_dir_all(&dir).context("failed to create node events directory")?;
     Ok(dir)
 }
 
@@ -169,8 +253,8 @@ fn ffmpeg_jobs_root_dir() -> Result<PathBuf> {
 pub fn ensure_runtime_layout() -> Result<()> {
     migrate_legacy_runtime_root()?;
     normalize_logs_directory_name()?;
+    let _ = app_logs_dir()?;
     let _ = node_peers_dir()?;
-    let _ = node_events_dir()?;
     let _ = blender_jobs_root_dir()?;
     let _ = ffmpeg_jobs_root_dir()?;
     migrate_known_legacy_logs()?;

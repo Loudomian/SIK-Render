@@ -8,7 +8,6 @@ mod queue;
 mod state;
 
 use chrono::Local;
-use std::path::PathBuf;
 use tauri::Manager;
 use tauri_plugin_log::{Target, TargetKind};
 
@@ -22,6 +21,8 @@ pub fn run() {
                 .build(),
         )
         .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_store::Builder::default().build())
         .plugin(tauri_plugin_notification::init())
@@ -66,12 +67,12 @@ pub fn run() {
             commands::nodes::get_peers,
             commands::nodes::get_node_job_events,
             commands::nodes::forget_peer,
-            commands::nodes::get_node_events_dir,
             commands::nodes::list_node_interfaces,
             commands::path_template::preview_output_path_template,
             commands::app::get_app_version_info,
             commands::app::app_ready,
             commands::app::path_exists,
+            commands::app::reset_app_runtime_data,
             commands::blender::get_blender_versions,
             commands::blender::inspect_toolchain,
             commands::blender::add_blender_by_path,
@@ -108,23 +109,6 @@ pub fn run() {
     });
 }
 
-fn sikfilm_log_dir() -> PathBuf {
-    #[cfg(target_os = "windows")]
-    if let Some(app_data) = std::env::var_os("APPDATA") {
-        return PathBuf::from(app_data)
-            .join("SIKFilm")
-            .join("Render")
-            .join("logs")
-            .join(env!("CARGO_PKG_VERSION"));
-    }
-
-    std::env::temp_dir()
-        .join("SIKFilm")
-        .join("Render")
-        .join("logs")
-        .join(env!("CARGO_PKG_VERSION"))
-}
-
 fn sikfilm_log_file_name() -> String {
     let timestamp = Local::now().format("%Y%m%d_%H%M%S_%3f");
     format!("sikrender_{timestamp}")
@@ -134,7 +118,15 @@ fn log_targets() -> Vec<Target> {
     #[allow(unused_mut)]
     let mut targets: Vec<Target> = vec![
         Target::new(TargetKind::Folder {
-            path: sikfilm_log_dir(),
+            path: crate::app_paths::app_logs_dir().unwrap_or_else(|error| {
+                eprintln!("failed to resolve app log directory: {error}");
+                std::env::temp_dir()
+                    .join("SIKFilm")
+                    .join("Render")
+                    .join("logs")
+                    .join("app")
+                    .join(env!("CARGO_PKG_VERSION"))
+            }),
             file_name: Some(sikfilm_log_file_name()),
         }),
         Target::new(TargetKind::Webview),

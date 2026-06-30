@@ -188,6 +188,35 @@
             <p class="settings-field-title">当前版本</p>
             <p class="settings-version-value">v{{ appVersion }}<span v-if="commitHash" class="settings-commit-hash"> ({{ commitHash }})</span></p>
           </div>
+          <div class="settings-card-actions">
+            <UButton
+              icon="i-lucide-refresh-cw"
+              label="检查更新"
+              color="neutral"
+              variant="outline"
+              size="sm"
+              :loading="checkingUpdate"
+              @click="checkForUpdates"
+            />
+            <UButton
+              icon="i-lucide-trash-2"
+              label="重新初始化"
+              color="error"
+              variant="outline"
+              size="sm"
+              :disabled="runtimeResetting"
+              @click="runtimeResetModalOpen = true"
+            />
+          </div>
+          <div v-if="runtimeResetResult" class="settings-reset-result">
+            <UAlert
+              :color="runtimeResetResult.failedPaths.length ? 'warning' : 'success'"
+              variant="subtle"
+              :title="runtimeResetResult.failedPaths.length ? '已完成，部分文件未删除' : '已重新初始化'"
+              :description="runtimeResetSummary"
+            />
+            <p class="settings-reset-path">{{ runtimeResetResult.rootPath }}</p>
+          </div>
         </section>
       </div>
       </section>
@@ -200,14 +229,83 @@
     <FfmpegSettingsModal v-model:open="ffmpegModalOpen" />
     <OutputPathTemplateSettingsModal v-model:open="outputPathTemplateModalOpen" />
     <NetworkSettingsModal v-model:open="networkModalOpen" />
+
+    <UModal
+      :open="runtimeResetModalOpen"
+      :close="false"
+      title="确认重新初始化"
+      :ui="{ content: 'job-modal-content settings-modal-content' }"
+      @update:open="handleRuntimeResetOpenChange"
+    >
+      <template #body>
+        <div class="modal-stack">
+          <UAlert
+            color="error"
+            variant="subtle"
+            title="此操作会删除本机应用运行数据"
+            description="将终止当前渲染/转码进程，并删除配置、任务数据库、日志、节点 ID 和节点缓存。执行成功后应用会自动重启。"
+          />
+
+          <section class="surface-panel settings-field-panel">
+            <div class="settings-field-copy">
+              <p class="settings-field-title">输入 RESET 确认</p>
+              <p class="hint-text">该操作只删除 SIK Render 自己的运行数据，不会删除你的 Blender 工程文件或渲染输出目录。</p>
+            </div>
+            <UInput
+              v-model="runtimeResetConfirmText"
+              placeholder="RESET"
+              :disabled="runtimeResetting"
+              autocomplete="off"
+            />
+          </section>
+
+          <UAlert
+            v-if="runtimeResetError"
+            color="error"
+            variant="subtle"
+            title="重新初始化失败"
+            :description="runtimeResetError"
+          />
+
+          <div class="modal-actions settings-modal-actions">
+            <div class="settings-modal-actions-start" />
+            <div class="settings-modal-actions-end">
+              <UButton
+                icon="i-lucide-x"
+                label="取消"
+                color="neutral"
+                variant="outline"
+                :disabled="runtimeResetting"
+                @click="runtimeResetModalOpen = false"
+              />
+              <UButton
+                icon="i-lucide-trash-2"
+                label="确认重新初始化"
+                color="error"
+                variant="solid"
+                :loading="runtimeResetting"
+                :disabled="runtimeResetConfirmText !== 'RESET'"
+                @click="confirmRuntimeReset"
+              />
+            </div>
+          </div>
+        </div>
+      </template>
+    </UModal>
   </div>
 </template>
 
 <script setup lang="ts">
 import { getVersion } from '@tauri-apps/api/app'
 import { invoke } from '@tauri-apps/api/core'
+import { check } from '@tauri-apps/plugin-updater'
+import { relaunch } from '@tauri-apps/plugin-process'
+import type { RuntimeResetResult } from '~/types'
 
 const settingsStore = useSettingsStore()
+const toast = useToast()
+const { resetAppRuntimeData } = useTauri()
+const updaterState = useUpdaterState()
 const runtimeConfig = useRuntimeConfig()
 const blenderPathModalOpen = ref(false)
 const ffmpegPathModalOpen = ref(false)
@@ -216,6 +314,12 @@ const blenderOutputModalOpen = ref(false)
 const ffmpegModalOpen = ref(false)
 const outputPathTemplateModalOpen = ref(false)
 const networkModalOpen = ref(false)
+const runtimeResetModalOpen = ref(false)
+const runtimeResetting = ref(false)
+const runtimeResetConfirmText = ref('')
+const runtimeResetError = ref('')
+const runtimeResetResult = ref<RuntimeResetResult | null>(null)
+const checkingUpdate = ref(false)
 const appVersion = ref(String(runtimeConfig.public.appVersion ?? '0.0.0'))
 const commitHash = ref('')
 
@@ -239,8 +343,78 @@ const ffmpegPathNote = computed(() =>
 
 const outputTemplateSummary = computed(() => '集中管理渲染序列、Blender 转码和独立转码的默认输出模板。')
 
+const runtimeResetSummary = computed(() => {
+  if (!runtimeResetResult.value) return ''
+  const removedCount = runtimeResetResult.value.removedPaths.length
+  const failedCount = runtimeResetResult.value.failedPaths.length
+  if (!failedCount) return `已删除 ${removedCount} 项运行数据。应用将自动重启完成初始化。`
+  return `已删除 ${removedCount} 项运行数据，${failedCount} 项删除失败。请关闭应用后手动清理残留文件，或重启后再次执行。`
+})
+
 async function setTheme(theme: 'dark' | 'light' | 'system') {
   await settingsStore.setTheme(theme)
+}
+
+function handleRuntimeResetOpenChange(value: boolean) {
+  if (runtimeResetting.value) return
+  runtimeResetModalOpen.value = value
+  if (!value) {
+    runtimeResetConfirmText.value = ''
+    runtimeResetError.value = ''
+  }
+}
+
+async function confirmRuntimeReset() {
+  if (runtimeResetting.value || runtimeResetConfirmText.value !== 'RESET') return
+
+  runtimeResetting.value = true
+  runtimeResetError.value = ''
+
+  try {
+    runtimeResetResult.value = await resetAppRuntimeData()
+    runtimeResetModalOpen.value = false
+    runtimeResetConfirmText.value = ''
+    toast.add({
+      title: runtimeResetResult.value.failedPaths.length ? '重新初始化完成，存在残留' : '重新初始化完成',
+      description: '应用将自动重启以完成初始化。',
+      color: runtimeResetResult.value.failedPaths.length ? 'warning' : 'success',
+    })
+    window.setTimeout(() => {
+      void relaunch()
+    }, 800)
+  } catch (error) {
+    runtimeResetError.value = error instanceof Error ? error.message : String(error)
+  } finally {
+    runtimeResetting.value = false
+  }
+}
+
+async function checkForUpdates() {
+  if (checkingUpdate.value) return
+
+  checkingUpdate.value = true
+  try {
+    const update = shouldUseMockUpdate() ? createMockUpdate(appVersion.value) : await check()
+    updaterState.setUpdate(update)
+    if (!update) {
+      toast.add({
+        title: '已是最新版本',
+        description: `当前版本 v${appVersion.value}`,
+        color: 'success',
+      })
+      return
+    }
+
+    updaterState.modalOpen.value = true
+  } catch (error) {
+    toast.add({
+      title: '检查更新失败',
+      description: error instanceof Error ? error.message : String(error),
+      color: 'error',
+    })
+  } finally {
+    checkingUpdate.value = false
+  }
 }
 
 onMounted(async () => {

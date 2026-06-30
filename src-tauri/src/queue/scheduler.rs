@@ -338,9 +338,11 @@ pub async fn load_job(pool: &sqlx::SqlitePool, id: &str) -> anyhow::Result<Rende
 pub fn emit_job_update(app: &AppHandle, job: &RenderJob) {
     let _ = app.emit("job-updated", JobUpdatedEvent { job: job.clone() });
     if let Some(state) = app.try_state::<crate::state::AppState>() {
-        let _ = state
-            .ws_broadcaster
-            .send(crate::network::types::WsMessage::JobUpdated { job: job.clone() });
+        let _ = state.ws_broadcaster.send(
+            crate::network::types::WsMessage::JobUpdated {
+                job: crate::network::types::RemoteJobSnapshot::from_job(job),
+            },
+        );
     }
 }
 

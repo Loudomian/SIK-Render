@@ -113,6 +113,19 @@
   line-height: 1.35;
 }
 
+.settings-update-version-panel {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.settings-update-version-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
 .settings-inline-versions {
   display: inline-flex;
   flex-wrap: wrap;
@@ -149,6 +162,76 @@
   font-size: 0.92rem;
   font-weight: 600;
   line-height: 1.5;
+}
+
+.settings-danger-card {
+  border-color: color-mix(in srgb, var(--ui-error) 28%, var(--ui-border));
+}
+
+.settings-reset-result {
+  display: grid;
+  gap: 0.55rem;
+  margin-bottom: 1rem;
+}
+
+.settings-reset-path {
+  margin: 0;
+  overflow: hidden;
+  color: var(--ui-text-muted);
+  font-family: var(--ui-font-mono, ui-monospace, SFMono-Regular, Consolas, monospace);
+  font-size: 0.78rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-update-notes {
+  display: grid;
+  gap: 0.45rem;
+  max-height: 14rem;
+  margin: 0;
+  overflow: auto;
+  color: var(--ui-text-muted);
+  font-size: 0.86rem;
+  line-height: 1.6;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.settings-update-notes p {
+  margin: 0;
+}
+
+.settings-update-notes-heading {
+  color: var(--ui-text);
+  font-weight: 700;
+}
+
+.settings-update-notes-list {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.settings-update-notes-list-item {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  font-size: 0.82rem;
+  line-height: 1.55;
+}
+
+.settings-update-notes-dot {
+  flex: 0 0 auto;
+  width: 0.32rem;
+  height: 0.32rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ui-primary) 70%, var(--ui-text-muted));
+}
+
+.settings-update-notes-list-text {
+  min-width: 0;
 }
 
 .settings-version-inline {
