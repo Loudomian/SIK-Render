@@ -164,6 +164,7 @@
 
 <script setup lang="ts">
 import { invoke } from '@tauri-apps/api/core'
+import { getVersion } from '@tauri-apps/api/app'
 import { check } from '@tauri-apps/plugin-updater'
 import { relaunch } from '@tauri-apps/plugin-process'
 import { open as openUrl } from '@tauri-apps/plugin-shell'
@@ -176,6 +177,7 @@ const { onProgress, onJobUpdated, onLog, onQueueState } = useRenderEvents()
 const shadowRecoveryToast = useShadowRecoveryToast()
 const updaterState = useUpdaterState()
 const toast = useToast()
+const runtimeConfig = useRuntimeConfig()
 const CONTEXT_MENU_ALLOW_SELECTOR = '[data-context-menu]'
 
 const navItems = computed(() => [
@@ -367,12 +369,20 @@ async function notifyAppReadyAfterPaint() {
 async function checkForAvailableUpdate() {
   try {
     if (shouldUseMockUpdate()) {
-      updaterState.setUpdate(createMockUpdate())
+      updaterState.setUpdate(createMockUpdate(await getCurrentAppVersion()))
       return
     }
     updaterState.setUpdate(await check())
   } catch (error) {
     console.debug('Background update check failed:', error)
+  }
+}
+
+async function getCurrentAppVersion() {
+  try {
+    return await getVersion()
+  } catch {
+    return String(runtimeConfig.public.appVersion ?? '0.0.0')
   }
 }
 

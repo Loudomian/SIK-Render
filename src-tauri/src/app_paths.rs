@@ -43,7 +43,7 @@ pub fn tool_root_dir() -> Result<PathBuf> {
 pub fn runtime_reset_targets() -> Result<Vec<PathBuf>> {
     let root = tool_root_dir()?;
     let db_path = root.join(DB_FILE_NAME);
-    Ok(vec![
+    Ok(dedup_runtime_reset_targets(vec![
         root.join(CONFIG_FILE_NAME),
         db_path.clone(),
         root.join(format!("{DB_FILE_NAME}-wal")),
@@ -55,7 +55,30 @@ pub fn runtime_reset_targets() -> Result<Vec<PathBuf>> {
         root.join(LEGACY_LOGS_DIR_NAME),
         root.join("Logs"),
         root.join(NODES_DIR_NAME),
-    ])
+    ]))
+}
+
+fn dedup_runtime_reset_targets(targets: Vec<PathBuf>) -> Vec<PathBuf> {
+    let mut deduped = Vec::new();
+    for target in targets {
+        let key = if cfg!(windows) {
+            target.to_string_lossy().to_lowercase()
+        } else {
+            target.to_string_lossy().into_owned()
+        };
+        if deduped.iter().any(|existing: &PathBuf| {
+            let existing_key = if cfg!(windows) {
+                existing.to_string_lossy().to_lowercase()
+            } else {
+                existing.to_string_lossy().into_owned()
+            };
+            existing_key == key
+        }) {
+            continue;
+        }
+        deduped.push(target);
+    }
+    deduped
 }
 
 pub fn reset_runtime_data() -> Result<(PathBuf, Vec<PathBuf>, Vec<(PathBuf, String)>)> {

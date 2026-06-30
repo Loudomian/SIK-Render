@@ -21,15 +21,22 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Check tag and package version
+      - name: Check tag and app versions
         shell: bash
         run: |
           tag="${GITHUB_REF_NAME}"
           version="$(node -p "require('./package.json').version")"
+          tauri_version="$(node -p "require('./src-tauri/tauri.conf.json').version")"
           expected="v${version}"
 
           echo "tag=${tag}"
           echo "package=${version}"
+          echo "tauri=${tauri_version}"
+
+          if [[ "${tauri_version}" != "${version}" ]]; then
+            echo "::error::tauri.conf.json version ${tauri_version} does not match package.json version ${version}."
+            exit 1
+          fi
 
           if [[ "${tag}" != "${expected}" ]]; then
             echo "::error::Tag ${tag} does not match package version ${expected}."

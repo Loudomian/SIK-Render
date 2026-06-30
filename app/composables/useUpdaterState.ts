@@ -28,13 +28,13 @@ export function shouldUseMockUpdate() {
   return window.localStorage.getItem('sik-render-mock-update') === '1'
 }
 
-export function createMockUpdate(): AppUpdate {
+export function createMockUpdate(currentVersion: string): AppUpdate {
   return {
-    currentVersion: '1.1.4',
+    currentVersion,
     version: '9.9.9-dev',
     date: new Date().toISOString(),
     body: [
-      '### Changes since v1.1.4',
+      `### Changes since v${currentVersion}`,
       '',
       '- feat: add updater badge and modal (local mock)',
       '- fix: verify release notes rendering in the app',

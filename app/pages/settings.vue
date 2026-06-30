@@ -394,7 +394,7 @@ async function checkForUpdates() {
 
   checkingUpdate.value = true
   try {
-    const update = shouldUseMockUpdate() ? createMockUpdate() : await check()
+    const update = shouldUseMockUpdate() ? createMockUpdate(appVersion.value) : await check()
     updaterState.setUpdate(update)
     if (!update) {
       toast.add({
