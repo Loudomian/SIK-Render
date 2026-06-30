@@ -40,6 +40,66 @@ pub fn tool_root_dir() -> Result<PathBuf> {
     roaming_app_dir()
 }
 
+pub fn runtime_reset_targets() -> Result<Vec<PathBuf>> {
+    let root = tool_root_dir()?;
+    let db_path = root.join(DB_FILE_NAME);
+    Ok(vec![
+        root.join(CONFIG_FILE_NAME),
+        db_path.clone(),
+        root.join(format!("{DB_FILE_NAME}-wal")),
+        root.join(format!("{DB_FILE_NAME}-shm")),
+        root.join(format!("{DB_FILE_NAME}-journal")),
+        root.join(NODE_ID_FILE_NAME),
+        root.join(LEGACY_NODE_ID_FILE_NAME),
+        root.join(JOBS_ROOT_DIR_NAME),
+        root.join(LEGACY_LOGS_DIR_NAME),
+        root.join("Logs"),
+        root.join(NODES_DIR_NAME),
+    ])
+}
+
+pub fn reset_runtime_data() -> Result<(PathBuf, Vec<PathBuf>, Vec<(PathBuf, String)>)> {
+    let root = tool_root_dir()?;
+    let root = root
+        .canonicalize()
+        .unwrap_or_else(|_| root.to_path_buf());
+    let mut removed = Vec::new();
+    let mut failed = Vec::new();
+
+    for target in runtime_reset_targets()? {
+        if !target.exists() {
+            continue;
+        }
+
+        let resolved = target
+            .canonicalize()
+            .unwrap_or_else(|_| target.to_path_buf());
+        if !resolved.starts_with(&root) {
+            failed.push((
+                target,
+                format!("refusing to remove path outside runtime root {}", root.display()),
+            ));
+            continue;
+        }
+
+        let result = if resolved.is_dir() {
+            fs::remove_dir_all(&resolved)
+        } else {
+            fs::remove_file(&resolved)
+        };
+
+        match result {
+            Ok(()) => removed.push(resolved),
+            Err(error) => failed.push((resolved, error.to_string())),
+        }
+    }
+
+    ensure_runtime_layout()?;
+    let _ = read_or_create_node_id()?;
+
+    Ok((root, removed, failed))
+}
+
 fn roaming_app_dir() -> Result<PathBuf> {
     #[cfg(target_os = "windows")]
     if let Some(app_data) = std::env::var_os("APPDATA") {

@@ -70,6 +70,7 @@ pub fn run() {
             commands::app::get_app_version_info,
             commands::app::app_ready,
             commands::app::path_exists,
+            commands::app::reset_app_runtime_data,
             commands::blender::get_blender_versions,
             commands::blender::inspect_toolchain,
             commands::blender::add_blender_by_path,

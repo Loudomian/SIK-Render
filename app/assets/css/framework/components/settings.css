@@ -151,6 +151,26 @@
   line-height: 1.5;
 }
 
+.settings-danger-card {
+  border-color: color-mix(in srgb, var(--ui-error) 28%, var(--ui-border));
+}
+
+.settings-reset-result {
+  display: grid;
+  gap: 0.55rem;
+  margin-bottom: 1rem;
+}
+
+.settings-reset-path {
+  margin: 0;
+  overflow: hidden;
+  color: var(--ui-text-muted);
+  font-family: var(--ui-font-mono, ui-monospace, SFMono-Regular, Consolas, monospace);
+  font-size: 0.78rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .settings-version-inline {
   display: flex;
   flex-wrap: wrap;

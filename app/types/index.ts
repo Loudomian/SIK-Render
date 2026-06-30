@@ -247,6 +247,17 @@ export interface ToolchainStatus {
   ffmpegSource: string | null
 }
 
+export interface RuntimeResetFailure {
+  path: string
+  error: string
+}
+
+export interface RuntimeResetResult {
+  rootPath: string
+  removedPaths: string[]
+  failedPaths: RuntimeResetFailure[]
+}
+
 export interface BlendProjectSettings {
   frameStart: number
   frameEnd: number
