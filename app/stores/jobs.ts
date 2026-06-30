@@ -199,7 +199,9 @@ export const useJobsStore = defineStore('jobs', () => {
   }
 
   function applyLog(event: RenderLogEvent) {
-    const existing = [...(logs.value[event.jobId] ?? []), event.line]
+    const current = logs.value[event.jobId] ?? []
+    if (current.at(-1) === event.line) return
+    const existing = [...current, event.line]
     logs.value[event.jobId] = existing.slice(-MAX_LOG_LINES)
     if (/\bFra:\d+/.test(event.line) || /\bSaved:\s/i.test(event.line)) {
       renderStarted.value[event.jobId] = true

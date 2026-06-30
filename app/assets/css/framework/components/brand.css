@@ -63,3 +63,34 @@
   line-height: 1.05;
   letter-spacing: -0.02em;
 }
+
+.app-brand-title-row {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-width: 0;
+}
+
+.app-update-badge {
+  display: inline-flex;
+  z-index: 1;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  opacity: 0.88;
+  transition: opacity 160ms ease;
+}
+
+.app-update-badge:hover {
+  opacity: 1;
+}
+
+.app-update-badge:focus-visible {
+  outline: 2px solid var(--ui-primary);
+  outline-offset: 2px;
+}

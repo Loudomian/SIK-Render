@@ -1221,8 +1221,8 @@ onMounted(async () => {
     jobsStore.applyJobUpdate(event)
   }))
   detailUnlisteners.push(await onLog((event) => {
-    jobsStore.applyLog(event)
     if (event.jobId !== jobId.value || !allLogsLoaded.value) return
+    if (allLogLines.value.at(-1) === event.line) return
     allLogLines.value = [...allLogLines.value, event.line]
   }))
   detailUnlisteners.push(await onFfmpegJobUpdated((event) => {

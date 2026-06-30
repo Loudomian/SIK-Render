@@ -42,6 +42,5 @@ sik-render.toml
 node-id.txt
 node-id.toml
 .claude/settings.local.json
-
 # Docs (kept locally, not tracked)
 docs/

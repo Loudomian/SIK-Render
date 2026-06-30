@@ -9,6 +9,8 @@
     "dialog:allow-open",
     "dialog:allow-save",
     "log:default",
-    "notification:default"
+    "notification:default",
+    "updater:default",
+    "process:allow-restart"
   ]
 }

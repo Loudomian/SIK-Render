@@ -31,7 +31,17 @@
               </span>
             </button>
             <div class="app-brand-copy">
-              <span class="app-brand-title">SIK Render</span>
+              <span class="app-brand-title-row">
+                <span class="app-brand-title">SIK Render</span>
+                <button
+                  v-if="updaterAvailable"
+                  class="app-update-badge"
+                  type="button"
+                  @click="openUpdateModal"
+                >
+                  <UBadge label="NEW" color="error" variant="subtle" class="page-eyebrow" />
+                </button>
+              </span>
             </div>
           </div>
 
@@ -60,12 +70,103 @@
           <NuxtPage />
         </UContainer>
       </main>
+
+      <UModal
+        :open="updateModalOpen"
+        :close="false"
+        title="发现新版本"
+        :ui="{ content: 'job-modal-content settings-modal-content' }"
+        @update:open="handleUpdateModalOpenChange"
+      >
+        <template #body>
+          <div class="modal-stack">
+            <section class="surface-panel settings-field-panel settings-update-version-panel">
+              <div class="settings-field-copy">
+                <div class="settings-update-version-row">
+                  <p class="settings-field-title">SIK Render v{{ updateVersion }}</p>
+                  <UButton
+                    icon="i-lucide-external-link"
+                    label="前往发布页"
+                    color="neutral"
+                    variant="ghost"
+                    size="xs"
+                    @click="openUpdateReleasePage"
+                  />
+                </div>
+                <p class="hint-text">当前版本：v{{ updateCurrentVersion }}</p>
+                <p v-if="updateDate" class="hint-text">发布时间：{{ updateDate }}</p>
+              </div>
+            </section>
+
+            <section class="surface-panel settings-field-panel">
+              <div class="settings-field-copy">
+                <p class="settings-field-title">更新说明</p>
+                <div class="settings-update-notes">
+                  <template v-if="updateNoteBlocks.length">
+                    <template v-for="(block, index) in updateNoteBlocks" :key="index">
+                      <p v-if="block.type === 'paragraph'">{{ block.text }}</p>
+                      <p v-else-if="block.type === 'heading'" class="settings-update-notes-heading">
+                        {{ block.text }}
+                      </p>
+                      <div v-else class="settings-update-notes-list" role="list">
+                        <div
+                          v-for="(item, itemIndex) in block.items"
+                          :key="itemIndex"
+                          class="settings-update-notes-list-item"
+                          role="listitem"
+                        >
+                          <span class="settings-update-notes-dot" aria-hidden="true" />
+                          <span class="settings-update-notes-list-text">{{ item }}</span>
+                        </div>
+                      </div>
+                    </template>
+                  </template>
+                  <p v-else>此版本没有提供更新说明。</p>
+                </div>
+              </div>
+            </section>
+
+            <UAlert
+              v-if="updateError"
+              color="error"
+              variant="subtle"
+              title="更新失败"
+              :description="updateError"
+            />
+
+            <div class="modal-actions settings-modal-actions">
+              <div class="settings-modal-actions-start" />
+              <div class="settings-modal-actions-end">
+                <UButton
+                  icon="i-lucide-clock"
+                  label="稍后"
+                  color="neutral"
+                  variant="outline"
+                  :disabled="installingUpdate"
+                  @click="updateModalOpen = false"
+                />
+                <UButton
+                  icon="i-lucide-download"
+                  label="下载并安装"
+                  color="primary"
+                  variant="solid"
+                  :loading="installingUpdate"
+                  @click="installAvailableUpdate"
+                />
+              </div>
+            </div>
+          </div>
+        </template>
+      </UModal>
     </div>
   </UApp>
 </template>
 
 <script setup lang="ts">
 import { invoke } from '@tauri-apps/api/core'
+import { check } from '@tauri-apps/plugin-updater'
+import { relaunch } from '@tauri-apps/plugin-process'
+import { open as openUrl } from '@tauri-apps/plugin-shell'
 import appIconLightUrl from '~/assets/app-icon-light.png'
 import appIconDarkUrl from '~/assets/app-icon-dark.png'
 
@@ -73,6 +174,8 @@ const jobsStore = useJobsStore()
 const settingsStore = useSettingsStore()
 const { onProgress, onJobUpdated, onLog, onQueueState } = useRenderEvents()
 const shadowRecoveryToast = useShadowRecoveryToast()
+const updaterState = useUpdaterState()
+const toast = useToast()
 const CONTEXT_MENU_ALLOW_SELECTOR = '[data-context-menu]'
 
 const navItems = computed(() => [
@@ -113,6 +216,25 @@ function resolveTheme(theme: 'dark' | 'light' | 'system') {
 
 const resolvedTheme = computed(() => resolveTheme(settingsStore.settings.theme))
 const brandToggleTitle = computed(() => resolvedTheme.value === 'dark' ? '切换到浅色模式' : '切换到深色模式')
+const updaterAvailable = computed(() => updaterState.available.value)
+const updateModalOpen = updaterState.modalOpen
+const installingUpdate = ref(false)
+const updateError = ref('')
+const updateVersion = computed(() => updaterState.version.value || '未知版本')
+const updateCurrentVersion = computed(() => updaterState.latestUpdate.value?.currentVersion || '未知版本')
+const updateDate = computed(() => formatUpdateDate(updaterState.latestUpdate.value?.date))
+const updateNoteBlocks = computed(() => parseUpdateNotes(updaterState.latestUpdate.value?.body))
+const updateReleaseUrl = computed(() => {
+  const version = updaterState.latestUpdate.value?.version
+  if (!version) return 'https://github.com/Loudomian/SIK-Render/releases'
+  const tag = version.startsWith('v') ? version : `v${version}`
+  return `https://github.com/Loudomian/SIK-Render/releases/tag/${tag}`
+})
+
+type UpdateNoteBlock =
+  | { type: 'heading'; text: string }
+  | { type: 'paragraph'; text: string }
+  | { type: 'list'; items: string[] }
 
 function applyThemeClass(theme: 'dark' | 'light' | 'system') {
   const resolved = resolveTheme(theme)
@@ -134,6 +256,92 @@ function handleGlobalContextMenu(event: MouseEvent) {
   event.preventDefault()
 }
 
+function formatUpdateDate(value?: string) {
+  if (!value) return ''
+
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+
+  return new Intl.DateTimeFormat('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(date)
+}
+
+function parseUpdateNotes(body?: string): UpdateNoteBlock[] {
+  if (!body?.trim()) return []
+
+  const lines = body
+    .replaceAll('\r\n', '\n')
+    .split('\n')
+    .map(line => line.trim())
+
+  while (lines.length && !lines[0]) lines.shift()
+  if (/^#{1,6}\s+changes since\b/i.test(lines[0] ?? '')) {
+    lines.shift()
+  }
+  while (lines.length && !lines[0]) lines.shift()
+
+  const blocks: UpdateNoteBlock[] = []
+  let paragraph: string[] = []
+  let listItems: string[] = []
+
+  const flushParagraph = () => {
+    if (!paragraph.length) return
+    blocks.push({ type: 'paragraph', text: paragraph.join(' ') })
+    paragraph = []
+  }
+
+  const flushList = () => {
+    if (!listItems.length) return
+    blocks.push({ type: 'list', items: listItems })
+    listItems = []
+  }
+
+  for (const line of lines) {
+    if (!line) {
+      flushParagraph()
+      flushList()
+      continue
+    }
+
+    const heading = line.match(/^#{1,6}\s+(.+)$/)
+    if (heading) {
+      flushParagraph()
+      flushList()
+      blocks.push({ type: 'heading', text: cleanMarkdownInline(heading[1] ?? '') })
+      continue
+    }
+
+    const listItem = line.match(/^[-*]\s+(.+)$/)
+    if (listItem) {
+      flushParagraph()
+      listItems.push(cleanMarkdownInline(listItem[1] ?? ''))
+      continue
+    }
+
+    flushList()
+    paragraph.push(cleanMarkdownInline(line))
+  }
+
+  flushParagraph()
+  flushList()
+
+  return blocks
+}
+
+function cleanMarkdownInline(value: string) {
+  return value
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    .replace(/\*([^*]+)\*/g, '$1')
+    .replace(/\[([^\]]+)]\([^)]+\)/g, '$1')
+    .trim()
+}
+
 async function handleBrandIconClick() {
   try {
     await settingsStore.toggleTheme()
@@ -153,6 +361,69 @@ async function notifyAppReadyAfterPaint() {
     await invoke('app_ready')
   } catch (error) {
     console.error('Failed to finalize app startup:', error)
+  }
+}
+
+async function checkForAvailableUpdate() {
+  try {
+    if (shouldUseMockUpdate()) {
+      updaterState.setUpdate(createMockUpdate())
+      return
+    }
+    updaterState.setUpdate(await check())
+  } catch (error) {
+    console.debug('Background update check failed:', error)
+  }
+}
+
+function openUpdateModal() {
+  if (!updaterState.latestUpdate.value) return
+  updateError.value = ''
+  updaterState.modalOpen.value = true
+}
+
+function handleUpdateModalOpenChange(value: boolean) {
+  if (installingUpdate.value) return
+  updaterState.modalOpen.value = value
+  if (!value) updateError.value = ''
+}
+
+async function openUpdateReleasePage() {
+  try {
+    await openUrl(updateReleaseUrl.value)
+  } catch (error) {
+    toast.add({
+      title: '无法打开发布页',
+      description: error instanceof Error ? error.message : String(error),
+      color: 'error',
+    })
+  }
+}
+
+async function installAvailableUpdate() {
+  if (installingUpdate.value) return
+
+  const update = updaterState.latestUpdate.value
+  if (!update) {
+    updateError.value = '更新信息已失效，请稍后重新检查。'
+    return
+  }
+
+  installingUpdate.value = true
+  updateError.value = ''
+
+  try {
+    await update.downloadAndInstall()
+    toast.add({
+      title: '更新安装完成',
+      description: '应用将重启以完成更新。',
+      color: 'success',
+    })
+    await relaunch()
+  } catch (error) {
+    updateError.value = error instanceof Error ? error.message : String(error)
+  } finally {
+    installingUpdate.value = false
   }
 }
 
@@ -178,6 +449,7 @@ onMounted(async () => {
     jobsStore.fetchQueueState(),
     settingsStore.load(),
   ])
+  void checkForAvailableUpdate()
   unlisteners.push(await onProgress(jobsStore.applyProgress))
   unlisteners.push(await onJobUpdated(jobsStore.applyJobUpdate))
   unlisteners.push(await onLog((event) => {
