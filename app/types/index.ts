@@ -46,6 +46,34 @@ export interface RenderJob {
   remainingSecs?: number | null
 }
 
+export interface RemoteJobSnapshot {
+  id: string
+  jobNumber: number
+  name: string
+  note: string | null
+  status: JobStatus
+  renderMode: RenderMode
+  outputFormat: string
+  outputPath: string
+  blendFile: string
+  originalFrameStart: number
+  originalFrameEnd: number
+  frameStart: number
+  frameEnd: number
+  crashCount: number
+  shadowResolutionScaleOverride?: number | null
+  lastRenderedFrame?: number | null
+  previewWidth: number | null
+  previewHeight: number | null
+  createdAt: number
+  startedAt: number | null
+  finishedAt: number | null
+  currentFrame?: number | null
+  totalFrames?: number | null
+  timeElapsed?: number | null
+  remainingSecs?: number | null
+}
+
 export interface AddJobPayload {
   name: string
   note?: string | null
@@ -278,7 +306,7 @@ export interface NodeInterfaceInfo {
 
 export interface PeerInfo {
   node: NodeInfo
-  jobs: RenderJob[]
+  jobs: RemoteJobSnapshot[]
   queuePaused: boolean
   connected: boolean
   firstSeenAt?: number | null
@@ -297,7 +325,7 @@ export interface PeerLostEvent {
 
 export interface PeerJobUpdatedEvent {
   nodeId: string
-  job: RenderJob
+  job: RemoteJobSnapshot
 }
 
 export interface PeerQueueStateEvent {
@@ -313,6 +341,12 @@ export interface PeerProgressEvent {
   timeElapsed: number
   memoryMb: number
   remainingSecs: number | null
+}
+
+export interface PeerLogEvent {
+  nodeId: string
+  jobId: string
+  line: string
 }
 
 export type NodeJobEventKind =

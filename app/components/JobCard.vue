@@ -188,7 +188,7 @@ import { useRouter } from 'vue-router'
 import type { RenderJob } from '~/types'
 import { JOB_STATUS_COLOR, JOB_STATUS_LABEL } from '~/composables/useJobStatus'
 import { formatQueueOrderLabel, RENDER_QUEUE_ORDER_HIDDEN_STATUSES, resolveQueueOrder } from '~/composables/useQueueOrder'
-import { formatShortTimestamp } from '~/utils/date-format'
+import { formatDuration, formatShortTimestamp } from '~/utils/date-format'
 import { resolveOutputDirectory } from '~/utils/output-path'
 import { captureVideoPoster } from '~/utils/video-preview'
 
@@ -272,9 +272,7 @@ const previewVisible = ref(false)
 const previewLoading = ref(false)
 const lightboxOpen = ref(false)
 const previewVideoEl = ref<HTMLVideoElement | null>(null)
-const cardInfoEl = ref<HTMLElement | null>(null)
-const cardInfoHeight = ref<number | null>(null)
-let cardInfoResizeObserver: ResizeObserver | null = null
+const { cardInfoEl, cardInfoHeight, syncHeightAfterTick } = useCardInfoHeight()
 let previewLoadToken = 0
 let previewRevealTimer = 0
 let previewPersistKey: string | null = null
@@ -294,20 +292,6 @@ const previewFrameEnd = computed(() => {
   const capped = job.frameStart + progressed - 1
   return Math.min(job.frameEnd, Math.max(job.frameStart, capped))
 })
-
-function syncCardInfoHeight() {
-  const el = cardInfoEl.value
-  if (!el) return
-  cardInfoHeight.value = Math.round(el.getBoundingClientRect().height)
-}
-
-function formatDuration(ms: number) {
-  const s = Math.round(ms / 1000)
-  if (s < 60) return `${s}s`
-  const m = Math.floor(s / 60)
-  if (m < 60) return `${m}m ${s % 60}s`
-  return `${Math.floor(m / 60)}h ${m % 60}m`
-}
 
 function openDetails() {
   router.push(`/jobs/${props.job.id}`)
@@ -544,26 +528,11 @@ watch(
     props.job.currentFrame,
     props.job.totalFrames,
   ] as const,
-  async () => {
-    await nextTick()
-    syncCardInfoHeight()
-  },
+  () => { void syncHeightAfterTick() },
   { flush: 'post' },
 )
 
-onMounted(() => {
-  if (!cardInfoEl.value) return
-  syncCardInfoHeight()
-  cardInfoResizeObserver = new ResizeObserver((entries) => {
-    const entry = entries[0]
-    if (!entry) return
-    cardInfoHeight.value = Math.round(entry.contentRect.height)
-  })
-  cardInfoResizeObserver.observe(cardInfoEl.value)
-})
-
 onUnmounted(() => {
-  cardInfoResizeObserver?.disconnect()
   window.clearTimeout(previewRevealTimer)
 })
 </script>

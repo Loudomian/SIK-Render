@@ -42,8 +42,13 @@ pub fn list_node_interfaces() -> Result<Vec<NodeInterfaceInfo>, String> {
 }
 
 #[tauri::command]
-pub fn get_node_job_events(node_id: String, job_id: String) -> Result<Vec<NodeJobEvent>, String> {
-    crate::network::events::load_node_job_events(&node_id, &job_id)
+pub async fn get_node_job_events(
+    node_id: String,
+    job_id: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<NodeJobEvent>, String> {
+    crate::network::events::load_node_job_events(&state.pool, &node_id, &job_id)
+        .await
         .map_err(|error| error.to_string())
 }
 
@@ -61,16 +66,11 @@ pub async fn forget_peer(node_id: String, state: State<'_, AppState>) -> Result<
         peers.remove(&node_id)
     };
 
-    crate::network::events::delete_node_events(&node_id).map_err(|error| error.to_string())?;
+    crate::network::events::delete_node_events(&state.pool, &node_id)
+        .await
+        .map_err(|error| error.to_string())?;
     if removed.is_some() || crate::network::peers::load_peer_record(&node_id).map_err(|error| error.to_string())?.is_some() {
         crate::network::peers::delete_peer_record(&node_id).map_err(|error| error.to_string())?;
     }
     Ok(())
-}
-
-#[tauri::command]
-pub fn get_node_events_dir() -> Result<String, String> {
-    crate::app_paths::node_events_dir()
-        .map(|p| p.to_string_lossy().to_string())
-        .map_err(|error| error.to_string())
 }

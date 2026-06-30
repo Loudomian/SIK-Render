@@ -148,17 +148,7 @@
         <UCard variant="subtle" :ui="{ root: 'detail-section detail-full log-section node-event-section', body: 'detail-card-body' }">
           <div class="log-header">
             <h2 class="detail-card-title log-title">节点事件</h2>
-            <div class="log-header-actions">
-              <UButton
-                v-if="nodeEventsDir"
-                icon="i-lucide-folder-open"
-                label="打开日志目录"
-                color="neutral"
-                variant="subtle"
-                size="sm"
-                @click="openPath(nodeEventsDir)"
-              />
-            </div>
+            <div class="log-header-actions" />
           </div>
           <div class="node-event-surface">
             <div ref="eventPanelEl" class="node-event-panel">
@@ -178,6 +168,16 @@
             </div>
           </div>
         </UCard>
+
+        <UCard variant="subtle" :ui="{ root: 'detail-section detail-full log-section node-event-section', body: 'detail-card-body' }">
+          <div class="log-header">
+            <h2 class="detail-card-title log-title">实时渲染日志</h2>
+            <div class="log-header-actions" />
+          </div>
+          <div class="node-event-surface">
+            <pre ref="remoteLogPanelEl" class="node-event-panel remote-log-panel"><span v-if="remoteLogs.length === 0" class="log-empty">暂无远端日志。节点渲染时会实时显示 Blender 输出。</span><template v-else>{{ remoteLogs.join('\n') }}</template></pre>
+          </div>
+        </UCard>
       </div>
     </section>
   </div>
@@ -191,11 +191,10 @@ import { formatShortTimestamp, formatTimestamp } from '~/utils/date-format'
 
 const route = useRoute()
 const nodesStore = useNodesStore()
-const { getNodeEventsDir, openPath } = useTauri()
 const loading = ref(true)
-const nodeEventsDir = ref<string | null>(null)
 const durationNow = ref(Date.now())
 const eventPanelEl = ref<HTMLElement | null>(null)
+const remoteLogPanelEl = ref<HTMLElement | null>(null)
 
 const STATUS_LABEL = JOB_STATUS_LABEL
 const nodeId = computed(() => route.params.nodeId as string)
@@ -204,6 +203,7 @@ const peer = computed(() => nodesStore.peers[nodeId.value] ?? null)
 const job = computed(() => peer.value?.jobs.find(item => item.id === jobId.value) ?? null)
 const queueJobs = computed(() => peer.value?.jobs ?? [])
 const statusBadgeColor = computed(() => JOB_STATUS_COLOR[job.value?.status ?? 'pending'] ?? 'neutral')
+const remoteLogs = computed(() => nodesStore.getPeerLogs(nodeId.value, jobId.value))
 const displayEvents = computed(() => {
   const seen = new Set<string>()
   return queueJobs.value
@@ -400,18 +400,9 @@ async function refreshPreview() {
   }
 }
 
-async function refreshNodeEventsDir() {
-  try {
-    nodeEventsDir.value = await getNodeEventsDir()
-  } catch {
-    nodeEventsDir.value = null
-  }
-}
-
 watch(previewSourceUrl, () => { void refreshPreview() }, { immediate: true })
 
 onMounted(async () => {
-  void refreshNodeEventsDir()
   durationRefreshTimer = window.setInterval(() => {
     durationNow.value = Date.now()
   }, 30_000)
@@ -439,6 +430,17 @@ watch(
     const panel = eventPanelEl.value
     if (!panel) return
     panel.scrollTop = 0
+  },
+  { flush: 'post' },
+)
+
+watch(
+  () => remoteLogs.value.length,
+  async () => {
+    await nextTick()
+    const panel = remoteLogPanelEl.value
+    if (!panel) return
+    panel.scrollTop = panel.scrollHeight
   },
   { flush: 'post' },
 )

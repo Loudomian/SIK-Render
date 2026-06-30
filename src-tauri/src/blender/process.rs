@@ -12,6 +12,8 @@ use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Child;
 use tokio::sync::Mutex;
 
+const FINAL_FRAME_EXIT_GRACE: std::time::Duration = std::time::Duration::from_secs(20);
+
 async fn generate_quick_mp4_preview(
     app: &AppHandle,
     state: &AppState,
@@ -107,8 +109,8 @@ fn emit_render_progress(app: &AppHandle, event: RenderProgressEvent) {
             .ws_broadcaster
             .send(crate::network::types::WsMessage::Progress {
                 job_id: event.job_id,
-                frame: event.frame as i32,
-                total_frames: event.total_frames as i32,
+                frame: event.frame,
+                total_frames: event.total_frames,
                 time_elapsed: event.time_elapsed,
                 memory_mb: event.memory_mb,
                 remaining_secs: event.remaining_secs,
@@ -121,6 +123,24 @@ fn emit_render_progress(app: &AppHandle, event: RenderProgressEvent) {
 pub struct RenderLogEvent {
     pub job_id: String,
     pub line: String,
+}
+
+fn emit_render_log_line(app: &AppHandle, job_id: &str, line: String) {
+    let _ = app.emit(
+        "render-log",
+        RenderLogEvent {
+            job_id: job_id.to_string(),
+            line: line.clone(),
+        },
+    );
+    if let Some(state) = app.try_state::<crate::state::AppState>() {
+        let _ = state
+            .ws_broadcaster
+            .send(crate::network::types::WsMessage::Log {
+                job_id: job_id.to_string(),
+                line,
+            });
+    }
 }
 
 /// Sliding window for per-frame render times used to compute stable ETA.
@@ -483,9 +503,10 @@ pub async fn run_job(app: AppHandle, state: AppState, job: RenderJob) -> Result<
             Ok(c) => c,
             Err(e) => break Err(e),
         };
+        let child_pid = child.id();
         {
             let mut active = state.active_jobs.lock().await;
-            if let Some(pid) = child.id() {
+            if let Some(pid) = child_pid {
                 active.insert(job.id.clone(), pid);
             }
         }
@@ -502,6 +523,8 @@ pub async fn run_job(app: AppHandle, state: AppState, job: RenderJob) -> Result<
         let stderr = child.stderr.take().expect("stderr not captured");
 
         let render_running = Arc::new(AtomicBool::new(true));
+        let final_frame_watchdog_cancelled = Arc::new(AtomicBool::new(false));
+        let final_frame_watchdog_killed = Arc::new(AtomicBool::new(false));
         let progress_started_at = Arc::new(std::time::Instant::now());
         let last_primary_progress_ms = Arc::new(AtomicU64::new(0));
         // Per-run stderr buffer for error messages on failure.
@@ -584,13 +607,7 @@ pub async fn run_job(app: AppHandle, state: AppState, job: RenderJob) -> Result<
             let mut lines = BufReader::new(stderr).lines();
             while let Ok(Some(line)) = lines.next_line().await {
                 let rendered_line = crate::app_paths::timestamped_log_line(&line);
-                let _ = app_stderr.emit(
-                    "render-log",
-                    RenderLogEvent {
-                        job_id: job_id_stderr.clone(),
-                        line: rendered_line.clone(),
-                    },
-                );
+                emit_render_log_line(&app_stderr, &job_id_stderr, rendered_line.clone());
                 if let Some(p) = parser::parse_time_progress(&line) {
                     persist_job_progress(
                         &state_stderr,
@@ -620,18 +637,13 @@ pub async fn run_job(app: AppHandle, state: AppState, job: RenderJob) -> Result<
         let mut stdout_last_frame = actual_start.max(job_frame_start) as u32;
         let mut latest_frame_time_secs: Option<f32> = None;
         let mut quick_mp4_progress_seen = false;
+        let mut final_frame_watchdog_started = false;
         // Sliding window: skip first 3 warmup frames, then average last 8.
         let mut frame_window = FrameTimeWindow::new(3, 8);
         let mut lines = BufReader::new(stdout).lines();
         while let Some(line) = lines.next_line().await? {
             let rendered_line = crate::app_paths::timestamped_log_line(&line);
-            let _ = app.emit(
-                "render-log",
-                RenderLogEvent {
-                    job_id: job.id.clone(),
-                    line: rendered_line.clone(),
-                },
-            );
+            emit_render_log_line(&app, &job.id, rendered_line.clone());
             {
                 let _guard = log_write_lock_stdout.lock().await;
                 let _ = crate::app_paths::append_log_line(&log_file_path_stdout, &rendered_line);
@@ -692,6 +704,35 @@ pub async fn run_job(app: AppHandle, state: AppState, job: RenderJob) -> Result<
                         remaining_secs: remaining,
                     },
                 );
+
+                if completed >= total_frames && !quick_mp4 && !final_frame_watchdog_started {
+                    final_frame_watchdog_started = true;
+                    if let Some(pid) = child_pid {
+                        let watchdog_cancelled = final_frame_watchdog_cancelled.clone();
+                        let watchdog_killed = final_frame_watchdog_killed.clone();
+                        let log_file_path_watchdog = log_file_path.clone();
+                        let log_write_lock_watchdog = log_write_lock.clone();
+                        let app_watchdog = app.clone();
+                        let job_id_watchdog = job.id.clone();
+                        tokio::spawn(async move {
+                            tokio::time::sleep(FINAL_FRAME_EXIT_GRACE).await;
+                            if watchdog_cancelled.load(Ordering::Relaxed) {
+                                return;
+                            }
+
+                            watchdog_killed.store(true, Ordering::Relaxed);
+                            let line = format!(
+                                "[watchdog] Final frame was saved, but Blender did not exit within {}s. Terminating Blender process tree so post-render tasks can continue.",
+                                FINAL_FRAME_EXIT_GRACE.as_secs()
+                            );
+                            emit_render_log_line(&app_watchdog, &job_id_watchdog, line.clone());
+                            let _guard = log_write_lock_watchdog.lock().await;
+                            let _ =
+                                crate::app_paths::append_log_line(&log_file_path_watchdog, &line);
+                            let _ = AppState::kill_process_tree(pid);
+                        });
+                    }
+                }
             }
             if let Some(p) = parser::parse_time_progress(&line) {
                 latest_frame_time_secs = Some(p.time_elapsed);
@@ -726,6 +767,7 @@ pub async fn run_job(app: AppHandle, state: AppState, job: RenderJob) -> Result<
                 );
             }
         }
+        final_frame_watchdog_cancelled.store(true, Ordering::Relaxed);
 
         let _ = stderr_task.await;
         let exit_status = child.wait().await?;
@@ -736,7 +778,7 @@ pub async fn run_job(app: AppHandle, state: AppState, job: RenderJob) -> Result<
         }
         state.active_jobs.lock().await.remove(&job.id);
 
-        if exit_status.success() {
+        if exit_status.success() || final_frame_watchdog_killed.load(Ordering::Relaxed) {
             if quick_mp4 {
                 generate_quick_mp4_preview(&app, &state, &job, &log_file_path).await;
             }
@@ -819,13 +861,7 @@ pub async fn run_job(app: AppHandle, state: AppState, job: RenderJob) -> Result<
         };
 
         log::warn!("Job {}: {}", job.id, recovery_line);
-        let _ = app.emit(
-            "render-log",
-            RenderLogEvent {
-                job_id: job.id.clone(),
-                line: recovery_line.clone(),
-            },
-        );
+        emit_render_log_line(&app, &job.id, recovery_line.clone());
         {
             let _guard = log_write_lock.lock().await;
             let _ = crate::app_paths::append_log_line(&log_file_path, &recovery_line);

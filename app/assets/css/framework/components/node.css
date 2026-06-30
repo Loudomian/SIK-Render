@@ -243,6 +243,18 @@
   overflow-y: auto;
 }
 
+.remote-log-panel {
+  display: block;
+  padding: 0.85rem 1rem;
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--ui-text-toned);
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 0.8rem;
+  line-height: 1.6;
+}
+
 .node-event-row {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);

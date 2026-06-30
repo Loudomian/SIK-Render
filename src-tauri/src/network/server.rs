@@ -1,4 +1,4 @@
-use crate::network::types::{NodeInfo, NodeInterfaceInfo, WsMessage};
+use crate::network::types::{NodeInfo, NodeInterfaceInfo, RemoteJobSnapshot, WsMessage};
 use crate::queue::job::{DbRenderJob, RenderJob};
 use crate::state::AppState;
 use axum::{
@@ -54,7 +54,7 @@ async fn handle_node_info(
 
 async fn handle_jobs(
     AxumState((_, state)): AxumState<(AppHandle, AppState)>,
-) -> Json<Vec<RenderJob>> {
+) -> Json<Vec<RemoteJobSnapshot>> {
     Json(load_all_jobs(&state).await.unwrap_or_default())
 }
 
@@ -93,9 +93,12 @@ async fn handle_ws_upgrade(
 
 async fn handle_ws(socket: WebSocket, app: AppHandle, state: AppState) {
     let mut rx = state.ws_broadcaster.subscribe();
-    let (mut sender, _reader) = socket.split();
+    let (mut sender, mut reader) = socket.split();
+    let mut heartbeat = tokio::time::interval(std::time::Duration::from_secs(30));
+    heartbeat.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
     let hello = WsMessage::Hello {
+        protocol_version: 1,
         node: build_node_info(&app, &state).await,
         jobs: load_all_jobs(&state).await.unwrap_or_default(),
         queue_paused: state.is_queue_paused(),
@@ -108,17 +111,37 @@ async fn handle_ws(socket: WebSocket, app: AppHandle, state: AppState) {
     }
 
     loop {
-        match rx.recv().await {
-            Ok(msg) => {
-                let Ok(text) = serde_json::to_string(&msg) else {
+        tokio::select! {
+            result = rx.recv() => {
+                match result {
+                    Ok(msg) => {
+                        let Ok(text) = serde_json::to_string(&msg) else {
+                            continue;
+                        };
+                        if sender.send(Message::Text(text.into())).await.is_err() {
+                            break;
+                        }
+                    }
+                    Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
+                    Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
+                }
+            }
+            _ = heartbeat.tick() => {
+                let Ok(text) = serde_json::to_string(&WsMessage::Ping) else {
                     continue;
                 };
                 if sender.send(Message::Text(text.into())).await.is_err() {
                     break;
                 }
             }
-            Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
-            Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
+            msg = reader.next() => {
+                match msg {
+                    Some(Ok(Message::Close(_))) | None => break,
+                    Some(Ok(Message::Text(_))) => {}
+                    Some(Err(_)) => break,
+                    _ => {}
+                }
+            }
         }
     }
 }
@@ -316,7 +339,7 @@ fn content_type_for_path(path: &std::path::Path) -> &'static str {
     }
 }
 
-async fn load_all_jobs(state: &AppState) -> anyhow::Result<Vec<RenderJob>> {
+async fn load_all_jobs(state: &AppState) -> anyhow::Result<Vec<RemoteJobSnapshot>> {
     let rows = sqlx::query_as::<_, DbRenderJob>(
         "SELECT id, job_number, name, note, crash_count,
                 auto_transcode_mp4, transcode_name_override, transcode_fps_override,
@@ -334,5 +357,9 @@ async fn load_all_jobs(state: &AppState) -> anyhow::Result<Vec<RenderJob>> {
     .fetch_all(&state.pool)
     .await?;
 
-    Ok(rows.into_iter().map(RenderJob::from).collect())
+    Ok(rows
+        .into_iter()
+        .map(RenderJob::from)
+        .map(|job| RemoteJobSnapshot::from_job(&job))
+        .collect())
 }

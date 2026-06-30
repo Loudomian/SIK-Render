@@ -22,9 +22,6 @@ const tauriApi = {
   forgetPeer: (nodeId: string) =>
     invoke<void>('forget_peer', { nodeId }),
 
-  getNodeEventsDir: () =>
-    invoke<string>('get_node_events_dir'),
-
   listNodeInterfaces: () =>
     invoke<NodeInterfaceInfo[]>('list_node_interfaces'),
 
