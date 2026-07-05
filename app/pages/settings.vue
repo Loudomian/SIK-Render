@@ -177,7 +177,7 @@
         <section class="surface-panel settings-field-panel">
           <div class="settings-field-copy">
             <p class="settings-field-title">版权信息</p>
-            <p class="settings-brand-line">SIKFILM · 灌灌小狗</p>
+            <p class="settings-brand-line">SIKFILM · 罐罐小狗</p>
             <p class="hint-text">Made with ❤️ by Loudomian and 空气小怪.</p>
           </div>
         </section>

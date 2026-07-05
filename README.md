@@ -62,13 +62,18 @@ Development builds store runtime files in the repository root. Production builds
 %APPDATA%\SIKFilm\Render\
 ```
 
-Key files:
+Key files and directories:
 
-- `sik-render.toml`: settings
-- `node-id.toml`: node identity
-- `sik-render.sqlite3`: job database
-- `jobs\`: job logs, snapshots, and previews
-- `Logs\<version>\sikrender_<timestamp>.log`: app logs
+- `sik-render.toml`: app settings
+- `node-id.toml`: local node identity
+- `sik-render.sqlite3`: render/transcode job database
+- `jobs\blender\blender_job_0001_abcd\job.toml`: Blender job snapshot
+- `jobs\blender\blender_job_0001_abcd\log\blender_<timestamp>.log`: Blender job logs
+- `jobs\blender\blender_job_0001_abcd\preview.jpg`: Blender job preview
+- `jobs\ffmpeg\ffmpeg_job_0001_abcd\job.toml`: FFmpeg job snapshot
+- `jobs\ffmpeg\ffmpeg_job_0001_abcd\log\ffmpeg_<timestamp>.log`: FFmpeg job logs
+- `logs\app\<version>\sikrender_<timestamp>.log`: app logs
+- `nodes\peers\*.toml`: persisted LAN peer snapshots
 
 ## License
 
