@@ -8,43 +8,45 @@
         >
           <div class="detail-context-menu-target" data-context-menu>
             <div class="detail-heading-stack">
-              <div class="detail-heading-line">
-                <UBadge
-                  :label="STATUS_LABEL[job.status] ?? job.status"
-                  :color="statusBadgeColor"
-                  variant="subtle"
-                />
-                <UBadge v-if="orderBadgeLabel" :label="orderBadgeLabel" color="neutral" variant="subtle" />
-                <UBadge
-                  v-if="job.crashCount > 0"
-                  :label="`崩溃 ${job.crashCount} 次`"
-                  color="warning"
-                  variant="subtle"
-                />
-              </div>
               <div class="detail-title-row">
-                <UBreadcrumb
-                  as="h1"
-                  :items="detailBreadcrumbItems"
-                  :ui="{
-                    root: 'detail-breadcrumb',
-                    list: 'detail-breadcrumb-list',
-                    item: 'detail-breadcrumb-item',
-                    link: 'detail-breadcrumb-link',
-                    linkLabel: 'detail-breadcrumb-label',
-                    separator: 'detail-breadcrumb-separator-wrap',
-                    separatorIcon: 'detail-breadcrumb-separator',
-                  }"
-                >
-                  <template #separator>
-                    <span class="detail-breadcrumb-separator" aria-hidden="true">&gt;</span>
-                  </template>
-                  <template #item-label="{ item, active }">
-                    <span :class="active ? 'detail-breadcrumb-current' : 'detail-breadcrumb-ancestor'">
-                      {{ item.label }}
-                    </span>
-                  </template>
-                </UBreadcrumb>
+                <div class="detail-title-main">
+                  <UBreadcrumb
+                    as="h1"
+                    :items="detailBreadcrumbItems"
+                    :ui="{
+                      root: 'detail-breadcrumb',
+                      list: 'detail-breadcrumb-list',
+                      item: 'detail-breadcrumb-item',
+                      link: 'detail-breadcrumb-link',
+                      linkLabel: 'detail-breadcrumb-label',
+                      separator: 'detail-breadcrumb-separator-wrap',
+                      separatorIcon: 'detail-breadcrumb-separator',
+                    }"
+                  >
+                    <template #separator>
+                      <span class="detail-breadcrumb-separator" aria-hidden="true">&gt;</span>
+                    </template>
+                    <template #item-label="{ item, active }">
+                      <span :class="active ? 'detail-breadcrumb-current' : 'detail-breadcrumb-ancestor'">
+                        {{ item.label }}
+                      </span>
+                    </template>
+                  </UBreadcrumb>
+                  <div class="detail-title-badges">
+                    <UBadge
+                      :label="STATUS_LABEL[job.status] ?? job.status"
+                      :color="statusBadgeColor"
+                      variant="subtle"
+                    />
+                    <UBadge v-if="orderBadgeLabel" :label="orderBadgeLabel" color="neutral" variant="subtle" />
+                    <UBadge
+                      v-if="job.crashCount > 0"
+                      :label="`崩溃 ${job.crashCount} 次`"
+                      color="warning"
+                      variant="subtle"
+                    />
+                  </div>
+                </div>
                 <div class="detail-header-actions">
                   <UFieldGroup v-if="transcodeSupported" size="md" class="detail-action-fieldgroup">
                     <UButton
@@ -385,21 +387,25 @@
         <h2 class="detail-card-title">文件路径</h2>
         <div class="detail-info-stack">
           <section class="detail-info-item">
-            <h3 class="detail-info-label">工程文件</h3>
-            <div class="surface-panel path-row detail-path-row">
-              <span class="path-text" :title="job.blendFile">{{ job.blendFile }}</span>
-              <UTooltip text="在文件管理器中显示" :content="{ side: 'top', sideOffset: 6 }">
-                <UButton icon="i-lucide-external-link" color="neutral" variant="ghost" size="xs" square @click="openPath(job.blendFile)" />
+            <div class="detail-path-chip">
+              <span class="detail-path-label">工程文件：</span>
+              <button class="detail-path-text" type="button" :title="job.blendFile" @click="openPath(job.blendFile)">
+                {{ job.blendFile }}
+              </button>
+              <UTooltip text="复制路径" :content="{ side: 'top', sideOffset: 6 }">
+                <UButton icon="i-lucide-copy" color="neutral" variant="ghost" size="xs" square @click="copyPath(job.blendFile)" />
               </UTooltip>
             </div>
           </section>
           <section class="detail-info-item">
-            <h3 class="detail-info-label">输出路径</h3>
             <div class="detail-path-stack">
-              <div class="surface-panel path-row detail-path-row">
-                <span class="path-text" :title="job.outputPath">{{ job.outputPath }}</span>
-                <UTooltip text="打开输出目录" :content="{ side: 'top', sideOffset: 6 }">
-                  <UButton icon="i-lucide-external-link" color="neutral" variant="ghost" size="xs" square @click="openPath(resolveOutputDirectory(job.outputPath))" />
+              <div class="detail-path-chip">
+                <span class="detail-path-label">输出路径：</span>
+                <button class="detail-path-text" type="button" :title="job.outputPath" @click="openPath(resolveOutputDirectory(job.outputPath))">
+                  {{ job.outputPath }}
+                </button>
+                <UTooltip text="复制路径" :content="{ side: 'top', sideOffset: 6 }">
+                  <UButton icon="i-lucide-copy" color="neutral" variant="ghost" size="xs" square @click="copyPath(job.outputPath)" />
                 </UTooltip>
               </div>
             </div>
@@ -820,6 +826,20 @@ const transcodePrimaryAction = computed(() => {
 function openMetadataDialog() {
   if (!job.value) return
   metadataDialogOpen.value = true
+}
+
+async function copyPath(path: string) {
+  if (!path) return
+  try {
+    await navigator.clipboard.writeText(path)
+    toast.add({ title: '路径已复制', color: 'success' })
+  } catch (error) {
+    toast.add({
+      title: '复制路径失败',
+      description: error instanceof Error ? error.message : String(error),
+      color: 'error',
+    })
+  }
 }
 
 function buildJobContextMenuItems(currentJob: RenderJob) {

@@ -5,36 +5,38 @@
     <section class="page-hero detail-hero">
       <div class="page-hero-copy detail-title">
         <div class="detail-heading-stack">
-          <div class="detail-heading-line">
-            <UBadge :label="STATUS_LABEL[job.status] ?? job.status" :color="statusBadgeColor" variant="subtle" />
-            <UBadge :label="peer.connected ? '节点在线' : '节点断开'" :color="peer.connected ? 'success' : 'neutral'" variant="subtle" />
-            <UBadge v-if="job.renderMode === 'quick_mp4'" label="快速 MP4" color="neutral" variant="subtle" />
-            <UBadge v-if="job.crashCount > 0" :label="`崩溃 ${job.crashCount} 次`" color="warning" variant="subtle" />
-            <UBadge v-if="shadowScaleLabel" :label="shadowScaleLabel" color="warning" variant="subtle" />
-          </div>
           <div class="detail-title-row">
-            <UBreadcrumb
-              as="h1"
-              :items="detailBreadcrumbItems"
-              :ui="{
-                root: 'detail-breadcrumb',
-                list: 'detail-breadcrumb-list',
-                item: 'detail-breadcrumb-item',
-                link: 'detail-breadcrumb-link',
-                linkLabel: 'detail-breadcrumb-label',
-                separator: 'detail-breadcrumb-separator-wrap',
-                separatorIcon: 'detail-breadcrumb-separator',
-              }"
-            >
-              <template #separator>
-                <span class="detail-breadcrumb-separator" aria-hidden="true">&gt;</span>
-              </template>
-              <template #item-label="{ item, active }">
-                <span :class="active ? 'detail-breadcrumb-current' : 'detail-breadcrumb-ancestor'">
-                  {{ item.label }}
-                </span>
-              </template>
-            </UBreadcrumb>
+            <div class="detail-title-main">
+              <UBreadcrumb
+                as="h1"
+                :items="detailBreadcrumbItems"
+                :ui="{
+                  root: 'detail-breadcrumb',
+                  list: 'detail-breadcrumb-list',
+                  item: 'detail-breadcrumb-item',
+                  link: 'detail-breadcrumb-link',
+                  linkLabel: 'detail-breadcrumb-label',
+                  separator: 'detail-breadcrumb-separator-wrap',
+                  separatorIcon: 'detail-breadcrumb-separator',
+                }"
+              >
+                <template #separator>
+                  <span class="detail-breadcrumb-separator" aria-hidden="true">&gt;</span>
+                </template>
+                <template #item-label="{ item, active }">
+                  <span :class="active ? 'detail-breadcrumb-current' : 'detail-breadcrumb-ancestor'">
+                    {{ item.label }}
+                  </span>
+                </template>
+              </UBreadcrumb>
+              <div class="detail-title-badges">
+                <UBadge :label="STATUS_LABEL[job.status] ?? job.status" :color="statusBadgeColor" variant="subtle" />
+                <UBadge :label="peer.connected ? '节点在线' : '节点断开'" :color="peer.connected ? 'success' : 'neutral'" variant="subtle" />
+                <UBadge v-if="job.renderMode === 'quick_mp4'" label="快速 MP4" color="neutral" variant="subtle" />
+                <UBadge v-if="job.crashCount > 0" :label="`崩溃 ${job.crashCount} 次`" color="warning" variant="subtle" />
+                <UBadge v-if="shadowScaleLabel" :label="shadowScaleLabel" color="warning" variant="subtle" />
+              </div>
+            </div>
             <div class="detail-header-actions" />
           </div>
           <p v-if="job.note" class="page-note detail-note">{{ job.note }}</p>
@@ -49,15 +51,21 @@
           <h2 class="detail-card-title">文件路径</h2>
           <div class="detail-info-stack">
             <section class="detail-info-item">
-              <h3 class="detail-info-label">工程文件</h3>
-              <div class="surface-panel path-row detail-path-row">
-                <span class="path-text" :title="job.blendFile">{{ job.blendFile }}</span>
+              <div class="detail-path-chip">
+                <span class="detail-path-label">工程文件：</span>
+                <span class="detail-path-text" :title="job.blendFile">{{ job.blendFile }}</span>
+                <UTooltip text="复制路径" :content="{ side: 'top', sideOffset: 6 }">
+                  <UButton icon="i-lucide-copy" color="neutral" variant="ghost" size="xs" square @click="copyPath(job.blendFile)" />
+                </UTooltip>
               </div>
             </section>
             <section class="detail-info-item">
-              <h3 class="detail-info-label">输出路径</h3>
-              <div class="surface-panel path-row detail-path-row">
-                <span class="path-text" :title="job.outputPath">{{ job.outputPath }}</span>
+              <div class="detail-path-chip">
+                <span class="detail-path-label">输出路径：</span>
+                <span class="detail-path-text" :title="job.outputPath">{{ job.outputPath }}</span>
+                <UTooltip text="复制路径" :content="{ side: 'top', sideOffset: 6 }">
+                  <UButton icon="i-lucide-copy" color="neutral" variant="ghost" size="xs" square @click="copyPath(job.outputPath)" />
+                </UTooltip>
               </div>
             </section>
           </div>
@@ -191,6 +199,7 @@ import { formatShortTimestamp, formatTimestamp } from '~/utils/date-format'
 
 const route = useRoute()
 const nodesStore = useNodesStore()
+const toast = useToast()
 const loading = ref(true)
 const durationNow = ref(Date.now())
 const eventPanelEl = ref<HTMLElement | null>(null)
@@ -332,6 +341,20 @@ const previewText = computed(() => {
 
 function formatTime(timestamp: number) {
   return formatTimestamp(timestamp)
+}
+
+async function copyPath(path: string) {
+  if (!path) return
+  try {
+    await navigator.clipboard.writeText(path)
+    toast.add({ title: '路径已复制', color: 'success' })
+  } catch (error) {
+    toast.add({
+      title: '复制路径失败',
+      description: error instanceof Error ? error.message : String(error),
+      color: 'error',
+    })
+  }
 }
 
 function normalizeDisplayEvent(event: ReturnType<typeof nodesStore.getJobEvents>[number]) {

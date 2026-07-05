@@ -33,6 +33,18 @@
   min-width: 0;
 }
 
+.queue-heading-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.queue-heading-title h1 {
+  flex: 0 1 auto;
+}
+
 .queue-hero-actions-stack {
   display: flex;
   flex-wrap: wrap;

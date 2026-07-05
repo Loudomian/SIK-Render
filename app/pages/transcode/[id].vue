@@ -3,36 +3,38 @@
     <section class="page-hero detail-hero">
       <div class="page-hero-copy detail-title">
         <div class="detail-heading-stack">
-          <div class="detail-heading-line">
-            <UBadge :label="statusLabel(job.status)" :color="statusColor(job.status)" variant="subtle" />
-            <UBadge :label="job.sourceType === 'blender_job' ? '来自 Blender Job' : '来自文件夹'" color="neutral" variant="subtle" />
-          </div>
           <div class="detail-title-row">
-            <UBreadcrumb
-              as="h1"
-              :items="[
-                { label: '转码队列', to: '/transcode' },
-                { label: `#${job.jobNumber} ${job.name}` },
-              ]"
-              :ui="{
-                root: 'detail-breadcrumb',
-                list: 'detail-breadcrumb-list',
-                item: 'detail-breadcrumb-item',
-                link: 'detail-breadcrumb-link',
-                linkLabel: 'detail-breadcrumb-label',
-                separator: 'detail-breadcrumb-separator-wrap',
-                separatorIcon: 'detail-breadcrumb-separator',
-              }"
-            >
-              <template #separator>
-                <span class="detail-breadcrumb-separator" aria-hidden="true">&gt;</span>
-              </template>
-              <template #item-label="{ item, active }">
-                <span :class="active ? 'detail-breadcrumb-current' : 'detail-breadcrumb-ancestor'">
-                  {{ item.label }}
-                </span>
-              </template>
-            </UBreadcrumb>
+            <div class="detail-title-main">
+              <UBreadcrumb
+                as="h1"
+                :items="[
+                  { label: '转码队列', to: '/transcode' },
+                  { label: `#${job.jobNumber} ${job.name}` },
+                ]"
+                :ui="{
+                  root: 'detail-breadcrumb',
+                  list: 'detail-breadcrumb-list',
+                  item: 'detail-breadcrumb-item',
+                  link: 'detail-breadcrumb-link',
+                  linkLabel: 'detail-breadcrumb-label',
+                  separator: 'detail-breadcrumb-separator-wrap',
+                  separatorIcon: 'detail-breadcrumb-separator',
+                }"
+              >
+                <template #separator>
+                  <span class="detail-breadcrumb-separator" aria-hidden="true">&gt;</span>
+                </template>
+                <template #item-label="{ item, active }">
+                  <span :class="active ? 'detail-breadcrumb-current' : 'detail-breadcrumb-ancestor'">
+                    {{ item.label }}
+                  </span>
+                </template>
+              </UBreadcrumb>
+              <div class="detail-title-badges">
+                <UBadge :label="statusLabel(job.status)" :color="statusColor(job.status)" variant="subtle" />
+                <UBadge :label="job.sourceType === 'blender_job' ? '来自 Blender Job' : '来自文件夹'" color="neutral" variant="subtle" />
+              </div>
+            </div>
             <div class="detail-header-actions">
               <UButton
                 v-if="job.status === 'running'"
@@ -73,36 +75,40 @@
         <h2 class="detail-card-title">文件路径</h2>
         <div class="detail-info-stack">
           <section class="detail-info-item">
-            <h3 class="detail-info-label">输入路径</h3>
-            <div class="surface-panel path-row detail-path-row">
-              <span class="path-text" :title="job.inputPath">{{ job.inputPath }}</span>
-              <UTooltip text="在文件管理器中显示" :content="{ side: 'top', sideOffset: 6 }">
+            <div class="detail-path-chip">
+              <span class="detail-path-label">输入路径：</span>
+              <button class="detail-path-text" type="button" :title="job.inputPath" @click="openPath(job.inputPath)">
+                {{ job.inputPath }}
+              </button>
+              <UTooltip text="复制路径" :content="{ side: 'top', sideOffset: 6 }">
                 <UButton
-                  icon="i-lucide-external-link"
+                  icon="i-lucide-copy"
                   color="neutral"
                   variant="ghost"
                   size="xs"
                   square
-                  @click="openPath(job.inputPath)"
+                  @click="copyPath(job.inputPath)"
                 />
               </UTooltip>
             </div>
           </section>
 
           <section class="detail-info-item">
-            <h3 class="detail-info-label">输出路径</h3>
             <div class="detail-path-stack">
-              <div class="surface-panel path-row detail-path-row">
-                <span class="path-text" :title="job.outputPath">{{ job.outputPath }}</span>
-                <UTooltip text="打开输出目录" :content="{ side: 'top', sideOffset: 6 }">
+              <div class="detail-path-chip">
+                <span class="detail-path-label">输出路径：</span>
+                <button class="detail-path-text" type="button" :title="job.outputPath" @click="openPath(resolveOutputDirectory(job.outputPath))">
+                  {{ job.outputPath }}
+                </button>
+                <UTooltip text="复制路径" :content="{ side: 'top', sideOffset: 6 }">
                   <UButton
                     v-if="job.outputPath"
-                    icon="i-lucide-external-link"
+                    icon="i-lucide-copy"
                     color="neutral"
                     variant="ghost"
                     size="xs"
                     square
-                    @click="openPath(resolveOutputDirectory(job.outputPath))"
+                    @click="copyPath(job.outputPath)"
                   />
                 </UTooltip>
               </div>
@@ -315,6 +321,20 @@ async function handleDelete() {
   } catch (error) {
     toast.add({
       title: '删除 FFmpeg Job 失败',
+      description: error instanceof Error ? error.message : String(error),
+      color: 'error',
+    })
+  }
+}
+
+async function copyPath(path: string) {
+  if (!path) return
+  try {
+    await navigator.clipboard.writeText(path)
+    toast.add({ title: '路径已复制', color: 'success' })
+  } catch (error) {
+    toast.add({
+      title: '复制路径失败',
       description: error instanceof Error ? error.message : String(error),
       color: 'error',
     })

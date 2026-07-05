@@ -3,7 +3,6 @@
     <section class="nodes-header">
       <section class="page-hero nodes-hero">
         <div class="page-hero-copy">
-          <UBadge label="Nodes" color="neutral" variant="subtle" class="page-eyebrow" />
           <h1>渲染节点</h1>
           <p class="page-note">当前在线 {{ nodesStore.connectedCount }} 个节点，已记录 {{ nodesStore.peerList.length }} 个节点。</p>
         </div>

@@ -2,7 +2,6 @@
   <div class="settings-page">
     <section class="page-hero settings-header">
       <div class="page-hero-copy">
-        <UBadge label="Settings" color="neutral" variant="subtle" class="page-eyebrow" />
         <h1>设置</h1>
         <p class="page-note">按路径和参数分组管理工具配置，所有细项都通过弹窗调整。</p>
       </div>

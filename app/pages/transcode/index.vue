@@ -15,9 +15,6 @@
     <section class="queue-header">
       <section class="page-hero queue-hero">
         <div class="page-hero-copy">
-          <div class="queue-title-row">
-            <UBadge label="FFmpeg Queue" color="neutral" variant="subtle" class="page-eyebrow" />
-          </div>
           <div class="queue-heading-row">
             <div class="queue-heading-copy">
               <h1>转码队列</h1>

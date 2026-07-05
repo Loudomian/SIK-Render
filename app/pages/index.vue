@@ -15,17 +15,16 @@
     <section class="queue-header">
       <section class="page-hero queue-hero">
         <div class="page-hero-copy">
-          <div class="queue-title-row">
-            <UBadge label="Render Queue" color="neutral" variant="subtle" class="page-eyebrow" />
-            <UBadge
-              :label="jobsStore.queuePaused ? '队列已暂停' : '队列运行中'"
-              :color="jobsStore.queuePaused ? 'warning' : 'success'"
-              variant="subtle"
-            />
-          </div>
           <div class="queue-heading-row">
             <div class="queue-heading-copy">
-              <h1>渲染队列</h1>
+              <div class="queue-heading-title">
+                <h1>渲染队列</h1>
+                <UBadge
+                  :label="jobsStore.queuePaused ? '队列已暂停' : '队列运行中'"
+                  :color="jobsStore.queuePaused ? 'warning' : 'success'"
+                  variant="subtle"
+                />
+              </div>
               <p class="page-note">管理本地 Blender 渲染任务。</p>
             </div>
             <div class="queue-hero-actions-stack">
