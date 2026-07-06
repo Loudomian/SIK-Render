@@ -1,6 +1,9 @@
 import type { Update } from '@tauri-apps/plugin-updater'
 
-export type AppUpdate = Pick<Update, 'currentVersion' | 'version' | 'date' | 'body' | 'downloadAndInstall'>
+export type AppUpdate = Pick<Update, 'currentVersion' | 'version' | 'date' | 'body'>
+export type InstallableUpdate = AppUpdate & Pick<Update, 'downloadAndInstall'>
+
+let pendingUpdate: InstallableUpdate | null = null
 
 export function useUpdaterState() {
   const available = useState<boolean>('updater:available', () => false)
@@ -8,10 +11,26 @@ export function useUpdaterState() {
   const latestUpdate = useState<AppUpdate | null>('updater:update', () => null)
   const modalOpen = useState<boolean>('updater:modal-open', () => false)
 
-  function setUpdate(update: AppUpdate | null) {
+  function setUpdate(update: InstallableUpdate | null) {
+    pendingUpdate = update
     latestUpdate.value = update
+      ? {
+          currentVersion: update.currentVersion,
+          version: update.version,
+          date: update.date,
+          body: update.body,
+        }
+      : null
     available.value = Boolean(update)
     version.value = update?.version ?? ''
+  }
+
+  async function downloadAndInstallUpdate() {
+    if (!pendingUpdate) {
+      throw new Error('The pending update is no longer available. Check for updates again.')
+    }
+
+    await pendingUpdate.downloadAndInstall()
   }
 
   return {
@@ -20,6 +39,7 @@ export function useUpdaterState() {
     latestUpdate,
     modalOpen,
     setUpdate,
+    downloadAndInstallUpdate,
   }
 }
 
@@ -28,7 +48,7 @@ export function shouldUseMockUpdate() {
   return window.localStorage.getItem('sik-render-mock-update') === '1'
 }
 
-export function createMockUpdate(currentVersion: string): AppUpdate {
+export function createMockUpdate(currentVersion: string): InstallableUpdate {
   return {
     currentVersion,
     version: '9.9.9-dev',

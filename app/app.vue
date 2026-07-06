@@ -409,8 +409,7 @@ async function openUpdateReleasePage() {
 async function installAvailableUpdate() {
   if (installingUpdate.value) return
 
-  const update = updaterState.latestUpdate.value
-  if (!update) {
+  if (!updaterState.latestUpdate.value) {
     updateError.value = t('updater.stale')
     return
   }
@@ -419,7 +418,7 @@ async function installAvailableUpdate() {
   updateError.value = ''
 
   try {
-    await update.downloadAndInstall()
+    await updaterState.downloadAndInstallUpdate()
     toast.add({
       title: t('updater.installedTitle'),
       description: t('updater.installedDescription'),
