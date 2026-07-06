@@ -18,12 +18,7 @@
                 :color="statusColor"
                 variant="subtle"
               />
-              <UBadge
-                v-if="job.renderMode === 'quick_mp4'"
-                :label="t('jobCard.quickMp4')"
-                color="neutral"
-                variant="subtle"
-              />
+              <UBadge v-if="outputModeBadgeLabel" :label="outputModeBadgeLabel" color="neutral" variant="subtle" />
               <UBadge v-if="orderBadgeLabel" :label="orderBadgeLabel" color="neutral" variant="subtle" />
               <UBadge
                 v-if="job.crashCount > 0"
@@ -214,6 +209,12 @@ const { formatShortTimestamp } = useDateFormatters()
 const statusLabel = useJobStatusLabel()
 const queueOrderLabel = useQueueOrderLabel()
 const statusColor = computed(() => JOB_STATUS_COLOR[props.job.status] ?? 'neutral')
+const outputModeBadgeLabel = computed(() => {
+  if (props.job.renderMode === 'quick_mp4') return t('renderQueue.outputMode.QUICK_MP4')
+  if (props.job.outputFormat === 'PNG') return t('renderQueue.outputMode.PNG')
+  if (props.job.outputFormat === 'OPEN_EXR' || props.job.outputFormat === 'EXR') return t('renderQueue.outputMode.OPEN_EXR')
+  return props.job.outputFormat || ''
+})
 
 const retryButtonLabel = computed(() => {
   if (props.job.status === 'interrupted') return t('jobCard.actions.continue')
@@ -421,7 +422,8 @@ async function syncStoredPreviewDimensions(width: number, height: number) {
 
   previewPersistKey = nextKey
   try {
-    await updateJobPreviewDimensions(props.job.id, width, height)
+    const updated = await updateJobPreviewDimensions(props.job.id, width, height)
+    jobsStore.mergeJob(updated)
   } catch {
     // Ignore persistence failures; preview display should still work.
   } finally {

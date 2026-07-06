@@ -70,12 +70,36 @@ export const useJobsStore = defineStore('jobs', () => {
     pausedJobId.value = state.pausedJob ?? null
   }
 
+  function mergeJob(updated: RenderJob) {
+    const index = jobs.value.findIndex(job => job.id === updated.id)
+    if (index === -1) {
+      jobs.value.push(updated)
+    } else {
+      jobs.value[index] = {
+        ...jobs.value[index],
+        ...updated,
+      }
+    }
+    sortJobs()
+  }
+
   async function submitJob(payload: AddJobPayload) {
     const job = await addJob(payload)
-    // job-updated may have arrived during the await and set status to 'running';
-    // only push if not already tracked to avoid overwriting the newer status.
-    if (!jobs.value.find((j) => j.id === job.id)) {
+    // job-updated may arrive during the await and set status/progress first.
+    // Merge the add_job response so static fields like fps and preview size are not lost.
+    const existing = jobs.value.find((j) => j.id === job.id)
+    if (!existing) {
       jobs.value.push(job)
+    } else {
+      Object.assign(existing, {
+        ...job,
+        status: existing.status === 'running' ? existing.status : job.status,
+        currentFrame: existing.currentFrame ?? job.currentFrame,
+        totalFrames: existing.totalFrames ?? job.totalFrames,
+        lastRenderedFrame: existing.lastRenderedFrame ?? job.lastRenderedFrame,
+        timeElapsed: existing.timeElapsed ?? job.timeElapsed,
+        remainingSecs: existing.remainingSecs ?? job.remainingSecs,
+      })
     }
     sortJobs()
     return job
@@ -290,6 +314,7 @@ export const useJobsStore = defineStore('jobs', () => {
     startQueue,
     pauseQueue,
     applyQueueState,
+    mergeJob,
     submitJob,
     updateJobMetadata,
     updateJobTranscodeSettings,

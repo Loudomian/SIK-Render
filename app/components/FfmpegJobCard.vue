@@ -38,8 +38,8 @@
             </span>
             <span class="job-meta-divider" aria-hidden="true" />
             <span class="job-meta-item">
-              <span class="job-meta-label">FPS</span>
-              <strong>{{ job.fps.toFixed(3) }}</strong>
+              <span class="job-meta-label">{{ t('ffmpegCard.specs') }}</span>
+              <strong>{{ specsLabel }}</strong>
             </span>
             <span class="job-meta-divider" aria-hidden="true" />
             <span class="job-meta-item">
@@ -135,6 +135,7 @@ const queueOrder = computed(() => {
   return resolveQueueOrder(transcodeStore.ffmpegJobs, props.job, FFMPEG_QUEUE_ORDER_HIDDEN_STATUSES)
 })
 const orderBadgeLabel = computed(() => queueOrderLabel(queueOrder.value))
+const specsLabel = computed(() => `${formatFps(props.job.fps)} FPS`)
 
 function openOutputDirectory() {
   openPath(resolveOutputDirectory(props.job.outputPath))
@@ -145,5 +146,10 @@ function formatBytes(value: number | null) {
   if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`
   if (value < 1024 * 1024 * 1024) return `${(value / (1024 * 1024)).toFixed(1)} MB`
   return `${(value / (1024 * 1024 * 1024)).toFixed(1)} GB`
+}
+
+function formatFps(value: number | null | undefined) {
+  if (value == null || value <= 0) return '—'
+  return Number.isInteger(value) ? `${value}` : value.toFixed(3).replace(/0+$/, '').replace(/\.$/, '')
 }
 </script>

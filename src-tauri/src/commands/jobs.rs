@@ -895,6 +895,7 @@ pub async fn update_job_preview_dimensions(
     width: i32,
     height: i32,
     state: State<'_, AppState>,
+    app: tauri::AppHandle,
 ) -> Result<RenderJob, String> {
     if width <= 0 || height <= 0 {
         return Err("preview dimensions must be positive".into());
@@ -908,9 +909,11 @@ pub async fn update_job_preview_dimensions(
         .await
         .map_err(|error| error.to_string())?;
 
-    scheduler::load_job(&state.pool, &id)
+    let job = scheduler::load_job(&state.pool, &id)
         .await
-        .map_err(|error| error.to_string())
+        .map_err(|error| error.to_string())?;
+    scheduler::emit_job_update(&app, &job);
+    Ok(job)
 }
 
 #[tauri::command]

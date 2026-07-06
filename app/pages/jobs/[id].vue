@@ -394,76 +394,48 @@
     <section class="detail-content">
       <div class="detail-grid">
         <UCard variant="subtle" :ui="{ root: 'detail-section detail-full', body: 'detail-card-body' }">
-        <h2 class="detail-card-title">{{ t('jobDetails.filePaths') }}</h2>
-        <div class="detail-info-stack">
-          <section class="detail-info-item">
-            <div class="detail-path-chip">
-              <span class="detail-path-label">{{ t('jobDetails.blendFile') }}</span>
-              <button class="detail-path-text" type="button" :title="job.blendFile" @click="openPath(job.blendFile)">
-                {{ job.blendFile }}
-              </button>
-              <UTooltip :text="t('jobDetails.copyPath')" :content="{ side: 'top', sideOffset: 6 }">
-                <UButton icon="i-lucide-copy" color="neutral" variant="ghost" size="xs" square @click="copyPath(job.blendFile)" />
-              </UTooltip>
+          <h2 class="detail-card-title">{{ t('jobDetails.projectDetails') }}</h2>
+          <div class="detail-job-meta-stack">
+            <div class="detail-job-meta">
+              <span class="job-meta-item detail-job-meta-item">
+                <span class="job-meta-label">{{ t('jobDetails.stats.format') }}</span>
+                <strong>{{ displayOutputModeLabel }}</strong>
+              </span>
+              <span class="job-meta-item detail-job-meta-item">
+                <span class="job-meta-label">{{ t('jobDetails.stats.specs') }}</span>
+                <strong>{{ specsLabel }}</strong>
+              </span>
+              <span class="job-meta-item detail-job-meta-item">
+                <span class="job-meta-label">{{ t('jobDetails.stats.frameRange') }}</span>
+                <strong>{{ originalFrameRangeLabel }} ({{ t('jobDetails.stats.totalFrames', { count: originalFrameTotal }) }})</strong>
+              </span>
+              <span v-if="showCurrentExecutionRange" class="job-meta-item detail-job-meta-item">
+                <span class="job-meta-label">{{ t('jobDetails.stats.currentExecution') }}</span>
+                <strong>{{ currentExecutionRangeLabel }} ({{ t('jobDetails.stats.totalFrames', { count: currentExecutionTotal }) }})</strong>
+              </span>
+              <span class="job-meta-item detail-job-meta-item">
+                <span class="job-meta-label">{{ t('jobDetails.stats.blenderVersion') }}</span>
+                <strong>{{ blenderVersion }}</strong>
+              </span>
+              <span v-if="crashCount" class="job-meta-item detail-job-meta-item">
+                <span class="job-meta-label">{{ t('jobDetails.stats.crashRecovery') }}</span>
+                <strong>{{ t('jobDetails.stats.crashTimes', { count: crashCount }) }}</strong>
+              </span>
+              <span class="job-meta-item detail-job-meta-item">
+                <span class="job-meta-label">{{ t('jobDetails.stats.started') }}</span>
+                <strong>{{ formatTime(job.startedAt ?? job.createdAt) }}</strong>
+              </span>
+              <span class="job-meta-item detail-job-meta-item">
+                <span class="job-meta-label">{{ t('jobDetails.stats.finished') }}</span>
+                <strong>{{ job.finishedAt ? formatTime(job.finishedAt) : '—' }}</strong>
+              </span>
+              <span class="job-meta-item detail-job-meta-item">
+                <span class="job-meta-label">{{ t('jobDetails.stats.duration') }}</span>
+                <strong>{{ duration }}</strong>
+              </span>
             </div>
-          </section>
-          <section class="detail-info-item">
-            <div class="detail-path-stack">
-              <div class="detail-path-chip">
-                <span class="detail-path-label">{{ t('jobDetails.outputPath') }}</span>
-                <button class="detail-path-text" type="button" :title="job.outputPath" @click="openPath(resolveOutputDirectory(job.outputPath))">
-                  {{ job.outputPath }}
-                </button>
-                <UTooltip :text="t('jobDetails.copyPath')" :content="{ side: 'top', sideOffset: 6 }">
-                  <UButton icon="i-lucide-copy" color="neutral" variant="ghost" size="xs" square @click="copyPath(job.outputPath)" />
-                </UTooltip>
-              </div>
-            </div>
-          </section>
-        </div>
-        </UCard>
-
-        <UCard variant="subtle" :ui="{ root: 'detail-section detail-full', body: 'detail-card-body' }">
-          <div class="stat-row">
-          <div class="stat-item">
-            <p class="stat-label">{{ t('jobDetails.stats.format') }}</p>
-            <p class="stat-value">{{ displayOutputModeLabel }}</p>
-          </div>
-          <div class="stat-item">
-            <p class="stat-label">{{ t('jobDetails.stats.frameRange') }}</p>
-            <p class="stat-value">{{ originalFrameRangeLabel }} ({{ t('jobDetails.stats.totalFrames', { count: originalFrameTotal }) }})</p>
-          </div>
-          <div v-if="showCurrentExecutionRange" class="stat-item">
-            <p class="stat-label">{{ t('jobDetails.stats.currentExecution') }}</p>
-            <p class="stat-value">{{ currentExecutionRangeLabel }} ({{ t('jobDetails.stats.totalFrames', { count: currentExecutionTotal }) }})</p>
-          </div>
-          <div class="stat-item">
-            <p class="stat-label">Blender</p>
-            <p class="stat-value">{{ blenderVersion }}</p>
-          </div>
-          <div v-if="crashCount" class="stat-item">
-            <p class="stat-label">{{ t('jobDetails.stats.crashRecovery') }}</p>
-            <p class="stat-value">{{ t('jobDetails.stats.crashTimes', { count: crashCount }) }}</p>
-          </div>
-        </div>
-        <div class="stat-row">
-          <div class="stat-item">
-            <p class="stat-label">{{ t('jobDetails.stats.started') }}</p>
-            <p class="stat-value">{{ formatTime(job.startedAt ?? job.createdAt) }}</p>
-          </div>
-          <div class="stat-item">
-            <p class="stat-label">{{ t('jobDetails.stats.finished') }}</p>
-            <p class="stat-value">{{ job.finishedAt ? formatTime(job.finishedAt) : '—' }}</p>
-          </div>
-          <div class="stat-item">
-            <p class="stat-label">{{ t('jobDetails.stats.duration') }}</p>
-            <p class="stat-value">{{ duration }}</p>
-          </div>
-        </div>
-        <template v-if="job.status === 'running'">
-          <div class="stat-row">
-            <div class="stat-item detail-progress-stat">
-              <p class="stat-label">{{ t('jobDetails.stats.renderProgress') }}</p>
+            <div v-if="job.status === 'running'" class="detail-progress-meta">
+              <span class="job-meta-label">{{ t('jobDetails.stats.renderProgress') }}</span>
               <RenderProgress
                 class="detail-render-progress"
                 :frame="job.currentFrame ?? 0"
@@ -474,7 +446,36 @@
               />
             </div>
           </div>
-        </template>
+        </UCard>
+
+        <UCard variant="subtle" :ui="{ root: 'detail-section detail-full', body: 'detail-card-body' }">
+          <h2 class="detail-card-title">{{ t('jobDetails.filePaths') }}</h2>
+          <div class="detail-info-stack">
+            <section class="detail-info-item">
+              <div class="detail-path-chip">
+                <span class="detail-path-label">{{ t('jobDetails.blendFile') }}</span>
+                <button class="detail-path-text" type="button" :title="job.blendFile" @click="openPath(job.blendFile)">
+                  {{ job.blendFile }}
+                </button>
+                <UTooltip :text="t('jobDetails.copyPath')" :content="{ side: 'top', sideOffset: 6 }">
+                  <UButton icon="i-lucide-copy" color="neutral" variant="ghost" size="xs" square @click="copyPath(job.blendFile)" />
+                </UTooltip>
+              </div>
+            </section>
+            <section class="detail-info-item">
+              <div class="detail-path-stack">
+                <div class="detail-path-chip">
+                  <span class="detail-path-label">{{ t('jobDetails.outputPath') }}</span>
+                  <button class="detail-path-text" type="button" :title="job.outputPath" @click="openPath(resolveOutputDirectory(job.outputPath))">
+                    {{ job.outputPath }}
+                  </button>
+                  <UTooltip :text="t('jobDetails.copyPath')" :content="{ side: 'top', sideOffset: 6 }">
+                    <UButton icon="i-lucide-copy" color="neutral" variant="ghost" size="xs" square @click="copyPath(job.outputPath)" />
+                  </UTooltip>
+                </div>
+              </div>
+            </section>
+          </div>
         </UCard>
 
         <UCard variant="subtle" :ui="{ root: 'detail-section detail-full preview-card', body: 'detail-card-body' }">
@@ -683,8 +684,25 @@ const showCurrentExecutionRange = computed(() => {
   return currentJob.originalFrameStart !== currentJob.frameStart || currentJob.originalFrameEnd !== currentJob.frameEnd
 })
 const displayOutputModeLabel = computed(() => {
-  if (isQuickMp4Job.value) return t('jobDetails.preview.quickMp4Output')
+  if (isQuickMp4Job.value) return t('renderQueue.outputMode.QUICK_MP4')
+  if (job.value?.outputFormat === 'PNG') return t('renderQueue.outputMode.PNG')
+  if (job.value?.outputFormat === 'OPEN_EXR' || job.value?.outputFormat === 'EXR') return t('renderQueue.outputMode.OPEN_EXR')
   return job.value?.outputFormat ?? '—'
+})
+const resolutionLabel = computed(() => {
+  const width = job.value?.previewWidth
+  const height = job.value?.previewHeight
+  if (!width || !height || width <= 0 || height <= 0) return '—'
+  return `${width}×${height}`
+})
+const fpsLabel = computed(() => {
+  const fps = job.value?.fps
+  if (!fps || fps <= 0) return '—'
+  return Number.isInteger(fps) ? `${fps}` : fps.toFixed(3).replace(/0+$/, '').replace(/\.$/, '')
+})
+const specsLabel = computed(() => {
+  const parts = [resolutionLabel.value, fpsLabel.value === '—' ? '—' : `${fpsLabel.value} FPS`].filter(part => part !== '—')
+  return parts.length ? parts.join(' · ') : '—'
 })
 
 function deriveRenderSequenceDirectory(outputPath: string) {
@@ -1038,6 +1056,9 @@ async function refreshVideoPreview() {
   const poster = await captureVideoPoster(url).catch(() => null)
   if (token !== videoPreviewPosterToken) return
   videoPreviewPosterUrl.value = poster?.dataUrl ?? null
+  if (poster) {
+    void syncStoredPreviewDimensions(poster.width, poster.height)
+  }
 }
 
 async function preloadPreview(url: string) {
@@ -1057,7 +1078,8 @@ async function syncStoredPreviewDimensions(width: number, height: number) {
   if (currentKey === nextKey) return
 
   try {
-    await updateJobPreviewDimensions(j.id, width, height)
+    const updated = await updateJobPreviewDimensions(j.id, width, height)
+    jobsStore.mergeJob(updated)
   } catch {
     // Ignore persistence failures; preview display should still work.
   }

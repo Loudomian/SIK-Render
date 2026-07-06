@@ -53,7 +53,7 @@ export default {
   jobCard: {
     quickMp4: '快速 MP4',
     crashCount: '崩溃 {count} 次',
-    emptyNote: '编辑项目名称和备注',
+    emptyNote: '编辑任务名称和备注',
     frameRange: '帧范围',
     currentExecution: '当前执行',
     renderTime: '渲染时间',
@@ -79,7 +79,7 @@ export default {
       deleteTooltip: '从队列中删除这个任务',
       openOutputTooltip: '打开输出目录',
       detailsTooltip: '查看任务详情',
-      editMetadataTooltip: '编辑项目名称和备注',
+      editMetadataTooltip: '编辑任务名称和备注',
     },
     preview: {
       generatedFinalFrame: '已生成最终帧预览',
@@ -94,6 +94,7 @@ export default {
     sourceBlenderJob: '来自 Blender Job',
     sourceFolder: '来自文件夹',
     frameSegment: '帧段',
+    specs: '规格',
     fileSize: '文件大小',
     frames: '帧',
   },
@@ -263,7 +264,7 @@ export default {
       pauseQueueTooltip: '立即中止当前渲染任务并暂停队列，恢复时会从断点自动续跑',
       clearCompleted: '清理已完成',
       clearCompletedConfirm: '确认清理',
-      editMetadata: '编辑项目信息',
+      editMetadata: '编辑任务信息',
     },
     retry: {
       title: '选择渲染方式',
@@ -416,14 +417,17 @@ export default {
   },
   jobDetails: {
     filePaths: '文件路径',
+    projectDetails: '任务详情',
     blendFile: '工程文件：',
     outputPath: '输出路径：',
     copyPath: '复制路径',
     stats: {
       format: '格式',
+      specs: '规格',
       frameRange: '帧范围',
       totalFrames: '共 {count} 帧',
       currentExecution: '当前执行',
+      blenderVersion: 'Blender 版本',
       crashRecovery: '崩溃恢复',
       crashTimes: '{count} 次',
       started: '开始',
@@ -468,7 +472,7 @@ export default {
     actions: {
       continue: '继续',
       rerender: '重新渲染',
-      editMetadata: '编辑项目信息',
+      editMetadata: '编辑任务信息',
     },
     copy: {
       success: '路径已复制',
@@ -532,11 +536,13 @@ export default {
   transcodeDetails: {
     breadcrumb: '转码队列',
     sourceJob: '查看源任务',
+    jobDetails: '任务详情',
     filePaths: '文件路径',
     inputPath: '输入路径：',
     outputPath: '输出路径：',
     stats: {
       frameSegment: '帧段',
+      specs: '规格',
       outputFps: '输出 FPS',
       progress: '进度',
       fileSize: '文件大小',
@@ -721,12 +727,12 @@ export default {
       quality: '质量',
     },
     metadata: {
-      title: '编辑项目信息',
-      projectName: '项目名称',
+      title: '编辑任务信息',
+      projectName: '任务名称',
       projectNamePlaceholder: '例如：Shot_010_Lighting',
       note: '任务备注',
       notePlaceholder: '写一点备注，例如返修原因、交付要求、客户反馈。',
-      nameRequired: '项目名称不能为空。',
+      nameRequired: '任务名称不能为空。',
     },
     outputTemplates: {
       title: '输出路径模板',

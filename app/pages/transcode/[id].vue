@@ -2,9 +2,9 @@
   <div v-if="job" class="detail-page">
     <section class="page-hero detail-hero">
       <div class="page-hero-copy detail-title">
-        <div class="detail-heading-stack">
-          <div class="detail-title-row">
-            <div class="detail-title-main">
+        <div class="queue-heading-row detail-heading-row">
+          <div class="queue-heading-copy detail-heading-copy">
+            <div class="queue-heading-title detail-heading-title">
               <UBreadcrumb
                 as="h1"
                 :items="[
@@ -35,35 +35,35 @@
                 <UBadge :label="job.sourceType === 'blender_job' ? t('ffmpegCard.sourceBlenderJob') : t('ffmpegCard.sourceFolder')" color="neutral" variant="subtle" />
               </div>
             </div>
-            <div class="detail-header-actions">
-              <UButton
-                v-if="job.status === 'running'"
-                icon="i-lucide-square"
-                :label="t('common.cancel')"
-                color="warning"
-                variant="outline"
-                size="md"
-                @click="handleCancel"
-              />
-              <UButton
-                v-if="job.sourceBlenderJobId"
-                :to="`/jobs/${job.sourceBlenderJobId}`"
-                icon="i-lucide-arrow-right"
-                :label="t('transcodeDetails.sourceJob')"
-                color="neutral"
-                variant="outline"
-                size="md"
-              />
-              <UButton
-                v-if="job.status !== 'running'"
-                icon="i-lucide-trash-2"
-                :label="t('common.delete')"
-                color="error"
-                variant="outline"
-                size="md"
-                @click="handleDelete"
-              />
-            </div>
+          </div>
+          <div class="detail-header-actions">
+            <UButton
+              v-if="job.sourceBlenderJobId"
+              :to="`/jobs/${job.sourceBlenderJobId}`"
+              icon="i-lucide-arrow-right"
+              :label="t('transcodeDetails.sourceJob')"
+              color="neutral"
+              variant="outline"
+              size="md"
+            />
+            <UButton
+              v-if="job.status === 'running'"
+              icon="i-lucide-square"
+              :label="t('common.cancel')"
+              color="warning"
+              variant="outline"
+              size="md"
+              @click="handleCancel"
+            />
+            <UButton
+              v-if="job.status !== 'running'"
+              icon="i-lucide-trash-2"
+              :label="t('common.delete')"
+              color="error"
+              variant="outline"
+              size="md"
+              @click="handleDelete"
+            />
           </div>
         </div>
       </div>
@@ -72,96 +72,40 @@
     <section class="detail-content">
       <div class="detail-grid">
         <UCard variant="subtle" :ui="{ root: 'detail-section detail-full', body: 'detail-card-body' }">
-        <h2 class="detail-card-title">{{ t('transcodeDetails.filePaths') }}</h2>
-        <div class="detail-info-stack">
-          <section class="detail-info-item">
-            <div class="detail-path-chip">
-              <span class="detail-path-label">{{ t('transcodeDetails.inputPath') }}</span>
-              <button class="detail-path-text" type="button" :title="job.inputPath" @click="openPath(job.inputPath)">
-                {{ job.inputPath }}
-              </button>
-              <UTooltip :text="t('jobDetails.copyPath')" :content="{ side: 'top', sideOffset: 6 }">
-                <UButton
-                  icon="i-lucide-copy"
-                  color="neutral"
-                  variant="ghost"
-                  size="xs"
-                  square
-                  @click="copyPath(job.inputPath)"
-                />
-              </UTooltip>
+          <h2 class="detail-card-title">{{ t('transcodeDetails.jobDetails') }}</h2>
+          <div class="detail-job-meta-stack">
+            <div class="detail-job-meta">
+              <span class="job-meta-item detail-job-meta-item">
+                <span class="job-meta-label">{{ t('transcodeDetails.stats.frameSegment') }}</span>
+                <strong>{{ job.frameStart }} – {{ job.frameEnd }}</strong>
+              </span>
+              <span class="job-meta-item detail-job-meta-item">
+                <span class="job-meta-label">{{ t('transcodeDetails.stats.specs') }}</span>
+                <strong>{{ specsLabel }}</strong>
+              </span>
+              <span class="job-meta-item detail-job-meta-item">
+                <span class="job-meta-label">CRF / Preset</span>
+                <strong>{{ job.crf }} / {{ job.preset }}</strong>
+              </span>
+              <span class="job-meta-item detail-job-meta-item">
+                <span class="job-meta-label">{{ t('transcodeDetails.stats.fileSize') }}</span>
+                <strong>{{ formatBytes(job.outputSizeBytes) }}</strong>
+              </span>
+              <span class="job-meta-item detail-job-meta-item">
+                <span class="job-meta-label">{{ t('transcodeDetails.stats.videoDuration') }}</span>
+                <strong>{{ formatDuration(job.outputDurationSecs) }}</strong>
+              </span>
+              <span class="job-meta-item detail-job-meta-item">
+                <span class="job-meta-label">{{ t('transcodeDetails.stats.started') }}</span>
+                <strong>{{ job.startedAt ? formatTime(job.startedAt) : '—' }}</strong>
+              </span>
+              <span class="job-meta-item detail-job-meta-item">
+                <span class="job-meta-label">{{ t('transcodeDetails.stats.finished') }}</span>
+                <strong>{{ job.finishedAt ? formatTime(job.finishedAt) : '—' }}</strong>
+              </span>
             </div>
-          </section>
-
-          <section class="detail-info-item">
-            <div class="detail-path-stack">
-              <div class="detail-path-chip">
-                <span class="detail-path-label">{{ t('transcodeDetails.outputPath') }}</span>
-                <button class="detail-path-text" type="button" :title="job.outputPath" @click="openPath(resolveOutputDirectory(job.outputPath))">
-                  {{ job.outputPath }}
-                </button>
-                <UTooltip :text="t('jobDetails.copyPath')" :content="{ side: 'top', sideOffset: 6 }">
-                  <UButton
-                    v-if="job.outputPath"
-                    icon="i-lucide-copy"
-                    color="neutral"
-                    variant="ghost"
-                    size="xs"
-                    square
-                    @click="copyPath(job.outputPath)"
-                  />
-                </UTooltip>
-              </div>
-            </div>
-          </section>
-        </div>
-        </UCard>
-
-        <UCard variant="subtle" :ui="{ root: 'detail-section detail-full', body: 'detail-card-body' }">
-        <div class="stat-row">
-          <div class="stat-item">
-            <p class="stat-label">{{ t('transcodeDetails.stats.frameSegment') }}</p>
-            <p class="stat-value">{{ job.frameStart }} – {{ job.frameEnd }}</p>
-          </div>
-          <div class="stat-item">
-            <p class="stat-label">{{ t('transcodeDetails.stats.outputFps') }}</p>
-            <p class="stat-value">{{ job.fps.toFixed(3) }}</p>
-          </div>
-          <div class="stat-item">
-            <p class="stat-label">CRF / Preset</p>
-            <p class="stat-value">{{ job.crf }} / {{ job.preset }}</p>
-          </div>
-          <div class="stat-item">
-            <p class="stat-label">{{ t('transcodeDetails.stats.progress') }}</p>
-            <p class="stat-value">{{ job.progressFrame ?? 0 }} / {{ job.totalFrames ?? totalFrames }}</p>
-          </div>
-        </div>
-        <div class="stat-row">
-          <div class="stat-item">
-            <p class="stat-label">{{ t('transcodeDetails.stats.fileSize') }}</p>
-            <p class="stat-value">{{ formatBytes(job.outputSizeBytes) }}</p>
-          </div>
-          <div class="stat-item">
-            <p class="stat-label">{{ t('transcodeDetails.stats.videoDuration') }}</p>
-            <p class="stat-value">{{ formatDuration(job.outputDurationSecs) }}</p>
-          </div>
-          <div class="stat-item">
-            <p class="stat-label">{{ t('transcodeDetails.stats.created') }}</p>
-            <p class="stat-value">{{ formatTime(job.createdAt) }}</p>
-          </div>
-          <div class="stat-item">
-            <p class="stat-label">{{ t('transcodeDetails.stats.started') }}</p>
-            <p class="stat-value">{{ job.startedAt ? formatTime(job.startedAt) : '—' }}</p>
-          </div>
-          <div class="stat-item">
-            <p class="stat-label">{{ t('transcodeDetails.stats.finished') }}</p>
-            <p class="stat-value">{{ job.finishedAt ? formatTime(job.finishedAt) : '—' }}</p>
-          </div>
-        </div>
-        <template v-if="job.status === 'running'">
-          <div class="stat-row">
-            <div class="stat-item" style="flex: 1">
-              <p class="stat-label">{{ t('transcodeDetails.stats.transcodeProgress') }}</p>
+            <div v-if="job.status === 'running'" class="detail-progress-meta">
+              <span class="job-meta-label">{{ t('transcodeDetails.stats.transcodeProgress') }}</span>
               <UProgress
                 :value="job.progressFrame ?? 0"
                 :max="job.totalFrames ?? totalFrames"
@@ -171,7 +115,52 @@
               <p class="stat-value stat-progress-note">{{ job.progressFrame ?? 0 }} / {{ job.totalFrames ?? totalFrames }} {{ t('transcodeDetails.stats.frames') }}</p>
             </div>
           </div>
-        </template>
+        </UCard>
+
+        <UCard variant="subtle" :ui="{ root: 'detail-section detail-full', body: 'detail-card-body' }">
+          <h2 class="detail-card-title">{{ t('transcodeDetails.filePaths') }}</h2>
+          <div class="detail-info-stack">
+            <section class="detail-info-item">
+              <div class="detail-path-chip">
+                <span class="detail-path-label">{{ t('transcodeDetails.inputPath') }}</span>
+                <button class="detail-path-text" type="button" :title="job.inputPath" @click="openPath(job.inputPath)">
+                  {{ job.inputPath }}
+                </button>
+                <UTooltip :text="t('jobDetails.copyPath')" :content="{ side: 'top', sideOffset: 6 }">
+                  <UButton
+                    icon="i-lucide-copy"
+                    color="neutral"
+                    variant="ghost"
+                    size="xs"
+                    square
+                    @click="copyPath(job.inputPath)"
+                  />
+                </UTooltip>
+              </div>
+            </section>
+
+            <section class="detail-info-item">
+              <div class="detail-path-stack">
+                <div class="detail-path-chip">
+                  <span class="detail-path-label">{{ t('transcodeDetails.outputPath') }}</span>
+                  <button class="detail-path-text" type="button" :title="job.outputPath" @click="openPath(resolveOutputDirectory(job.outputPath))">
+                    {{ job.outputPath }}
+                  </button>
+                  <UTooltip :text="t('jobDetails.copyPath')" :content="{ side: 'top', sideOffset: 6 }">
+                    <UButton
+                      v-if="job.outputPath"
+                      icon="i-lucide-copy"
+                      color="neutral"
+                      variant="ghost"
+                      size="xs"
+                      square
+                      @click="copyPath(job.outputPath)"
+                    />
+                  </UTooltip>
+                </div>
+              </div>
+            </section>
+          </div>
         </UCard>
 
         <UCard variant="subtle" :ui="{ root: 'detail-section detail-full log-section', body: 'detail-card-body' }">
@@ -300,6 +289,16 @@ function formatDuration(value: number | null) {
   const secs = value % 60
   return `${mins}m ${secs.toFixed(1)}s`
 }
+
+function formatFps(value: number | null | undefined) {
+  if (value == null || value <= 0) return '—'
+  return Number.isInteger(value) ? `${value}` : value.toFixed(3).replace(/0+$/, '').replace(/\.$/, '')
+}
+
+const specsLabel = computed(() => {
+  const fps = formatFps(job.value?.fps)
+  return fps === '—' ? fps : `${fps} FPS`
+})
 
 async function handleCancel() {
   if (!job.value) return

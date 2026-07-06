@@ -53,7 +53,7 @@ export default {
   jobCard: {
     quickMp4: 'Quick MP4',
     crashCount: '{count} crashes',
-    emptyNote: 'Edit Project Name and Note',
+    emptyNote: 'Edit Job Name and Note',
     frameRange: 'Frame Range',
     currentExecution: 'Current Run',
     renderTime: 'Render Time',
@@ -79,7 +79,7 @@ export default {
       deleteTooltip: 'Remove this job from the queue',
       openOutputTooltip: 'Open output directory',
       detailsTooltip: 'View job details',
-      editMetadataTooltip: 'Edit Project Name and Note',
+      editMetadataTooltip: 'Edit Job Name and Note',
     },
     preview: {
       generatedFinalFrame: 'Final frame preview generated',
@@ -94,6 +94,7 @@ export default {
     sourceBlenderJob: 'From Blender Job',
     sourceFolder: 'From Folder',
     frameSegment: 'Frames',
+    specs: 'Specs',
     fileSize: 'File Size',
     frames: 'frames',
   },
@@ -263,7 +264,7 @@ export default {
       pauseQueueTooltip: 'Stop the current render job and pause the queue. Resume continues from the breakpoint.',
       clearCompleted: 'Clear Completed',
       clearCompletedConfirm: 'Clear',
-      editMetadata: 'Edit Project Info',
+      editMetadata: 'Edit Job Info',
     },
     retry: {
       title: 'Choose Render Mode',
@@ -416,14 +417,17 @@ export default {
   },
   jobDetails: {
     filePaths: 'File Paths',
+    projectDetails: 'Job Details',
     blendFile: 'Project File:',
     outputPath: 'Output Path:',
     copyPath: 'Copy Path',
     stats: {
       format: 'Format',
+      specs: 'Specs',
       frameRange: 'Frame Range',
       totalFrames: '{count} frames',
       currentExecution: 'Current Run',
+      blenderVersion: 'Blender Version',
       crashRecovery: 'Crash Recovery',
       crashTimes: '{count} times',
       started: 'Started',
@@ -468,7 +472,7 @@ export default {
     actions: {
       continue: 'Continue',
       rerender: 'Render Again',
-      editMetadata: 'Edit Project Info',
+      editMetadata: 'Edit Job Info',
     },
     copy: {
       success: 'Path Copied',
@@ -532,11 +536,13 @@ export default {
   transcodeDetails: {
     breadcrumb: 'Transcode Queue',
     sourceJob: 'View Source Job',
+    jobDetails: 'Job Details',
     filePaths: 'File Paths',
     inputPath: 'Input Path:',
     outputPath: 'Output Path:',
     stats: {
       frameSegment: 'Frame Segment',
+      specs: 'Specs',
       outputFps: 'Output FPS',
       progress: 'Progress',
       fileSize: 'File Size',
@@ -721,12 +727,12 @@ export default {
       quality: 'Quality',
     },
     metadata: {
-      title: 'Edit Project Info',
-      projectName: 'Project Name',
+      title: 'Edit Job Info',
+      projectName: 'Job Name',
       projectNamePlaceholder: 'Example: Shot_010_Lighting',
       note: 'Job Note',
       notePlaceholder: 'Add a note, such as revision reason, delivery requirements, or client feedback.',
-      nameRequired: 'Project name is required.',
+      nameRequired: 'Job name is required.',
     },
     outputTemplates: {
       title: 'Output Path Templates',
