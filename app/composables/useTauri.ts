@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core'
-import type { AddFfmpegJobPayload, AddJobPayload, AppSettings, BlenderInstall, BlendProjectSettings, FfmpegJob, FolderFrameGroup, FolderFramesInspection, JobLogSummary, NodeInfo, NodeInterfaceInfo, NodeJobEvent, OutputPathTemplatePreview, PathTemplateKind, PeerInfo, QueueState, RenderJob, RenderedFramesStatus, RuntimeResetResult, ShadowRecoveryResponse, ToolchainStatus } from '~/types'
+import type { AddFfmpegJobPayload, AddJobPayload, AppSettings, BlenderInstall, BlendProjectSettings, FfmpegJob, FolderFrameGroup, FolderFramesInspection, JobLogSummary, JobPreviewDimensionsUpdate, NodeInfo, NodeInterfaceInfo, NodeJobEvent, OutputPathTemplatePreview, PathTemplateKind, PeerInfo, QueueState, RenderJob, RenderedFramesStatus, RuntimeResetResult, ShadowRecoveryResponse, ToolchainStatus } from '~/types'
 
 // Typed wrappers around Tauri IPC commands
 
@@ -65,7 +65,7 @@ const tauriApi = {
     invoke<RenderJob>('reset_job', { id, resumeFromExisting, frameStart, frameEnd }),
 
   updateJobPreviewDimensions: (id: string, width: number, height: number) =>
-    invoke<RenderJob>('update_job_preview_dimensions', { id, width, height }),
+    invoke<JobPreviewDimensionsUpdate>('update_job_preview_dimensions', { id, width, height }),
 
   cancelJob: (id: string) =>
     invoke<void>('cancel_job', { id }),

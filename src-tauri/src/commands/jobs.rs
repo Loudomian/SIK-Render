@@ -48,6 +48,14 @@ pub struct UpdateJobMetadataPayload {
     pub note: Option<String>,
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct JobPreviewDimensionsUpdate {
+    pub id: String,
+    pub preview_width: i32,
+    pub preview_height: i32,
+}
+
 #[derive(Deserialize)]
 pub struct UpdateJobTranscodeSettingsPayload {
     pub id: String,
@@ -895,25 +903,29 @@ pub async fn update_job_preview_dimensions(
     width: i32,
     height: i32,
     state: State<'_, AppState>,
-    app: tauri::AppHandle,
-) -> Result<RenderJob, String> {
+) -> Result<JobPreviewDimensionsUpdate, String> {
     if width <= 0 || height <= 0 {
         return Err("preview dimensions must be positive".into());
     }
 
-    sqlx::query("UPDATE jobs SET preview_width = ?, preview_height = ? WHERE id = ?")
+    let rows_affected = sqlx::query("UPDATE jobs SET preview_width = ?, preview_height = ? WHERE id = ?")
         .bind(width)
         .bind(height)
         .bind(&id)
         .execute(&state.pool)
         .await
-        .map_err(|error| error.to_string())?;
+        .map_err(|error| error.to_string())?
+        .rows_affected();
 
-    let job = scheduler::load_job(&state.pool, &id)
-        .await
-        .map_err(|error| error.to_string())?;
-    scheduler::emit_job_update(&app, &job);
-    Ok(job)
+    if rows_affected == 0 {
+        return Err(format!("job {} was not found", id));
+    }
+
+    Ok(JobPreviewDimensionsUpdate {
+        id,
+        preview_width: width,
+        preview_height: height,
+    })
 }
 
 #[tauri::command]

@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import type { AddJobPayload, JobUpdatedEvent, RenderJob, RenderLogEvent, RenderProgressEvent } from '~/types'
+import type { AddJobPayload, JobPreviewDimensionsUpdate, JobUpdatedEvent, RenderJob, RenderLogEvent, RenderProgressEvent } from '~/types'
 
 const MAX_LOG_LINES = 5000
 
@@ -70,17 +70,11 @@ export const useJobsStore = defineStore('jobs', () => {
     pausedJobId.value = state.pausedJob ?? null
   }
 
-  function mergeJob(updated: RenderJob) {
-    const index = jobs.value.findIndex(job => job.id === updated.id)
-    if (index === -1) {
-      jobs.value.push(updated)
-    } else {
-      jobs.value[index] = {
-        ...jobs.value[index],
-        ...updated,
-      }
-    }
-    sortJobs()
+  function applyPreviewDimensions(update: JobPreviewDimensionsUpdate) {
+    const job = jobs.value.find(job => job.id === update.id)
+    if (!job) return
+    job.previewWidth = update.previewWidth
+    job.previewHeight = update.previewHeight
   }
 
   async function submitJob(payload: AddJobPayload) {
@@ -314,7 +308,7 @@ export const useJobsStore = defineStore('jobs', () => {
     startQueue,
     pauseQueue,
     applyQueueState,
-    mergeJob,
+    applyPreviewDimensions,
     submitJob,
     updateJobMetadata,
     updateJobTranscodeSettings,

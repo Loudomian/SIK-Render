@@ -20,6 +20,7 @@ export default {
     submit: 'Submit',
     choose: 'Choose',
     change: 'Change',
+    duration: 'Duration',
   },
   theme: {
     light: 'Light',
@@ -56,7 +57,6 @@ export default {
     emptyNote: 'Edit Job Name and Note',
     frameRange: 'Frame Range',
     currentExecution: 'Current Run',
-    renderTime: 'Render Time',
     notStarted: 'Not Started',
     finishedAt: {
       done: 'Completed At',
@@ -432,7 +432,6 @@ export default {
       crashTimes: '{count} times',
       started: 'Started',
       finished: 'Finished',
-      duration: 'Duration',
       renderProgress: 'Render Progress',
     },
     preview: {

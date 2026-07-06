@@ -20,6 +20,7 @@ export default {
     submit: '提交',
     choose: '选择',
     change: '更改',
+    duration: '耗时',
   },
   theme: {
     light: '浅色',
@@ -56,7 +57,6 @@ export default {
     emptyNote: '编辑任务名称和备注',
     frameRange: '帧范围',
     currentExecution: '当前执行',
-    renderTime: '渲染时间',
     notStarted: '未开始',
     finishedAt: {
       done: '完成时间',
@@ -432,7 +432,6 @@ export default {
       crashTimes: '{count} 次',
       started: '开始',
       finished: '完成',
-      duration: '耗时',
       renderProgress: '渲染进度',
     },
     preview: {

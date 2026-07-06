@@ -58,7 +58,7 @@
             </template>
             <span class="job-meta-divider" aria-hidden="true" />
             <span class="job-meta-item">
-              <span class="job-meta-label">{{ t('jobCard.renderTime') }}</span>
+              <span class="job-meta-label">{{ t('common.duration') }}</span>
               <strong>{{ renderTime }}</strong>
             </span>
             <span class="job-meta-divider" aria-hidden="true" />
@@ -205,6 +205,7 @@ const jobsStore = useJobsStore()
 const { openPath, getLastRenderedFrame, updateJobPreviewDimensions, pathExists } = useTauri()
 const { t } = useI18n()
 const { formatShortTimestamp } = useDateFormatters()
+const durationNow = useDurationNow()
 
 const statusLabel = useJobStatusLabel()
 const queueOrderLabel = useQueueOrderLabel()
@@ -239,7 +240,7 @@ const orderBadgeLabel = computed(() => queueOrderLabel(queueOrder.value))
 const renderTime = computed(() => {
   const job = props.job
   if (!job.startedAt) return t('jobCard.notStarted')
-  return formatDuration((job.finishedAt ?? Date.now()) - job.startedAt)
+  return formatDuration((job.finishedAt ?? durationNow.value) - job.startedAt)
 })
 const displayFrameRange = computed(() => `${props.job.originalFrameStart}–${props.job.originalFrameEnd}`)
 const currentExecutionRange = computed(() => `${props.job.frameStart}–${props.job.frameEnd}`)
@@ -422,8 +423,8 @@ async function syncStoredPreviewDimensions(width: number, height: number) {
 
   previewPersistKey = nextKey
   try {
-    const updated = await updateJobPreviewDimensions(props.job.id, width, height)
-    jobsStore.mergeJob(updated)
+    const update = await updateJobPreviewDimensions(props.job.id, width, height)
+    jobsStore.applyPreviewDimensions(update)
   } catch {
     // Ignore persistence failures; preview display should still work.
   } finally {

@@ -116,6 +116,12 @@ export interface JobUpdatedEvent {
   job: RenderJob
 }
 
+export interface JobPreviewDimensionsUpdate {
+  id: string
+  previewWidth: number
+  previewHeight: number
+}
+
 export interface ShadowRecoveryResponse {
   job: RenderJob
   scale: number

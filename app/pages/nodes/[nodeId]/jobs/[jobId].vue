@@ -108,7 +108,7 @@
               <p class="stat-value">{{ job.finishedAt ? formatTime(job.finishedAt) : '-' }}</p>
             </div>
             <div class="stat-item">
-              <p class="stat-label">{{ t('jobDetails.stats.duration') }}</p>
+              <p class="stat-label">{{ t('common.duration') }}</p>
               <p class="stat-value">{{ duration }}</p>
             </div>
           </div>
@@ -195,7 +195,7 @@
 
 <script setup lang="ts">
 import { JOB_STATUS_COLOR, useJobStatusLabel } from '~/composables/useJobStatus'
-import { useDateFormatters } from '~/utils/date-format'
+import { formatDuration, useDateFormatters } from '~/utils/date-format'
 
 const route = useRoute()
 const nodesStore = useNodesStore()
@@ -203,7 +203,7 @@ const toast = useToast()
 const { t } = useI18n()
 const { formatShortTimestamp, formatTimestamp } = useDateFormatters()
 const loading = ref(true)
-const durationNow = ref(Date.now())
+const durationNow = useDurationNow()
 const eventPanelEl = ref<HTMLElement | null>(null)
 const remoteLogPanelEl = ref<HTMLElement | null>(null)
 
@@ -292,13 +292,7 @@ const isWarmingUp = computed(() => {
 const duration = computed(() => {
   const currentJob = job.value
   if (!currentJob?.startedAt) return '-'
-  const ms = (currentJob.finishedAt ?? durationNow.value) - currentJob.startedAt
-  const secs = Math.round(ms / 1000)
-  if (secs < 60) return `${secs}s`
-  const minutes = Math.floor(secs / 60)
-  const restSecs = secs % 60
-  if (minutes < 60) return `${minutes}m ${restSecs}s`
-  return `${Math.floor(minutes / 60)}h ${minutes % 60}m ${restSecs}s`
+  return formatDuration((currentJob.finishedAt ?? durationNow.value) - currentJob.startedAt)
 })
 
 const currentFrame = computed(() => job.value?.currentFrame ?? 0)
@@ -320,7 +314,6 @@ const previewError = ref(false)
 const loadedEventKeys = new Set<string>()
 let previewLoadToken = 0
 let queueEventsLoadTimer = 0
-let durationRefreshTimer = 0
 const previewAspect = computed(() => {
   const currentJob = job.value
   if (!currentJob?.previewWidth || !currentJob.previewHeight) return null
@@ -432,10 +425,6 @@ async function refreshPreview() {
 watch(previewSourceUrl, () => { void refreshPreview() }, { immediate: true })
 
 onMounted(async () => {
-  durationRefreshTimer = window.setInterval(() => {
-    durationNow.value = Date.now()
-  }, 30_000)
-
   try {
     await nodesStore.init()
     await loadNodeQueueEvents()
@@ -475,7 +464,6 @@ watch(
 )
 
 onUnmounted(() => {
-  window.clearInterval(durationRefreshTimer)
   window.clearTimeout(queueEventsLoadTimer)
 })
 </script>

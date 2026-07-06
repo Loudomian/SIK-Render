@@ -430,7 +430,7 @@
                 <strong>{{ job.finishedAt ? formatTime(job.finishedAt) : '—' }}</strong>
               </span>
               <span class="job-meta-item detail-job-meta-item">
-                <span class="job-meta-label">{{ t('jobDetails.stats.duration') }}</span>
+                <span class="job-meta-label">{{ t('common.duration') }}</span>
                 <strong>{{ duration }}</strong>
               </span>
             </div>
@@ -594,7 +594,7 @@ import type { AddFfmpegJobPayload, JobLogSummary, RenderJob, RenderJobTranscodeC
 import { JOB_STATUS_COLOR, useJobStatusLabel } from '~/composables/useJobStatus'
 import { RENDER_QUEUE_ORDER_HIDDEN_STATUSES, resolveQueueOrder, useQueueOrderLabel } from '~/composables/useQueueOrder'
 import { buildTranscodeOutputPath, normalizeTranscodeDirectory, splitTranscodeOutputPath } from '~/composables/useTranscodeConfig'
-import { useDateFormatters } from '~/utils/date-format'
+import { formatDuration, useDateFormatters } from '~/utils/date-format'
 import { parseLogLine } from '~/utils/log-line'
 import { resolveOutputDirectory, resolvePathBaseName } from '~/utils/output-path'
 import { captureVideoPoster } from '~/utils/video-preview'
@@ -606,6 +606,7 @@ const jobsStore = useJobsStore()
 const transcodeStore = useTranscodeStore()
 const { t } = useI18n()
 const { formatTimestamp } = useDateFormatters()
+const durationNow = useDurationNow()
 
 const settingsStore = useSettingsStore()
 
@@ -1078,8 +1079,8 @@ async function syncStoredPreviewDimensions(width: number, height: number) {
   if (currentKey === nextKey) return
 
   try {
-    const updated = await updateJobPreviewDimensions(j.id, width, height)
-    jobsStore.mergeJob(updated)
+    const update = await updateJobPreviewDimensions(j.id, width, height)
+    jobsStore.applyPreviewDimensions(update)
   } catch {
     // Ignore persistence failures; preview display should still work.
   }
@@ -1254,13 +1255,7 @@ const formatTime = formatTimestamp
 const duration = computed(() => {
   const j = job.value
   if (!j?.startedAt) return '—'
-  const ms = (j.finishedAt ?? Date.now()) - j.startedAt
-  const secs = Math.round(ms / 1000)
-  if (secs < 60) return `${secs}s`
-  const m = Math.floor(secs / 60)
-  const s = secs % 60
-  if (m < 60) return `${m}m ${s}s`
-  return `${Math.floor(m / 60)}h ${m % 60}m ${s}s`
+  return formatDuration((j.finishedAt ?? durationNow.value) - j.startedAt)
 })
 
 onMounted(async () => {
