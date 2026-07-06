@@ -244,7 +244,7 @@
 <script setup lang="ts">
 import type { TranscodeLogEvent } from '~/types'
 import { FFMPEG_STATUS_COLOR, useFfmpegStatusLabel } from '~/composables/useFfmpegStatus'
-import { formatTimestamp } from '~/utils/date-format'
+import { useDateFormatters } from '~/utils/date-format'
 import { parseLogLine } from '~/utils/log-line'
 import { resolveOutputDirectory } from '~/utils/output-path'
 
@@ -253,6 +253,7 @@ const router = useRouter()
 const toast = useToast()
 const transcodeStore = useTranscodeStore()
 const { t } = useI18n()
+const { formatTimestamp } = useDateFormatters()
 const { openPath, getFfmpegJobLogs } = useTauri()
 const { onTranscodeProgress, onTranscodeLog, onFfmpegJobUpdated } = useRenderEvents()
 

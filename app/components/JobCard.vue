@@ -188,7 +188,7 @@ import { useRouter } from 'vue-router'
 import type { RenderJob } from '~/types'
 import { JOB_STATUS_COLOR, useJobStatusLabel } from '~/composables/useJobStatus'
 import { RENDER_QUEUE_ORDER_HIDDEN_STATUSES, resolveQueueOrder, useQueueOrderLabel } from '~/composables/useQueueOrder'
-import { formatDuration, formatShortTimestamp } from '~/utils/date-format'
+import { formatDuration, useDateFormatters } from '~/utils/date-format'
 import { resolveOutputDirectory } from '~/utils/output-path'
 import { captureVideoPoster } from '~/utils/video-preview'
 
@@ -198,6 +198,7 @@ const router = useRouter()
 const jobsStore = useJobsStore()
 const { openPath, getLastRenderedFrame, updateJobPreviewDimensions, pathExists } = useTauri()
 const { t } = useI18n()
+const { formatShortTimestamp } = useDateFormatters()
 
 const statusLabel = useJobStatusLabel()
 const queueOrderLabel = useQueueOrderLabel()

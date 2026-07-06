@@ -170,6 +170,7 @@ import { relaunch } from '@tauri-apps/plugin-process'
 import { open as openUrl } from '@tauri-apps/plugin-shell'
 import appIconLightUrl from '~/assets/app-icon-light.png'
 import appIconDarkUrl from '~/assets/app-icon-dark.png'
+import { formatDateTime } from '~/utils/date-format'
 
 const jobsStore = useJobsStore()
 const settingsStore = useSettingsStore()
@@ -178,7 +179,7 @@ const shadowRecoveryToast = useShadowRecoveryToast()
 const updaterState = useUpdaterState()
 const toast = useToast()
 const runtimeConfig = useRuntimeConfig()
-const { t, setLocale } = useI18n()
+const { t, locale, setLocale } = useI18n()
 const CONTEXT_MENU_ALLOW_SELECTOR = '[data-context-menu]'
 
 const navItems = computed(() => [
@@ -265,13 +266,7 @@ function formatUpdateDate(value?: string) {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return value
 
-  return new Intl.DateTimeFormat('zh-CN', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(date)
+  return formatDateTime(date, locale.value)
 }
 
 function parseUpdateNotes(body?: string): UpdateNoteBlock[] {
@@ -462,12 +457,12 @@ if (import.meta.client) {
 onMounted(async () => {
   systemThemeMedia?.addEventListener('change', handleSystemThemeChange)
   window.addEventListener('contextmenu', handleGlobalContextMenu, true)
-  await notifyAppReadyAfterPaint()
   await Promise.all([
     jobsStore.fetchJobs(),
     jobsStore.fetchQueueState(),
     settingsStore.load(),
   ])
+  await notifyAppReadyAfterPaint()
   void checkForAvailableUpdate()
   unlisteners.push(await onProgress(jobsStore.applyProgress))
   unlisteners.push(await onJobUpdated(jobsStore.applyJobUpdate))

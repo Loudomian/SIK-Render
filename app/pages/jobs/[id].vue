@@ -583,7 +583,7 @@ import type { AddFfmpegJobPayload, JobLogSummary, RenderJob, RenderJobTranscodeC
 import { JOB_STATUS_COLOR, useJobStatusLabel } from '~/composables/useJobStatus'
 import { RENDER_QUEUE_ORDER_HIDDEN_STATUSES, resolveQueueOrder, useQueueOrderLabel } from '~/composables/useQueueOrder'
 import { buildTranscodeOutputPath, normalizeTranscodeDirectory, splitTranscodeOutputPath } from '~/composables/useTranscodeConfig'
-import { formatTimestamp } from '~/utils/date-format'
+import { useDateFormatters } from '~/utils/date-format'
 import { parseLogLine } from '~/utils/log-line'
 import { resolveOutputDirectory, resolvePathBaseName } from '~/utils/output-path'
 import { captureVideoPoster } from '~/utils/video-preview'
@@ -594,6 +594,7 @@ const toast = useToast()
 const jobsStore = useJobsStore()
 const transcodeStore = useTranscodeStore()
 const { t } = useI18n()
+const { formatTimestamp } = useDateFormatters()
 
 const settingsStore = useSettingsStore()
 

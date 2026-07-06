@@ -152,7 +152,7 @@
 
 <script setup lang="ts">
 import type { NodeInfo, RemoteJobSnapshot } from '~/types'
-import { formatShortTimestamp } from '~/utils/date-format'
+import { useDateFormatters } from '~/utils/date-format'
 
 const props = withDefaults(defineProps<{
   node: NodeInfo
@@ -169,6 +169,7 @@ const props = withDefaults(defineProps<{
 const router = useRouter()
 const nodesStore = useNodesStore()
 const { t } = useI18n()
+const { formatShortTimestamp } = useDateFormatters()
 
 const runningJobs = computed(() => props.jobs.filter(job => job.status === 'running'))
 const activeJob = computed(() => runningJobs.value[0] ?? null)

@@ -58,6 +58,20 @@ export const useSettingsStore = defineStore('settings', () => {
     return locale === 'en-US' ? 'en-US' : 'zh-CN'
   }
 
+  function applyStoredLocalePreference() {
+    if (!import.meta.client) return
+    try {
+      const storedLocale = window.localStorage.getItem(LOCALE_STORAGE_KEY)
+      if (storedLocale) {
+        settings.value.locale = normalizeLocale(storedLocale)
+      }
+    } catch {
+      // Ignore storage failures and fall back to the bundled default.
+    }
+  }
+
+  applyStoredLocalePreference()
+
   function mergeInstalls(extra: BlenderInstall[]): BlenderInstall[] {
     const seen = new Set<string>()
     return extra.filter((b) => {

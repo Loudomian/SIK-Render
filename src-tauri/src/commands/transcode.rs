@@ -944,19 +944,27 @@ async fn resolve_ffmpeg_executable(
 
     match lookup.executable {
         Some(path) => Ok((path, lookup.source, configured_ffmpeg)),
-        None => {
-            let message = if let Some(configured) = configured_ffmpeg {
-                format!(
-                    "No usable FFmpeg executable was found. The configured path does not exist or is unavailable: {}. Reconfigure the FFmpeg executable in Settings.",
-                    configured.display()
-                )
-            } else {
-                String::from(
-                    "No usable FFmpeg executable was found. Configure an FFmpeg executable in Settings.",
-                )
-            };
-            Err(message)
-        }
+        None => Err(ffmpeg_missing_message(
+            settings.locale.as_str(),
+            configured_ffmpeg.as_deref(),
+        )),
+    }
+}
+
+fn ffmpeg_missing_message(locale: &str, configured_ffmpeg: Option<&Path>) -> String {
+    match (locale, configured_ffmpeg) {
+        ("en-US", Some(configured)) => format!(
+            "No usable FFmpeg executable was found. The configured path does not exist or is unavailable: {}. Reconfigure the FFmpeg executable in Settings.",
+            configured.display()
+        ),
+        ("en-US", None) => String::from(
+            "No usable FFmpeg executable was found. Configure an FFmpeg executable in Settings.",
+        ),
+        (_, Some(configured)) => format!(
+            "未找到可用的 FFmpeg。当前设置路径不存在或不可用：{}。请前往设置页重新指定 FFmpeg 可执行文件。",
+            configured.display()
+        ),
+        (_, None) => String::from("未找到可用的 FFmpeg。请前往设置页指定 FFmpeg 可执行文件。"),
     }
 }
 

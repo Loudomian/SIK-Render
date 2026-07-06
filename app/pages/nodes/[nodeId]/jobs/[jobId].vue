@@ -195,12 +195,13 @@
 
 <script setup lang="ts">
 import { JOB_STATUS_COLOR, useJobStatusLabel } from '~/composables/useJobStatus'
-import { formatShortTimestamp, formatTimestamp } from '~/utils/date-format'
+import { useDateFormatters } from '~/utils/date-format'
 
 const route = useRoute()
 const nodesStore = useNodesStore()
 const toast = useToast()
 const { t } = useI18n()
+const { formatShortTimestamp, formatTimestamp } = useDateFormatters()
 const loading = ref(true)
 const durationNow = ref(Date.now())
 const eventPanelEl = ref<HTMLElement | null>(null)
