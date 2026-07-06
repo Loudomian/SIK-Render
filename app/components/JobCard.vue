@@ -33,7 +33,18 @@
               />
             </div>
             <span class="job-name"><span class="job-number">#{{ job.jobNumber }}</span> {{ job.name }}</span>
-            <p v-if="job.note" class="job-note">{{ job.note }}</p>
+            <button
+              type="button"
+              class="job-note job-note-edit"
+              data-no-drag
+              :class="{ 'job-note-empty': !job.note }"
+              :title="t('jobCard.actions.editMetadataTooltip')"
+              @click.stop="$emit('editMetadata')"
+              @dblclick.stop
+            >
+              {{ job.note || t('jobCard.emptyNote') }}
+              <UIcon name="i-lucide-notebook-pen" class="job-note-icon" />
+            </button>
           </div>
         </div>
 
@@ -193,7 +204,7 @@ import { resolveOutputDirectory } from '~/utils/output-path'
 import { captureVideoPoster } from '~/utils/video-preview'
 
 const props = defineProps<{ job: RenderJob }>()
-defineEmits(['cancel', 'remove', 'retry'])
+defineEmits(['cancel', 'remove', 'retry', 'editMetadata'])
 const router = useRouter()
 const jobsStore = useJobsStore()
 const { openPath, getLastRenderedFrame, updateJobPreviewDimensions, pathExists } = useTauri()

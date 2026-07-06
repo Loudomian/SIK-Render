@@ -3,8 +3,6 @@
 }
 
 .detail-title {
-  display: grid;
-  gap: 0.55rem;
   flex: 1;
   min-width: 0;
   align-self: flex-start;
@@ -16,16 +14,63 @@
   text-wrap: pretty;
 }
 
-.detail-breadcrumb {
-  min-width: 0;
+.detail-note-edit {
+  display: block;
+  width: fit-content;
+  padding: 0;
+  border: 0;
+  border-radius: 0.35rem;
+  background: transparent;
+  font-family: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    color 140ms ease;
 }
 
-.detail-title-main {
-  display: flex;
-  flex: 1 1 22rem;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.5rem 0.6rem;
+.detail-note-edit:hover {
+  color: var(--ui-text-toned);
+}
+
+.detail-note-edit:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--ui-primary) 42%, transparent);
+  outline-offset: 2px;
+}
+
+.detail-note-empty {
+  color: var(--ui-text-dimmed);
+}
+
+.detail-note-icon {
+  display: inline-block;
+  margin-left: 0.25rem;
+  font-size: 0.95rem;
+  color: currentcolor;
+  opacity: 0.72;
+  transition: opacity 140ms ease;
+  vertical-align: -0.14em;
+}
+
+.detail-note-edit:hover .detail-note-icon,
+.detail-note-edit:focus-visible .detail-note-icon {
+  opacity: 1;
+}
+
+.detail-heading-copy {
+  width: 100%;
+}
+
+.detail-heading-row {
+  width: 100%;
+}
+
+.detail-heading-title {
+  flex: 1 1 auto;
+}
+
+.detail-breadcrumb {
   min-width: 0;
 }
 
@@ -107,31 +152,6 @@
   color: var(--ui-text);
   font: inherit;
   line-height: inherit;
-}
-
-.detail-title-row,
-.detail-heading-line {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.45rem;
-}
-
-.detail-title-row {
-  align-items: flex-start;
-  justify-content: space-between;
-  width: 100%;
-  gap: 0.7rem 1rem;
-}
-
-.detail-heading-stack {
-  display: grid;
-  gap: 0.55rem;
-  min-width: 0;
-}
-
-.detail-title-row > :first-child {
-  flex: 1 1 22rem;
-  min-width: 0;
 }
 
 .detail-header-actions,
@@ -509,7 +529,7 @@ button.detail-path-text:hover {
 }
 
 @media (max-width: 720px) {
-  .detail-title-row {
+  .detail-heading-row {
     flex-direction: column;
   }
 

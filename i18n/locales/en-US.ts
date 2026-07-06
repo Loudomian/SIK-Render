@@ -53,6 +53,7 @@ export default {
   jobCard: {
     quickMp4: 'Quick MP4',
     crashCount: '{count} crashes',
+    emptyNote: 'Edit Project Name and Note',
     frameRange: 'Frame Range',
     currentExecution: 'Current Run',
     renderTime: 'Render Time',
@@ -78,6 +79,7 @@ export default {
       deleteTooltip: 'Remove this job from the queue',
       openOutputTooltip: 'Open output directory',
       detailsTooltip: 'View job details',
+      editMetadataTooltip: 'Edit Project Name and Note',
     },
     preview: {
       generatedFinalFrame: 'Final frame preview generated',

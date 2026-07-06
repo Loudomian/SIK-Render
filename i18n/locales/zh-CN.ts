@@ -53,6 +53,7 @@ export default {
   jobCard: {
     quickMp4: '快速 MP4',
     crashCount: '崩溃 {count} 次',
+    emptyNote: '编辑项目名称和备注',
     frameRange: '帧范围',
     currentExecution: '当前执行',
     renderTime: '渲染时间',
@@ -78,6 +79,7 @@ export default {
       deleteTooltip: '从队列中删除这个任务',
       openOutputTooltip: '打开输出目录',
       detailsTooltip: '查看任务详情',
+      editMetadataTooltip: '编辑项目名称和备注',
     },
     preview: {
       generatedFinalFrame: '已生成最终帧预览',

@@ -134,6 +134,7 @@
               @cancel="jobsStore.stopJob(job.id)"
               @remove="deleteConfirmJob = job"
               @retry="handleRetry(job)"
+              @edit-metadata="openMetadataDialog(job)"
             />
           </div>
         </UContextMenu>

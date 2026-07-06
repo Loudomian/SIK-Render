@@ -3,7 +3,8 @@
   min-width: 0;
 }
 
-.job-context-menu-target {
+.job-context-menu-target,
+.detail-context-menu-target {
   width: 100%;
 }
 

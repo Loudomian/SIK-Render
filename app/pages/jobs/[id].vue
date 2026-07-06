@@ -7,9 +7,9 @@
           :ui="{ content: 'detail-context-menu-content' }"
         >
           <div class="detail-context-menu-target" data-context-menu>
-            <div class="detail-heading-stack">
-              <div class="detail-title-row">
-                <div class="detail-title-main">
+            <div class="queue-heading-row detail-heading-row">
+              <div class="queue-heading-copy detail-heading-copy">
+                <div class="queue-heading-title detail-heading-title">
                   <UBreadcrumb
                     as="h1"
                     :items="detailBreadcrumbItems"
@@ -47,73 +47,83 @@
                     />
                   </div>
                 </div>
-                <div class="detail-header-actions">
-                  <UFieldGroup v-if="transcodeSupported" size="md" class="detail-action-fieldgroup">
-                    <UButton
-                      :icon="transcodePrimaryAction.icon"
-                      :label="transcodePrimaryAction.label"
-                      :color="transcodePrimaryAction.color"
-                      variant="subtle"
-                      size="md"
-                      :loading="transcodePrimaryAction.loading"
-                      :disabled="transcodePrimaryAction.disabled"
-                      :ui="{ leadingIcon: transcodePrimaryAction.spin ? 'spin' : undefined }"
-                      @click="handlePrimaryTranscodeAction"
-                    />
-                    <UDropdownMenu
-                      :items="transcodeActionItems"
-                      arrow
-                      :content="{ side: 'bottom', align: 'end', sideOffset: 8 }"
-                    >
-                      <UButton
-                        icon="i-lucide-chevron-down"
-                        color="neutral"
-                        variant="outline"
-                        size="md"
-                        square
-                      />
-                      <template #auto-transcode-trailing>
-                        <USwitch
-                          :model-value="autoTranscodeEnabled"
-                          color="neutral"
-                          :disabled="updatingAutoTranscode || !transcodeSupported"
-                          @pointerdown.stop
-                          @click.stop
-                          @update:model-value="handleAutoTranscodeSwitchUpdate"
-                        />
-                      </template>
-                    </UDropdownMenu>
-                  </UFieldGroup>
-                  <UButton
-                    v-if="job.status === 'failed' || job.status === 'cancelled' || job.status === 'interrupted' || job.status === 'done'"
-                    icon="i-lucide-rotate-ccw"
-                    :label="job.status === 'cancelled' || job.status === 'interrupted' ? t('jobDetails.actions.continue') : t('jobDetails.actions.rerender')"
-                    :color="job.status === 'cancelled' || job.status === 'interrupted' ? 'warning' : 'neutral'"
-                    variant="outline"
-                    size="md"
-                    @click="handleRetry(job)"
-                  />
-                  <UButton
-                    v-if="job.status === 'running' || job.status === 'pending'"
-                    icon="i-lucide-x"
-                    :label="t('common.cancel')"
-                    color="warning"
-                    variant="outline"
-                    size="md"
-                    @click="jobsStore.stopJob(job.id)"
-                  />
-                  <UButton
-                    v-if="job.status === 'done' || job.status === 'failed' || job.status === 'cancelled' || job.status === 'interrupted'"
-                    icon="i-lucide-trash-2"
-                    :label="t('common.delete')"
-                    color="error"
-                    variant="outline"
-                    size="md"
-                    @click="showDeleteConfirm = true"
-                  />
-                </div>
+                <button
+                  type="button"
+                  class="page-note detail-note detail-note-edit"
+                  :class="{ 'detail-note-empty': !job.note }"
+                  :title="t('jobCard.actions.editMetadataTooltip')"
+                  @click.stop="openMetadataDialog"
+                  @dblclick.stop
+                >
+                  {{ job.note || t('jobCard.emptyNote') }}
+                  <UIcon name="i-lucide-notebook-pen" class="detail-note-icon" />
+                </button>
               </div>
-              <p v-if="job.note" class="page-note detail-note">{{ job.note }}</p>
+              <div class="detail-header-actions">
+                <UFieldGroup v-if="transcodeSupported" size="md" class="detail-action-fieldgroup">
+                  <UButton
+                    :icon="transcodePrimaryAction.icon"
+                    :label="transcodePrimaryAction.label"
+                    :color="transcodePrimaryAction.color"
+                    variant="subtle"
+                    size="md"
+                    :loading="transcodePrimaryAction.loading"
+                    :disabled="transcodePrimaryAction.disabled"
+                    :ui="{ leadingIcon: transcodePrimaryAction.spin ? 'spin' : undefined }"
+                    @click="handlePrimaryTranscodeAction"
+                  />
+                  <UDropdownMenu
+                    :items="transcodeActionItems"
+                    arrow
+                    :content="{ side: 'bottom', align: 'end', sideOffset: 8 }"
+                  >
+                    <UButton
+                      icon="i-lucide-chevron-down"
+                      color="neutral"
+                      variant="outline"
+                      size="md"
+                      square
+                    />
+                    <template #auto-transcode-trailing>
+                      <USwitch
+                        :model-value="autoTranscodeEnabled"
+                        color="neutral"
+                        :disabled="updatingAutoTranscode || !transcodeSupported"
+                        @pointerdown.stop
+                        @click.stop
+                        @update:model-value="handleAutoTranscodeSwitchUpdate"
+                      />
+                    </template>
+                  </UDropdownMenu>
+                </UFieldGroup>
+                <UButton
+                  v-if="job.status === 'failed' || job.status === 'cancelled' || job.status === 'interrupted' || job.status === 'done'"
+                  icon="i-lucide-rotate-ccw"
+                  :label="job.status === 'cancelled' || job.status === 'interrupted' ? t('jobDetails.actions.continue') : t('jobDetails.actions.rerender')"
+                  :color="job.status === 'cancelled' || job.status === 'interrupted' ? 'warning' : 'neutral'"
+                  variant="outline"
+                  size="md"
+                  @click="handleRetry(job)"
+                />
+                <UButton
+                  v-if="job.status === 'running' || job.status === 'pending'"
+                  icon="i-lucide-x"
+                  :label="t('common.cancel')"
+                  color="warning"
+                  variant="outline"
+                  size="md"
+                  @click="jobsStore.stopJob(job.id)"
+                />
+                <UButton
+                  v-if="job.status === 'done' || job.status === 'failed' || job.status === 'cancelled' || job.status === 'interrupted'"
+                  icon="i-lucide-trash-2"
+                  :label="t('common.delete')"
+                  color="error"
+                  variant="outline"
+                  size="md"
+                  @click="showDeleteConfirm = true"
+                />
+              </div>
             </div>
           </div>
         </UContextMenu>
