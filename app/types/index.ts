@@ -293,6 +293,7 @@ export interface AppSettings {
   exrCodec: 'NONE' | 'ZIP' | 'PIZ' | 'DWAA' | 'DWAB' | 'ZIPS' | 'RLE' | 'PXR24' | 'B44' | 'B44A'
   exrQuality: number
   theme: 'dark' | 'light' | 'system'
+  locale: 'zh-CN' | 'en-US'
   extraBlenderPaths: string[]
   excludedBlenderPaths: string[]
   maxCrashRetries: number

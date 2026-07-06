@@ -2,7 +2,7 @@
   <UModal
     :open="open"
     :close="false"
-    title="界面与外观"
+    :title="t('settingsModals.appearance.title')"
     :ui="{ content: 'job-modal-content settings-modal-content' }"
     @update:open="handleOpenChange"
   >
@@ -11,8 +11,8 @@
         <div class="settings-form-stack">
           <section class="surface-panel settings-field-panel">
             <div class="settings-field-copy">
-              <p class="settings-field-title">界面主题</p>
-              <p class="hint-text">切换浅色和深色主题，应用会立即生效。</p>
+              <p class="settings-field-title">{{ t('settingsModals.appearance.themeTitle') }}</p>
+              <p class="hint-text">{{ t('settingsModals.appearance.themeNote') }}</p>
             </div>
             <UFormField>
               <ColorModeSelect v-model="draftTheme" />
@@ -25,14 +25,14 @@
           <div class="settings-modal-actions-end">
             <UButton
               icon="i-lucide-x"
-              label="取消"
+              :label="t('common.cancel')"
               color="neutral"
               variant="outline"
               @click="emit('update:open', false)"
             />
             <UButton
               icon="i-lucide-save"
-              label="保存"
+              :label="t('common.save')"
               color="primary"
               variant="solid"
               @click="saveAppearance"
@@ -56,6 +56,7 @@ const emit = defineEmits<{
 }>()
 
 const settingsStore = useSettingsStore()
+const { t } = useI18n()
 const draftTheme = ref<AppSettings['theme']>('dark')
 
 watch(

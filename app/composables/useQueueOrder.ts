@@ -20,6 +20,7 @@ export function resolveQueueOrder<TStatus extends string, TItem extends QueueIte
   return index === -1 ? null : index + 1
 }
 
-export function formatQueueOrderLabel(order: number | null) {
-  return order != null ? `顺序 ${order}` : null
+export function useQueueOrderLabel() {
+  const { t } = useI18n()
+  return (order: number | null) => order != null ? t('queue.order', { order }) : null
 }

@@ -36,6 +36,8 @@ pub struct AppSettings {
     #[serde(default = "default_exr_quality")]
     pub exr_quality: u32,
     pub theme: String,
+    #[serde(default = "default_locale")]
+    pub locale: String,
     #[serde(default)]
     pub extra_blender_paths: Vec<String>,
     #[serde(default)]
@@ -72,6 +74,7 @@ impl Default for AppSettings {
             exr_codec: default_exr_codec(),
             exr_quality: default_exr_quality(),
             theme: "dark".into(),
+            locale: default_locale(),
             extra_blender_paths: Vec::new(),
             excluded_blender_paths: Vec::new(),
             max_crash_retries: default_max_crash_retries(),
@@ -148,12 +151,15 @@ struct BlenderOutputSettings {
 struct UiSettings {
     #[serde(default = "default_theme")]
     theme: String,
+    #[serde(default = "default_locale")]
+    locale: String,
 }
 
 impl Default for UiSettings {
     fn default() -> Self {
         Self {
             theme: default_theme(),
+            locale: default_locale(),
         }
     }
 }
@@ -215,16 +221,20 @@ fn default_theme() -> String {
     String::from("dark")
 }
 
+fn default_locale() -> String {
+    String::from("zh-CN")
+}
+
 fn default_render_output_path_template() -> String {
     String::from("./{blendFileName}_{frameStart}-{frameEnd}/{blendFileName}_{frame}")
 }
 
 fn default_blender_transcode_output_path_template() -> String {
-    String::from("./转码/{blendFileName}_{frameStart}-{frameEnd}.mp4")
+    String::from("./transcode/{blendFileName}_{frameStart}-{frameEnd}.mp4")
 }
 
 fn default_standalone_transcode_output_path_template() -> String {
-    String::from("../转码/{folderName}_{frameStart}-{frameEnd}.mp4")
+    String::from("../transcode/{folderName}_{frameStart}-{frameEnd}.mp4")
 }
 
 fn default_png_color_mode() -> String {
@@ -260,6 +270,13 @@ fn normalize_theme(theme: String) -> String {
         "light" => String::from("light"),
         "system" => String::from("system"),
         _ => default_theme(),
+    }
+}
+
+fn normalize_locale(locale: String) -> String {
+    match locale.as_str() {
+        "en-US" => String::from("en-US"),
+        _ => default_locale(),
     }
 }
 
@@ -391,6 +408,7 @@ impl From<SettingsFile> for AppSettings {
             exr_codec: normalize_exr_codec(&value.blender_output.exr_codec),
             exr_quality: normalize_exr_quality(value.blender_output.exr_quality),
             theme: normalize_theme(value.ui.theme),
+            locale: normalize_locale(value.ui.locale),
             extra_blender_paths: value.blender.extra_blender_paths,
             excluded_blender_paths: value.blender.excluded_blender_paths,
             max_crash_retries: normalize_max_crash_retries(value.tools.max_crash_retries),
@@ -417,7 +435,10 @@ impl From<AppSettings> for SettingsFile {
                 ffmpeg_max_concurrent: normalize_ffmpeg_max_concurrent(value.ffmpeg_max_concurrent),
                 max_crash_retries: normalize_max_crash_retries(value.max_crash_retries),
             },
-            ui: UiSettings { theme: value.theme },
+            ui: UiSettings {
+                theme: value.theme,
+                locale: value.locale,
+            },
             blender: BlenderSettings {
                 extra_blender_paths: value.extra_blender_paths,
                 excluded_blender_paths: value.excluded_blender_paths,
@@ -563,6 +584,7 @@ pub fn save_settings(app: AppHandle, settings: AppSettings) -> Result<(), String
     let path = settings_path(&app)?;
     let mut settings = settings;
     settings.theme = normalize_theme(settings.theme);
+    settings.locale = normalize_locale(settings.locale);
     settings.blend_inspect_timeout_seconds =
         normalize_blend_inspect_timeout_seconds(settings.blend_inspect_timeout_seconds);
     settings.transcode_crf = settings.transcode_crf.min(51);

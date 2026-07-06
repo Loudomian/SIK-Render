@@ -2,7 +2,7 @@
   <UModal
     :open="open"
     :close="false"
-    title="输出设置"
+    :title="t('settingsModals.blenderOutput.title')"
     :ui="{ content: 'job-modal-content settings-modal-content' }"
     @update:open="handleOpenChange"
   >
@@ -11,11 +11,11 @@
         <div class="settings-form-stack">
           <section class="surface-panel settings-field-panel">
             <div class="settings-field-copy">
-              <p class="settings-field-title">PNG 默认输出</p>
-              <p class="hint-text">默认使用 RGB，压缩率和色深按 Blender 的常用默认值处理。</p>
+              <p class="settings-field-title">{{ t('settingsModals.blenderOutput.pngTitle') }}</p>
+              <p class="hint-text">{{ t('settingsModals.blenderOutput.pngNote') }}</p>
             </div>
             <div class="settings-inline-fields settings-inline-fields-png">
-              <UFormField label="颜色">
+              <UFormField :label="t('settingsModals.blenderOutput.color')">
                 <USelect
                   v-model="draft.pngColorMode"
                   :items="pngColorModeOptions"
@@ -24,7 +24,7 @@
                   :ui="{ base: 'w-full' }"
                 />
               </UFormField>
-              <UFormField label="色深">
+              <UFormField :label="t('settingsModals.blenderOutput.colorDepth')">
                 <USelect
                   v-model="draft.pngColorDepth"
                   :items="pngColorDepthOptions"
@@ -33,7 +33,7 @@
                   :ui="{ base: 'w-full' }"
                 />
               </UFormField>
-              <UFormField label="压缩率">
+              <UFormField :label="t('settingsModals.blenderOutput.compression')">
                 <UInputNumber
                   v-model="draft.pngCompression"
                   :min="0"
@@ -51,11 +51,11 @@
 
           <section class="surface-panel settings-field-panel">
             <div class="settings-field-copy">
-              <p class="settings-field-title">OpenEXR 默认输出</p>
-              <p class="hint-text">默认使用 RGB、16-bit、DWAA，质量 98%。选择 OpenEXR 时会禁用转码。</p>
+              <p class="settings-field-title">{{ t('settingsModals.blenderOutput.exrTitle') }}</p>
+              <p class="hint-text">{{ t('settingsModals.blenderOutput.exrNote') }}</p>
             </div>
             <div class="settings-inline-fields settings-inline-fields-exr">
-              <UFormField label="颜色">
+              <UFormField :label="t('settingsModals.blenderOutput.color')">
                 <USelect
                   v-model="draft.exrColorMode"
                   :items="exrColorModeOptions"
@@ -64,7 +64,7 @@
                   :ui="{ base: 'w-full' }"
                 />
               </UFormField>
-              <UFormField label="色深">
+              <UFormField :label="t('settingsModals.blenderOutput.colorDepth')">
                 <USelect
                   v-model="draft.exrColorDepth"
                   :items="exrColorDepthOptions"
@@ -82,7 +82,7 @@
                   :ui="{ base: 'w-full' }"
                 />
               </UFormField>
-              <UFormField label="质量">
+              <UFormField :label="t('settingsModals.blenderOutput.quality')">
                 <UInputNumber
                   v-model="draft.exrQuality"
                   :min="0"
@@ -105,7 +105,7 @@
           <div class="settings-modal-actions-start">
             <UButton
               icon="i-lucide-rotate-ccw"
-              label="恢复默认"
+              :label="t('common.resetDefaults')"
               color="neutral"
               variant="ghost"
               :disabled="saving"
@@ -115,7 +115,7 @@
           <div class="settings-modal-actions-end">
             <UButton
               icon="i-lucide-x"
-              label="取消"
+              :label="t('common.cancel')"
               color="neutral"
               variant="outline"
               :disabled="saving"
@@ -123,7 +123,7 @@
             />
             <UButton
               icon="i-lucide-save"
-              label="保存"
+              :label="t('common.save')"
               color="primary"
               variant="solid"
               :loading="saving"
@@ -170,6 +170,7 @@ const emit = defineEmits<{
 }>()
 
 const settingsStore = useSettingsStore()
+const { t } = useI18n()
 
 const draft = reactive({
   pngColorMode: defaultOutputSettings.pngColorMode as ColorModeOption,

@@ -5,8 +5,8 @@
         <div class="drop-message">
           <UIcon name="i-lucide-folder-down" class="drop-icon" />
           <div class="drop-copy">
-            <strong>拖拽序列帧文件夹到窗口</strong>
-            <span>松开以创建转码任务</span>
+            <strong>{{ t('transcodeQueue.dragOverlay.title') }}</strong>
+            <span>{{ t('transcodeQueue.dragOverlay.description') }}</span>
           </div>
         </div>
       </div>
@@ -17,15 +17,15 @@
         <div class="page-hero-copy">
           <div class="queue-heading-row">
             <div class="queue-heading-copy">
-              <h1>转码队列</h1>
-              <p class="page-note">集中查看所有转码任务的状态、结果与日志。</p>
+              <h1>{{ t('transcodeQueue.title') }}</h1>
+              <p class="page-note">{{ t('transcodeQueue.description') }}</p>
             </div>
             <div class="queue-hero-actions-stack">
               <div class="page-hero-actions queue-hero-actions">
                 <UFieldGroup size="md">
                   <UButton
                     icon="i-lucide-plus"
-                    label="新建任务"
+                    :label="t('transcodeQueue.newJob')"
                     color="primary"
                     variant="solid"
                     @click="openCreateModal"
@@ -69,7 +69,7 @@
     </section>
 
     <section class="queue-content">
-      <div v-if="transcodeStore.loading" class="loading">加载中…</div>
+      <div v-if="transcodeStore.loading" class="loading">{{ t('common.loading') }}</div>
 
       <UCard
         v-else-if="transcodeStore.ffmpegJobs.length === 0"
@@ -80,8 +80,8 @@
         <div class="empty-state-icon">
           <UIcon name="i-lucide-clapperboard" />
         </div>
-        <div class="empty-state-title">还没有 FFmpeg Job</div>
-        <div class="empty-state-note">拖拽序列帧文件夹到窗口，或点击“新建任务”手动创建转码任务。</div>
+        <div class="empty-state-title">{{ t('transcodeQueue.empty.title') }}</div>
+        <div class="empty-state-note">{{ t('transcodeQueue.empty.note') }}</div>
       </UCard>
 
       <UCard
@@ -125,18 +125,18 @@
     <UModal
       :open="!!deleteConfirmJob"
       :close="false"
-      title="删除转码任务"
+      :title="t('transcodeQueue.delete.title')"
       :ui="{ content: 'job-modal-content' }"
       @update:open="v => { if (!v) deleteConfirmJob = null }"
     >
       <template #body>
         <div class="modal-stack">
           <p class="modal-copy">
-            确定删除 <strong>{{ deleteConfirmJob?.name }}</strong>？此操作不可撤销。
+            {{ t('transcodeQueue.delete.message', { name: deleteConfirmJob?.name ?? '' }) }}
           </p>
           <div class="modal-actions">
-            <UButton icon="i-lucide-x" label="取消" color="warning" variant="outline" @click="deleteConfirmJob = null" />
-            <UButton icon="i-lucide-trash-2" label="删除" color="error" variant="outline" @click="confirmDelete" />
+            <UButton icon="i-lucide-x" :label="t('common.cancel')" color="warning" variant="outline" @click="deleteConfirmJob = null" />
+            <UButton icon="i-lucide-trash-2" :label="t('common.delete')" color="error" variant="outline" @click="confirmDelete" />
           </div>
         </div>
       </template>
@@ -145,21 +145,19 @@
     <UModal
       :open="showClearCompletedConfirm"
       :close="false"
-      title="清理已完成任务"
+      :title="t('transcodeQueue.clearCompleted.title')"
       :ui="{ content: 'job-modal-content' }"
       @update:open="v => { if (!v) showClearCompletedConfirm = false }"
     >
       <template #body>
         <div class="modal-stack">
           <p class="modal-copy">
-            确定清理当前所有
-            <strong>{{ doneJobs.length }}</strong>
-            个已完成转码任务？此操作不可撤销。
+            {{ t('transcodeQueue.clearCompleted.message', { count: doneJobs.length }) }}
           </p>
           <div class="modal-actions">
             <UButton
               icon="i-lucide-x"
-              label="取消"
+              :label="t('common.cancel')"
               color="warning"
               variant="outline"
               :disabled="clearingCompletedTranscodeJobs"
@@ -167,7 +165,7 @@
             />
             <UButton
               icon="i-lucide-trash-2"
-              label="确认清理"
+              :label="t('transcodeQueue.actions.clearCompletedConfirm')"
               color="error"
               variant="outline"
               :loading="clearingCompletedTranscodeJobs"
@@ -202,6 +200,7 @@ const route = useRoute()
 const toast = useToast()
 const settingsStore = useSettingsStore()
 const transcodeStore = useTranscodeStore()
+const { t } = useI18n()
 const { scanFolderFrameGroups } = useTauri()
 const { onTranscodeProgress, onTranscodeLog, onFfmpegJobUpdated } = useRenderEvents()
 
@@ -249,25 +248,25 @@ const filteredJobs = computed(() => {
 const emptyTabTitle = computed(() => {
   switch (activeTab.value) {
     case 'queue':
-      return '当前没有排队中任务'
+      return t('transcodeQueue.empty.queueTitle')
     case 'done':
-      return '当前没有已完成任务'
+      return t('transcodeQueue.empty.doneTitle')
     case 'error':
-      return '当前没有已中止任务'
+      return t('transcodeQueue.empty.errorTitle')
     default:
-      return '当前没有任务'
+      return t('transcodeQueue.empty.allTitle')
   }
 })
 const emptyTabNote = computed(() => {
   switch (activeTab.value) {
     case 'queue':
-      return '等待中的任务会保留在这里，运行中的任务也会一起显示。'
+      return t('transcodeQueue.empty.queueNote')
     case 'done':
-      return '完成的 FFmpeg Job 会集中展示，方便回看输出结果。'
+      return t('transcodeQueue.empty.doneNote')
     case 'error':
-      return '失败和已取消的 FFmpeg Job 会保留在这里，便于重查日志。'
+      return t('transcodeQueue.empty.errorNote')
     default:
-      return '这里会显示当前筛选下的任务卡片。'
+      return t('transcodeQueue.empty.allNote')
   }
 })
 const emptyTabToneClass = computed(() => {
@@ -284,7 +283,7 @@ const emptyTabToneClass = computed(() => {
 })
 const transcodeQueueActionItems = computed<DropdownMenuItem[][]>(() => [[
   {
-    label: '清理已完成',
+    label: t('transcodeQueue.actions.clearCompleted'),
     icon: 'i-lucide-trash-2',
     disabled: clearingCompletedTranscodeJobs.value || doneJobs.value.length === 0,
     onSelect: () => {
@@ -294,7 +293,7 @@ const transcodeQueueActionItems = computed<DropdownMenuItem[][]>(() => [[
 ]])
 const tabItems = computed<TabsItem[]>(() => [
   {
-    label: '全部',
+    label: t('transcodeQueue.tabs.all'),
     value: 'all',
     badge: { label: String(transcodeStore.ffmpegJobs.length), color: 'neutral' as const, variant: 'subtle' as const },
     icon: 'i-lucide-layers',
@@ -302,7 +301,7 @@ const tabItems = computed<TabsItem[]>(() => [
     ui: { trigger: 'queue-tab-tone-all' },
   },
   {
-    label: '排队中',
+    label: t('transcodeQueue.tabs.queue'),
     value: 'queue',
     badge: { label: String(queueJobs.value.length), color: 'info' as const, variant: 'subtle' as const },
     icon: 'i-lucide-loader-circle',
@@ -310,7 +309,7 @@ const tabItems = computed<TabsItem[]>(() => [
     ui: { trigger: 'queue-tab-tone-queue' },
   },
   {
-    label: '已完成',
+    label: t('transcodeQueue.tabs.done'),
     value: 'done',
     badge: { label: String(doneJobs.value.length), color: 'success' as const, variant: 'subtle' as const },
     icon: 'i-lucide-circle-check-big',
@@ -318,7 +317,7 @@ const tabItems = computed<TabsItem[]>(() => [
     ui: { trigger: 'queue-tab-tone-done' },
   },
   {
-    label: '已中止',
+    label: t('transcodeQueue.tabs.error'),
     value: 'error',
     badge: { label: String(errorJobs.value.length), color: 'warning' as const, variant: 'subtle' as const },
     icon: 'i-lucide-triangle-alert',
@@ -343,8 +342,8 @@ async function addFolderToQueue(folderPath: string) {
     const result = await scanFolderFrameGroups(folderPath)
     if (result.groups.length === 0) {
       toast.add({
-        title: '未发现序列帧',
-        description: '这个目录里没有检测到可转码的序列帧。',
+        title: t('transcodeQueue.toast.noSequenceTitle'),
+        description: t('transcodeQueue.toast.noSequenceDescription'),
         color: 'warning',
       })
       return
@@ -363,7 +362,7 @@ async function addFolderToQueue(folderPath: string) {
     transcodeModalOpen.value = true
   } catch (error) {
     toast.add({
-      title: '创建 FFmpeg Job 失败',
+      title: t('transcodeQueue.toast.createFailedTitle'),
       description: error instanceof Error ? error.message : String(error),
       color: 'error',
     })
@@ -392,7 +391,7 @@ async function handleModalSubmit(payload: AddFfmpegJobPayload) {
   try {
     const job = await transcodeStore.submitFfmpegJob(payload)
     toast.add({
-      title: '已创建 FFmpeg Job',
+      title: t('transcodeQueue.toast.createdTitle'),
       description: `#${job.jobNumber} ${job.name}`,
       color: 'success',
     })
@@ -403,7 +402,7 @@ async function handleModalSubmit(payload: AddFfmpegJobPayload) {
     }
   } catch (error) {
     toast.add({
-      title: '创建 FFmpeg Job 失败',
+      title: t('transcodeQueue.toast.createFailedTitle'),
       description: error instanceof Error ? error.message : String(error),
       color: 'error',
     })
@@ -493,7 +492,7 @@ async function commitDrop() {
     await transcodeStore.reorderPendingJobs(remaining)
   } catch (error) {
     toast.add({
-      title: '顺序更新失败',
+      title: t('transcodeQueue.toast.reorderFailedTitle'),
       description: error instanceof Error ? error.message : String(error),
       color: 'error',
     })
@@ -565,14 +564,16 @@ async function confirmClearCompletedTranscodeJobs() {
     const { removed, failed } = await transcodeStore.clearCompletedJobs()
     if (removed > 0) {
       toast.add({
-        title: '已清理完成任务',
-        description: failed > 0 ? `成功清理 ${removed} 个，另有 ${failed} 个失败。` : `成功清理 ${removed} 个已完成任务。`,
+        title: t('transcodeQueue.toast.clearSuccessTitle'),
+        description: failed > 0
+          ? t('transcodeQueue.toast.clearPartialDescription', { removed, failed })
+          : t('transcodeQueue.toast.clearSuccessDescription', { removed }),
         color: failed > 0 ? 'warning' : 'success',
       })
     } else if (failed > 0) {
       toast.add({
-        title: '清理完成任务失败',
-        description: `共有 ${failed} 个任务未能删除。`,
+        title: t('transcodeQueue.toast.clearFailedTitle'),
+        description: t('transcodeQueue.toast.clearFailedDescription', { failed }),
         color: 'error',
       })
     }
@@ -587,7 +588,7 @@ async function handleCancel(id: string) {
     await transcodeStore.cancelFfmpegJob(id)
   } catch (error) {
     toast.add({
-      title: '取消 FFmpeg Job 失败',
+      title: t('transcodeQueue.toast.cancelFailedTitle'),
       description: error instanceof Error ? error.message : String(error),
       color: 'error',
     })
@@ -600,7 +601,7 @@ async function confirmDelete() {
     await transcodeStore.deleteFfmpegJob(deleteConfirmJob.value.id)
   } catch (error) {
     toast.add({
-      title: '删除 FFmpeg Job 失败',
+      title: t('transcodeQueue.toast.deleteFailedTitle'),
       description: error instanceof Error ? error.message : String(error),
       color: 'error',
     })

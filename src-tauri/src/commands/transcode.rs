@@ -947,11 +947,13 @@ async fn resolve_ffmpeg_executable(
         None => {
             let message = if let Some(configured) = configured_ffmpeg {
                 format!(
-                    "未找到可用的 FFmpeg。当前设置路径不存在或不可用：{}。请前往设置页重新指定 FFmpeg 可执行文件。",
+                    "No usable FFmpeg executable was found. The configured path does not exist or is unavailable: {}. Reconfigure the FFmpeg executable in Settings.",
                     configured.display()
                 )
             } else {
-                String::from("未找到可用的 FFmpeg。请前往设置页指定 FFmpeg 可执行文件。")
+                String::from(
+                    "No usable FFmpeg executable was found. Configure an FFmpeg executable in Settings.",
+                )
             };
             Err(message)
         }

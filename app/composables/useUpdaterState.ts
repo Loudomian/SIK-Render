@@ -41,7 +41,7 @@ export function createMockUpdate(currentVersion: string): AppUpdate {
     ].join('\n'),
     async downloadAndInstall() {
       await new Promise(resolve => window.setTimeout(resolve, 600))
-      throw new Error('本地 mock 更新不会下载安装包。关闭 mock 后使用真实 Release 测试安装。')
+      throw new Error('Local mock updates do not download installers. Disable the mock and test installation with a real release.')
     },
   }
 }

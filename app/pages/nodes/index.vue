@@ -3,8 +3,8 @@
     <section class="nodes-header">
       <section class="page-hero nodes-hero">
         <div class="page-hero-copy">
-          <h1>渲染节点</h1>
-          <p class="page-note">当前在线 {{ nodesStore.connectedCount }} 个节点，已记录 {{ nodesStore.peerList.length }} 个节点。</p>
+          <h1>{{ t('nodesPage.title') }}</h1>
+          <p class="page-note">{{ t('nodesPage.summary', { connected: nodesStore.connectedCount, total: nodesStore.peerList.length }) }}</p>
         </div>
       </section>
     </section>
@@ -12,7 +12,7 @@
     <section class="nodes-content">
       <section v-if="nodesStore.localNode" class="node-section">
         <div class="settings-section-heading">
-          <h2 class="settings-section-title">本机</h2>
+          <h2 class="settings-section-title">{{ t('nodesPage.local') }}</h2>
         </div>
         <NodeCard
           :node="nodesStore.localNode"
@@ -24,8 +24,8 @@
 
       <section class="node-section">
         <div class="settings-section-heading">
-          <h2 class="settings-section-title">局域网节点</h2>
-          <p class="hint-text">在线节点实时同步；离线节点保留最后一次记录。</p>
+          <h2 class="settings-section-title">{{ t('nodesPage.lan') }}</h2>
+          <p class="hint-text">{{ t('nodesPage.lanNote') }}</p>
         </div>
 
         <div v-if="nodesStore.peerList.length" class="node-list">
@@ -44,8 +44,8 @@
           <div class="empty-state-icon">
             <UIcon name="i-lucide-share-2" />
           </div>
-          <div class="empty-state-title">未发现其他节点</div>
-          <div class="empty-state-note">确认同网段，并放行端口 {{ localPort }} 与 mDNS。</div>
+          <div class="empty-state-title">{{ t('nodesPage.emptyTitle') }}</div>
+          <div class="empty-state-note">{{ t('nodesPage.emptyNote', { port: localPort }) }}</div>
         </UCard>
       </section>
     </section>
@@ -55,6 +55,7 @@
 <script setup lang="ts">
 const nodesStore = useNodesStore()
 const jobsStore = useJobsStore()
+const { t } = useI18n()
 const localPort = computed(() => nodesStore.localNode?.port ?? 47878)
 
 onMounted(async () => {

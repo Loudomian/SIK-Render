@@ -32,7 +32,19 @@ export default defineNuxtConfig({
     port: 3000,
   },
 
-  modules: ['@pinia/nuxt', '@nuxt/icon', '@nuxt/ui'],
+  modules: ['@pinia/nuxt', '@nuxt/icon', '@nuxt/ui', '@nuxtjs/i18n'],
+
+  i18n: {
+    strategy: 'no_prefix',
+    defaultLocale: 'zh-CN',
+    langDir: 'locales',
+    detectBrowserLanguage: false,
+    locales: [
+      { code: 'zh-CN', name: '简体中文', file: 'zh-CN.ts' },
+      { code: 'en-US', name: 'English', file: 'en-US.ts' },
+    ],
+    vueI18n: './i18n.config.ts',
+  },
 
   icon: {
     provider: 'none',

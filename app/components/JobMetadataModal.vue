@@ -2,31 +2,31 @@
   <UModal
     :open="open"
     :close="false"
-    title="编辑项目信息"
+    :title="t('settingsModals.metadata.title')"
     :ui="{ content: 'job-modal-content metadata-modal-content' }"
     @update:open="handleOpenChange"
   >
     <template #body>
       <div class="modal-stack metadata-modal-stack">
         <div class="metadata-form">
-          <UFormField label="项目名称" class="metadata-form-field">
+          <UFormField :label="t('settingsModals.metadata.projectName')" class="metadata-form-field">
             <UInput
               v-model.trim="draftName"
               :disabled="saving"
               size="lg"
               class="w-full"
-              placeholder="例如：Shot_010_Lighting"
+              :placeholder="t('settingsModals.metadata.projectNamePlaceholder')"
             />
           </UFormField>
 
-          <UFormField label="任务备注" class="metadata-form-field">
+          <UFormField :label="t('settingsModals.metadata.note')" class="metadata-form-field">
             <UTextarea
               v-model="draftNote"
               :disabled="saving"
               :rows="4"
               autoresize
               class="w-full"
-              placeholder="写一点备注，例如返修原因、交付要求、客户反馈。"
+              :placeholder="t('settingsModals.metadata.notePlaceholder')"
             />
           </UFormField>
         </div>
@@ -36,7 +36,7 @@
         <div class="modal-actions">
           <UButton
             icon="i-lucide-x"
-            label="取消"
+            :label="t('common.cancel')"
             color="warning"
             variant="outline"
             :disabled="saving"
@@ -44,7 +44,7 @@
           />
           <UButton
             icon="i-lucide-save"
-            label="保存"
+            :label="t('common.save')"
             color="primary"
             variant="solid"
             :loading="saving"
@@ -69,6 +69,7 @@ const emit = defineEmits<{
 }>()
 
 const jobsStore = useJobsStore()
+const { t } = useI18n()
 
 const draftName = ref('')
 const draftNote = ref('')
@@ -99,7 +100,7 @@ async function saveMetadata() {
 
   const nextName = draftName.value.trim()
   if (!nextName) {
-    errorMessage.value = '项目名称不能为空。'
+    errorMessage.value = t('settingsModals.metadata.nameRequired')
     return
   }
 

@@ -16,6 +16,7 @@ function normalizeRetryFrameStatus(job: RenderJob, status: RenderedFramesStatus)
 export function useJobRetry() {
   const jobsStore = useJobsStore()
   const { inspectRenderedFrames } = useTauri()
+  const { t } = useI18n()
 
   const showRetryConfirm = ref(false)
   const retryConfirmJob = ref<RenderJob | null>(null)
@@ -171,7 +172,7 @@ export function useJobRetry() {
 
   const retryFullRangeLabel = computed(() => {
     const job = retryConfirmJob.value
-    if (!job) return '当前片段'
+    if (!job) return t('jobRetry.currentSegment')
     return `${job.frameStart}–${job.frameEnd}`
   })
 
@@ -179,51 +180,55 @@ export function useJobRetry() {
     const job = retryConfirmJob.value
     if (!job) return ''
     if (job.renderMode === 'quick_mp4') {
-      return `会直接覆盖并重渲 ${job.frameStart}–${job.frameEnd} 的整段 MP4 输出。`
+      return t('jobRetry.quickMp4FullOverwrite', { start: job.frameStart, end: job.frameEnd })
     }
     if (retryFullRangePreviewMode.value === 'restart') {
-      return `整段覆盖会从第 ${job.frameStart} 帧重新渲染到 ${job.frameEnd} 帧。`
+      return t('jobRetry.fullRestartSummary', { start: job.frameStart, end: job.frameEnd })
     }
     if (retryFullRangePreviewMode.value === 'continue') {
       if (job.status === 'done') {
-        return '当前任务已完成，不能整段续跑。'
+        return t('jobRetry.fullContinueCompleted')
       }
       if (retryFrameStatus.value && retryFrameStatus.value.nextFrame <= job.frameEnd) {
-        return `整段续跑会从第 ${retryFrameStatus.value.nextFrame} 帧开始。`
+        return t('jobRetry.fullContinueFrom', { frame: retryFrameStatus.value.nextFrame })
       }
-      return '当前范围的帧已齐全，整段续跑会直接完成。'
+      return t('jobRetry.fullContinueComplete')
     }
     if (job.status === 'done') {
-      return '当前任务已完成；如需再次输出，请用整段覆盖或改为指定区间。'
+      return t('jobRetry.completedUseOverwriteOrCustom')
     }
     if (retryFrameStatus.value && retryFrameStatus.value.nextFrame <= job.frameEnd) {
-      return `整段续跑会从第 ${retryFrameStatus.value.nextFrame} 帧开始。`
+      return t('jobRetry.fullContinueFrom', { frame: retryFrameStatus.value.nextFrame })
     }
-    return '当前范围的帧已齐全，整段续跑会直接完成。'
+    return t('jobRetry.fullContinueComplete')
   })
 
   const retryCustomActionDescription = computed(() =>
     retryCustomActionResumeMode.value
-      ? '区间续跑会自动查找断点，并从下一帧继续。'
-      : '区间覆盖会从起始帧开始重新渲染。',
+      ? t('jobRetry.rangeResumeDescription')
+      : t('jobRetry.rangeRestartDescription'),
   )
 
   function buildRetryCustomRangeSummary(resumeFromExisting: boolean) {
     const job = retryConfirmJob.value
     const start = retryCustomStart.value
     const end = retryCustomEnd.value
-    if (!job || start == null || end == null) return '输入起止帧后，可选择续跑或覆盖。'
-    if (start > end) return '起始帧不能大于结束帧。'
+    if (!job || start == null || end == null) return t('jobRetry.customRangePrompt')
+    if (start > end) return t('jobRetry.startGreaterThanEnd')
     const status = retryCustomFrameStatus.value
-    if (!status) return `将处理区间 ${start}–${end}。`
-    if (status.frameCount === 0) return `区间 ${start}–${end} 还没有已渲染帧。`
+    if (!status) return t('jobRetry.processingRange', { start, end })
+    if (status.frameCount === 0) return t('jobRetry.noRenderedFramesInRange', { start, end })
     if (resumeFromExisting) {
       if (status.nextFrame <= end) {
-        return `已找到 ${status.frameCount} 帧，最后一帧 ${status.lastFrame ?? '—'}，将从 ${status.nextFrame} 继续。`
+        return t('jobRetry.resumeFoundFrames', {
+          count: status.frameCount,
+          lastFrame: status.lastFrame ?? '—',
+          nextFrame: status.nextFrame,
+        })
       }
-      return `区间 ${start}–${end} 已完整，继续后会直接完成。`
+      return t('jobRetry.rangeAlreadyComplete', { start, end })
     }
-    return `已找到 ${status.frameCount} 帧，覆盖后会从 ${start} 重新开始。`
+    return t('jobRetry.restartFoundFrames', { count: status.frameCount, start })
   }
 
   const retryCustomRangeSummary = computed(() => {
@@ -238,14 +243,14 @@ export function useJobRetry() {
 
   const retrySavedTranscodeRangeTitle = computed(() => {
     const job = retryConfirmJob.value
-    if (!job) return '原始片段'
+    if (!job) return t('jobRetry.originalSegment')
     const hasSavedOverride = job.transcodeFrameStartOverride != null && job.transcodeFrameEndOverride != null
-    return hasSavedOverride ? '已保存片段' : '原始片段'
+    return hasSavedOverride ? t('jobRetry.savedSegment') : t('jobRetry.originalSegment')
   })
 
   const retryCurrentTargetRangeLabel = computed(() => {
     const job = retryConfirmJob.value
-    if (!job) return '当前范围'
+    if (!job) return t('jobRetry.currentRange')
     const start = retryCustomStart.value ?? job.frameStart
     const end = retryCustomEnd.value ?? job.frameEnd
     return `${start}–${end}`
@@ -254,15 +259,18 @@ export function useJobRetry() {
   const retryTranscodeSummary = computed(() => {
     if (!retryConfirmJob.value) return ''
     if (!retryAutoTranscodeEnabled.value) {
-      return '关闭后，本次补渲不会自动转码。'
+      return t('jobRetry.autoTranscodeDisabled')
     }
     if (retryTranscodeRangeMode.value === 'original') {
       if (retryOriginalTranscodeRangeLabel.value === retryCurrentTargetRangeLabel.value) {
-        return `完成后自动转码 ${retryOriginalTranscodeRangeLabel.value}。`
+        return t('jobRetry.autoTranscodeRange', { range: retryOriginalTranscodeRangeLabel.value })
       }
-      return `完成后自动转码${retrySavedTranscodeRangeTitle.value} ${retryOriginalTranscodeRangeLabel.value}。`
+      return t('jobRetry.autoTranscodeNamedRange', {
+        title: retrySavedTranscodeRangeTitle.value,
+        range: retryOriginalTranscodeRangeLabel.value,
+      })
     }
-    return `完成后自动转码目标片段 ${retryCurrentTargetRangeLabel.value}。`
+    return t('jobRetry.autoTranscodeTargetRange', { range: retryCurrentTargetRangeLabel.value })
   })
 
   async function persistRetryTranscodeSettings(currentJob: RenderJob, nextRange: { start: number, end: number }) {
@@ -320,11 +328,14 @@ export function useJobRetry() {
     retryCustomResumeFromExisting.value = resumeFromExisting
     if (!job || start == null || end == null) return
     if (start > end) {
-      retryActionError.value = '起始帧不能大于结束帧。'
+      retryActionError.value = t('jobRetry.startGreaterThanEnd')
       return
     }
     if (start < job.originalFrameStart || end > job.originalFrameEnd) {
-      retryActionError.value = `帧范围必须在原始片段 ${job.originalFrameStart}–${job.originalFrameEnd} 内。`
+      retryActionError.value = t('jobRetry.rangeOutsideOriginal', {
+        start: job.originalFrameStart,
+        end: job.originalFrameEnd,
+      })
       return
     }
 

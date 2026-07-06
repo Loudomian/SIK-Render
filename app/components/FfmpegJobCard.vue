@@ -18,7 +18,7 @@
                 variant="subtle"
               />
               <UBadge
-                :label="job.sourceType === 'blender_job' ? '来自 Blender Job' : '来自文件夹'"
+                :label="job.sourceType === 'blender_job' ? t('ffmpegCard.sourceBlenderJob') : t('ffmpegCard.sourceFolder')"
                 color="neutral"
                 variant="subtle"
               />
@@ -33,7 +33,7 @@
         <div class="job-footer">
           <div class="job-meta">
             <span class="job-meta-item">
-              <span class="job-meta-label">帧段</span>
+              <span class="job-meta-label">{{ t('ffmpegCard.frameSegment') }}</span>
               <strong>{{ job.frameStart }}–{{ job.frameEnd }}</strong>
             </span>
             <span class="job-meta-divider" aria-hidden="true" />
@@ -49,7 +49,7 @@
             <template v-if="job.outputSizeBytes">
               <span class="job-meta-divider" aria-hidden="true" />
               <span class="job-meta-item">
-                <span class="job-meta-label">文件大小</span>
+                <span class="job-meta-label">{{ t('ffmpegCard.fileSize') }}</span>
                 <strong>{{ formatBytes(job.outputSizeBytes) }}</strong>
               </span>
             </template>
@@ -59,7 +59,7 @@
             <UButton
               v-if="job.status === 'running'"
               icon="i-lucide-square"
-              label="取消"
+              :label="t('common.cancel')"
               color="warning"
               variant="outline"
               size="sm"
@@ -68,7 +68,7 @@
             <UButton
               v-if="job.status !== 'running'"
               icon="i-lucide-trash-2"
-              label="删除"
+              :label="t('common.delete')"
               color="error"
               variant="outline"
               size="sm"
@@ -77,7 +77,7 @@
             <UButton
               v-if="job.outputPath"
               icon="i-lucide-folder-open"
-              label="输出目录"
+              :label="t('common.outputDirectory')"
               color="neutral"
               variant="outline"
               size="sm"
@@ -86,7 +86,7 @@
             <UButton
               :to="`/transcode/${job.id}`"
               icon="i-lucide-external-link"
-              label="详情"
+              :label="t('common.details')"
               color="neutral"
               variant="outline"
               size="sm"
@@ -103,7 +103,7 @@
         size="sm"
       />
       <div class="progress-meta">
-        <span>{{ job.progressFrame ?? 0 }} / {{ job.totalFrames ?? totalFrames }} 帧</span>
+        <span>{{ job.progressFrame ?? 0 }} / {{ job.totalFrames ?? totalFrames }} {{ t('ffmpegCard.frames') }}</span>
       </div>
     </div>
   </UCard>
@@ -111,8 +111,8 @@
 
 <script setup lang="ts">
 import type { FfmpegJob } from '~/types'
-import { FFMPEG_STATUS_COLOR, FFMPEG_STATUS_LABEL } from '~/composables/useFfmpegStatus'
-import { FFMPEG_QUEUE_ORDER_HIDDEN_STATUSES, formatQueueOrderLabel, resolveQueueOrder } from '~/composables/useQueueOrder'
+import { FFMPEG_STATUS_COLOR, useFfmpegStatusLabel } from '~/composables/useFfmpegStatus'
+import { FFMPEG_QUEUE_ORDER_HIDDEN_STATUSES, resolveQueueOrder, useQueueOrderLabel } from '~/composables/useQueueOrder'
 import { resolveOutputDirectory } from '~/utils/output-path'
 
 const props = defineProps<{ job: FfmpegJob }>()
@@ -124,14 +124,17 @@ defineEmits<{
 
 const { openPath } = useTauri()
 const transcodeStore = useTranscodeStore()
+const { t } = useI18n()
 
-const statusLabel = computed(() => FFMPEG_STATUS_LABEL[props.job.status])
+const translatedStatusLabel = useFfmpegStatusLabel()
+const queueOrderLabel = useQueueOrderLabel()
+const statusLabel = computed(() => translatedStatusLabel(props.job.status))
 const statusColor = computed(() => FFMPEG_STATUS_COLOR[props.job.status])
 const totalFrames = computed(() => props.job.frameEnd - props.job.frameStart + 1)
 const queueOrder = computed(() => {
   return resolveQueueOrder(transcodeStore.ffmpegJobs, props.job, FFMPEG_QUEUE_ORDER_HIDDEN_STATUSES)
 })
-const orderBadgeLabel = computed(() => formatQueueOrderLabel(queueOrder.value))
+const orderBadgeLabel = computed(() => queueOrderLabel(queueOrder.value))
 
 function openOutputDirectory() {
   openPath(resolveOutputDirectory(props.job.outputPath))

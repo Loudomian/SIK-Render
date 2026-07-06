@@ -8,7 +8,7 @@
               <UBreadcrumb
                 as="h1"
                 :items="[
-                  { label: '转码队列', to: '/transcode' },
+                  { label: t('transcodeDetails.breadcrumb'), to: '/transcode' },
                   { label: `#${job.jobNumber} ${job.name}` },
                 ]"
                 :ui="{
@@ -32,14 +32,14 @@
               </UBreadcrumb>
               <div class="detail-title-badges">
                 <UBadge :label="statusLabel(job.status)" :color="statusColor(job.status)" variant="subtle" />
-                <UBadge :label="job.sourceType === 'blender_job' ? '来自 Blender Job' : '来自文件夹'" color="neutral" variant="subtle" />
+                <UBadge :label="job.sourceType === 'blender_job' ? t('ffmpegCard.sourceBlenderJob') : t('ffmpegCard.sourceFolder')" color="neutral" variant="subtle" />
               </div>
             </div>
             <div class="detail-header-actions">
               <UButton
                 v-if="job.status === 'running'"
                 icon="i-lucide-square"
-                label="取消"
+                :label="t('common.cancel')"
                 color="warning"
                 variant="outline"
                 size="md"
@@ -49,7 +49,7 @@
                 v-if="job.sourceBlenderJobId"
                 :to="`/jobs/${job.sourceBlenderJobId}`"
                 icon="i-lucide-arrow-right"
-                label="查看源任务"
+                :label="t('transcodeDetails.sourceJob')"
                 color="neutral"
                 variant="outline"
                 size="md"
@@ -57,7 +57,7 @@
               <UButton
                 v-if="job.status !== 'running'"
                 icon="i-lucide-trash-2"
-                label="删除"
+                :label="t('common.delete')"
                 color="error"
                 variant="outline"
                 size="md"
@@ -72,15 +72,15 @@
     <section class="detail-content">
       <div class="detail-grid">
         <UCard variant="subtle" :ui="{ root: 'detail-section detail-full', body: 'detail-card-body' }">
-        <h2 class="detail-card-title">文件路径</h2>
+        <h2 class="detail-card-title">{{ t('transcodeDetails.filePaths') }}</h2>
         <div class="detail-info-stack">
           <section class="detail-info-item">
             <div class="detail-path-chip">
-              <span class="detail-path-label">输入路径：</span>
+              <span class="detail-path-label">{{ t('transcodeDetails.inputPath') }}</span>
               <button class="detail-path-text" type="button" :title="job.inputPath" @click="openPath(job.inputPath)">
                 {{ job.inputPath }}
               </button>
-              <UTooltip text="复制路径" :content="{ side: 'top', sideOffset: 6 }">
+              <UTooltip :text="t('jobDetails.copyPath')" :content="{ side: 'top', sideOffset: 6 }">
                 <UButton
                   icon="i-lucide-copy"
                   color="neutral"
@@ -96,11 +96,11 @@
           <section class="detail-info-item">
             <div class="detail-path-stack">
               <div class="detail-path-chip">
-                <span class="detail-path-label">输出路径：</span>
+                <span class="detail-path-label">{{ t('transcodeDetails.outputPath') }}</span>
                 <button class="detail-path-text" type="button" :title="job.outputPath" @click="openPath(resolveOutputDirectory(job.outputPath))">
                   {{ job.outputPath }}
                 </button>
-                <UTooltip text="复制路径" :content="{ side: 'top', sideOffset: 6 }">
+                <UTooltip :text="t('jobDetails.copyPath')" :content="{ side: 'top', sideOffset: 6 }">
                   <UButton
                     v-if="job.outputPath"
                     icon="i-lucide-copy"
@@ -120,11 +120,11 @@
         <UCard variant="subtle" :ui="{ root: 'detail-section detail-full', body: 'detail-card-body' }">
         <div class="stat-row">
           <div class="stat-item">
-            <p class="stat-label">帧段</p>
+            <p class="stat-label">{{ t('transcodeDetails.stats.frameSegment') }}</p>
             <p class="stat-value">{{ job.frameStart }} – {{ job.frameEnd }}</p>
           </div>
           <div class="stat-item">
-            <p class="stat-label">输出 FPS</p>
+            <p class="stat-label">{{ t('transcodeDetails.stats.outputFps') }}</p>
             <p class="stat-value">{{ job.fps.toFixed(3) }}</p>
           </div>
           <div class="stat-item">
@@ -132,43 +132,43 @@
             <p class="stat-value">{{ job.crf }} / {{ job.preset }}</p>
           </div>
           <div class="stat-item">
-            <p class="stat-label">进度</p>
+            <p class="stat-label">{{ t('transcodeDetails.stats.progress') }}</p>
             <p class="stat-value">{{ job.progressFrame ?? 0 }} / {{ job.totalFrames ?? totalFrames }}</p>
           </div>
         </div>
         <div class="stat-row">
           <div class="stat-item">
-            <p class="stat-label">文件大小</p>
+            <p class="stat-label">{{ t('transcodeDetails.stats.fileSize') }}</p>
             <p class="stat-value">{{ formatBytes(job.outputSizeBytes) }}</p>
           </div>
           <div class="stat-item">
-            <p class="stat-label">视频时长</p>
+            <p class="stat-label">{{ t('transcodeDetails.stats.videoDuration') }}</p>
             <p class="stat-value">{{ formatDuration(job.outputDurationSecs) }}</p>
           </div>
           <div class="stat-item">
-            <p class="stat-label">创建</p>
+            <p class="stat-label">{{ t('transcodeDetails.stats.created') }}</p>
             <p class="stat-value">{{ formatTime(job.createdAt) }}</p>
           </div>
           <div class="stat-item">
-            <p class="stat-label">开始</p>
+            <p class="stat-label">{{ t('transcodeDetails.stats.started') }}</p>
             <p class="stat-value">{{ job.startedAt ? formatTime(job.startedAt) : '—' }}</p>
           </div>
           <div class="stat-item">
-            <p class="stat-label">结束</p>
+            <p class="stat-label">{{ t('transcodeDetails.stats.finished') }}</p>
             <p class="stat-value">{{ job.finishedAt ? formatTime(job.finishedAt) : '—' }}</p>
           </div>
         </div>
         <template v-if="job.status === 'running'">
           <div class="stat-row">
             <div class="stat-item" style="flex: 1">
-              <p class="stat-label">转码进度</p>
+              <p class="stat-label">{{ t('transcodeDetails.stats.transcodeProgress') }}</p>
               <UProgress
                 :value="job.progressFrame ?? 0"
                 :max="job.totalFrames ?? totalFrames"
                 size="sm"
                 class="detail-progress"
               />
-              <p class="stat-value stat-progress-note">{{ job.progressFrame ?? 0 }} / {{ job.totalFrames ?? totalFrames }} 帧</p>
+              <p class="stat-value stat-progress-note">{{ job.progressFrame ?? 0 }} / {{ job.totalFrames ?? totalFrames }} {{ t('transcodeDetails.stats.frames') }}</p>
             </div>
           </div>
         </template>
@@ -176,10 +176,10 @@
 
         <UCard variant="subtle" :ui="{ root: 'detail-section detail-full log-section', body: 'detail-card-body' }">
           <div class="log-header">
-            <h2 class="detail-card-title log-title">转码日志</h2>
+            <h2 class="detail-card-title log-title">{{ t('transcodeDetails.logs.title') }}</h2>
             <div class="log-header-actions">
               <UButton
-                :label="showAllLogs ? '最新日志' : '全部日志'"
+                :label="showAllLogs ? t('jobDetails.logs.latest') : t('jobDetails.logs.all')"
                 :icon="showAllLogs ? 'i-lucide-clock' : 'i-lucide-layers'"
                 color="neutral"
                 variant="subtle"
@@ -189,7 +189,7 @@
               />
               <UButton
                 icon="i-lucide-copy"
-                label="复制"
+                :label="t('common.copy')"
                 color="neutral"
                 variant="subtle"
                 size="sm"
@@ -198,7 +198,7 @@
               <UButton
                 v-if="job.outputPath"
                 icon="i-lucide-folder-open"
-                label="输出目录"
+                :label="t('common.outputDirectory')"
                 color="neutral"
                 variant="subtle"
                 size="sm"
@@ -208,7 +208,7 @@
           </div>
           <div class="log-surface">
             <div ref="logEl" class="log-panel" @scroll="onLogScroll">
-              <span v-if="logLines.length === 0" class="log-empty">当前还没有转码日志。</span>
+              <span v-if="logLines.length === 0" class="log-empty">{{ t('transcodeDetails.logs.empty') }}</span>
               <div v-for="(entry, index) in displayLogLines" :key="index" class="log-line">
                 <div class="log-line-inner" :class="{ 'log-line-inner-no-timestamp': !entry.timestamp }">
                   <span v-if="entry.timestamp" class="log-line-timestamp">{{ entry.timestamp }}</span>
@@ -225,10 +225,10 @@
   <div v-else-if="loadError" class="detail-page">
     <UCard variant="subtle" class="empty-state" :ui="{ body: 'empty-state-body' }">
       <div class="empty-state-icon"><UIcon name="i-lucide-alert-circle" /></div>
-      <div class="empty-state-title">加载失败</div>
+      <div class="empty-state-title">{{ t('transcodeDetails.error.title') }}</div>
       <div class="empty-state-note">{{ loadError }}</div>
       <div class="empty-state-actions">
-        <UButton icon="i-lucide-arrow-left" label="返回转码队列" color="neutral" variant="outline" to="/transcode" />
+        <UButton icon="i-lucide-arrow-left" :label="t('transcodeDetails.error.back')" color="neutral" variant="outline" to="/transcode" />
       </div>
     </UCard>
   </div>
@@ -236,14 +236,14 @@
   <div v-else class="detail-page">
     <UCard variant="subtle" class="empty-state" :ui="{ body: 'empty-state-body' }">
       <div class="empty-state-icon"><UIcon name="i-lucide-loader-circle" /></div>
-      <div class="empty-state-title">加载中…</div>
+      <div class="empty-state-title">{{ t('common.loading') }}</div>
     </UCard>
   </div>
 </template>
 
 <script setup lang="ts">
 import type { TranscodeLogEvent } from '~/types'
-import { FFMPEG_STATUS_COLOR, FFMPEG_STATUS_LABEL } from '~/composables/useFfmpegStatus'
+import { FFMPEG_STATUS_COLOR, useFfmpegStatusLabel } from '~/composables/useFfmpegStatus'
 import { formatTimestamp } from '~/utils/date-format'
 import { parseLogLine } from '~/utils/log-line'
 import { resolveOutputDirectory } from '~/utils/output-path'
@@ -252,6 +252,7 @@ const route = useRoute()
 const router = useRouter()
 const toast = useToast()
 const transcodeStore = useTranscodeStore()
+const { t } = useI18n()
 const { openPath, getFfmpegJobLogs } = useTauri()
 const { onTranscodeProgress, onTranscodeLog, onFfmpegJobUpdated } = useRenderEvents()
 
@@ -274,9 +275,8 @@ const unlisteners: Array<() => void> = []
 const logEl = ref<HTMLDivElement | null>(null)
 const pinToBottom = ref(true)
 
-function statusLabel(status: keyof typeof FFMPEG_STATUS_LABEL) {
-  return FFMPEG_STATUS_LABEL[status]
-}
+const translatedStatusLabel = useFfmpegStatusLabel()
+const statusLabel = translatedStatusLabel
 
 function statusColor(status: keyof typeof FFMPEG_STATUS_COLOR) {
   return FFMPEG_STATUS_COLOR[status]
@@ -306,7 +306,7 @@ async function handleCancel() {
     await transcodeStore.cancelFfmpegJob(job.value.id)
   } catch (error) {
     toast.add({
-      title: '取消 FFmpeg Job 失败',
+      title: t('transcodeQueue.toast.cancelFailedTitle'),
       description: error instanceof Error ? error.message : String(error),
       color: 'error',
     })
@@ -320,7 +320,7 @@ async function handleDelete() {
     router.push('/transcode')
   } catch (error) {
     toast.add({
-      title: '删除 FFmpeg Job 失败',
+      title: t('transcodeQueue.toast.deleteFailedTitle'),
       description: error instanceof Error ? error.message : String(error),
       color: 'error',
     })
@@ -331,10 +331,10 @@ async function copyPath(path: string) {
   if (!path) return
   try {
     await navigator.clipboard.writeText(path)
-    toast.add({ title: '路径已复制', color: 'success' })
+    toast.add({ title: t('jobDetails.copy.success'), color: 'success' })
   } catch (error) {
     toast.add({
-      title: '复制路径失败',
+      title: t('jobDetails.copy.failed'),
       description: error instanceof Error ? error.message : String(error),
       color: 'error',
     })
@@ -357,7 +357,7 @@ async function toggleLogScope() {
   } catch (error) {
     showAllLogs.value = false
     toast.add({
-      title: '读取全部日志失败',
+      title: t('transcodeDetails.logs.loadAllFailed'),
       description: error instanceof Error ? error.message : String(error),
       color: 'error',
     })
@@ -370,12 +370,12 @@ async function copyLogs() {
   try {
     await navigator.clipboard.writeText(logLines.value.join('\n'))
     toast.add({
-      title: '已复制日志',
+      title: t('transcodeDetails.logs.copied'),
       color: 'success',
     })
   } catch (error) {
     toast.add({
-      title: '复制日志失败',
+      title: t('transcodeDetails.logs.copyFailed'),
       description: error instanceof Error ? error.message : String(error),
       color: 'error',
     })
@@ -411,7 +411,7 @@ onMounted(async () => {
     try {
       await transcodeStore.fetchFfmpegJob(jobId.value)
     } catch (error) {
-      loadError.value = error instanceof Error ? error.message : '任务不存在或已被删除'
+      loadError.value = error instanceof Error ? error.message : t('transcodeDetails.error.missing')
       return
     }
   }

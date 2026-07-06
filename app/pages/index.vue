@@ -5,8 +5,8 @@
         <div class="drop-message">
           <UIcon name="i-lucide-download" class="drop-icon" />
           <div class="drop-copy">
-            <strong>拖拽 .blend 工程到窗口</strong>
-            <span>松开以创建渲染任务</span>
+            <strong>{{ t('renderQueue.dragOverlay.title') }}</strong>
+            <span>{{ t('renderQueue.dragOverlay.description') }}</span>
           </div>
         </div>
       </div>
@@ -18,14 +18,14 @@
           <div class="queue-heading-row">
             <div class="queue-heading-copy">
               <div class="queue-heading-title">
-                <h1>渲染队列</h1>
+                <h1>{{ t('renderQueue.title') }}</h1>
                 <UBadge
-                  :label="jobsStore.queuePaused ? '队列已暂停' : '队列运行中'"
+                  :label="jobsStore.queuePaused ? t('renderQueue.queuePaused') : t('renderQueue.queueRunning')"
                   :color="jobsStore.queuePaused ? 'warning' : 'success'"
                   variant="subtle"
                 />
               </div>
-              <p class="page-note">管理本地 Blender 渲染任务。</p>
+              <p class="page-note">{{ t('renderQueue.description') }}</p>
             </div>
             <div class="queue-hero-actions-stack">
               <div class="page-hero-actions queue-hero-actions queue-hero-actions-secondary">
@@ -42,8 +42,8 @@
               </div>
               <div class="page-hero-actions queue-hero-actions">
                 <UFieldGroup size="md">
-                  <UTooltip text="创建新的渲染任务" arrow :content="{ side: 'bottom', sideOffset: 8 }">
-                    <UButton icon="i-lucide-plus" label="新建任务" color="primary" variant="solid" @click="openAddJob" />
+                  <UTooltip :text="t('renderQueue.createTooltip')" arrow :content="{ side: 'bottom', sideOffset: 8 }">
+                    <UButton icon="i-lucide-plus" :label="t('renderQueue.newJob')" color="primary" variant="solid" @click="openAddJob" />
                   </UTooltip>
                   <UDropdownMenu
                     :items="renderQueueActionItems"
@@ -86,14 +86,14 @@
     </section>
 
     <section class="queue-content">
-      <div v-if="jobsStore.loading" class="loading">加载中…</div>
+      <div v-if="jobsStore.loading" class="loading">{{ t('common.loading') }}</div>
 
         <UCard v-else-if="jobsStore.jobs.length === 0" variant="subtle" class="empty-state" :ui="{ body: 'empty-state-body' }">
         <div class="empty-state-icon">
           <UIcon name="i-lucide-film" />
         </div>
-        <div class="empty-state-title">还没有渲染任务</div>
-        <div class="empty-state-note">拖拽 .blend 工程到窗口，或点击“新建任务”按钮创建渲染任务。</div>
+        <div class="empty-state-title">{{ t('renderQueue.empty.title') }}</div>
+        <div class="empty-state-note">{{ t('renderQueue.empty.note') }}</div>
       </UCard>
 
       <UCard
@@ -149,7 +149,7 @@
     <UModal
       :open="showRetryConfirm"
       :close="false"
-      title="选择渲染方式"
+      :title="t('renderQueue.retry.title')"
       :ui="{ content: 'job-modal-content retry-modal-content' }"
       @update:open="v => { if (!v) closeRetryConfirm() }"
     >
@@ -160,17 +160,17 @@
               <section class="surface-panel transcode-submit-section retry-option-section retry-option-section-wide">
                 <div class="transcode-submit-head">
                   <div>
-                    <p class="choice-card-mode">快速 MP4</p>
-                    <h3 class="choice-card-title">重新渲染整个片段</h3>
+                    <p class="choice-card-mode">{{ t('jobCard.quickMp4') }}</p>
+                    <h3 class="choice-card-title">{{ t('renderQueue.retry.quickMp4Title') }}</h3>
                   </div>
                 </div>
                 <p class="choice-card-desc">
-                  快速 MP4 为单文件输出，仅支持整段覆盖重新渲染。
+                  {{ t('renderQueue.retry.quickMp4Description') }}
                 </p>
                 <div class="choice-card-toggle-group">
                   <UButton
                     icon="i-lucide-refresh-ccw"
-                    label="整段覆盖"
+                    :label="t('renderQueue.retry.fullRestart')"
                     color="neutral"
                     variant="outline"
                     size="sm"
@@ -189,17 +189,17 @@
               <section class="surface-panel transcode-submit-section retry-option-section retry-option-section-wide">
                 <div class="transcode-submit-head">
                   <div>
-                    <p class="choice-card-mode">整体片段</p>
-                    <h3 class="choice-card-title">重跑整个片段</h3>
+                    <p class="choice-card-mode">{{ t('renderQueue.retry.fullSegmentMode') }}</p>
+                    <h3 class="choice-card-title">{{ t('renderQueue.retry.fullSegmentTitle') }}</h3>
                   </div>
                 </div>
                 <p class="choice-card-desc">
-                  处理完整片段 <span class="choice-card-accent">{{ retryFullRangeLabel }}</span>。
+                  {{ t('renderQueue.retry.fullSegmentDescription', { range: retryFullRangeLabel }) }}
                 </p>
                 <div class="choice-card-toggle-group">
                   <UButton
                     icon="i-lucide-chevrons-right"
-                    label="整段续跑"
+                    :label="t('renderQueue.retry.fullContinue')"
                     color="neutral"
                     variant="outline"
                     size="sm"
@@ -214,7 +214,7 @@
                   />
                   <UButton
                     icon="i-lucide-refresh-ccw"
-                    label="整段覆盖"
+                    :label="t('renderQueue.retry.fullRestart')"
                     color="neutral"
                     variant="outline"
                     size="sm"
@@ -236,25 +236,25 @@
               <section class="surface-panel transcode-submit-section retry-option-section retry-option-section-wide">
                 <div class="transcode-submit-head">
                   <div>
-                    <p class="choice-card-mode">指定区间</p>
-                    <h3 class="choice-card-title">只重跑需要修复的部分</h3>
+                    <p class="choice-card-mode">{{ t('renderQueue.retry.customRangeMode') }}</p>
+                    <h3 class="choice-card-title">{{ t('renderQueue.retry.customRangeTitle') }}</h3>
                   </div>
                 </div>
                 <p class="choice-card-desc">
-                  只处理你填写的帧范围，适合补帧或局部返修。
+                  {{ t('renderQueue.retry.customRangeDescription') }}
                 </p>
                 <div class="choice-card-fields">
-                  <UFormField label="起始帧">
+                  <UFormField :label="t('renderQueue.retry.startFrame')">
                     <UInputNumber v-model="retryCustomStart" :min="1" />
                   </UFormField>
-                  <UFormField label="结束帧">
+                  <UFormField :label="t('renderQueue.retry.endFrame')">
                     <UInputNumber v-model="retryCustomEnd" :min="1" />
                   </UFormField>
                 </div>
                 <div class="choice-card-toggle-group">
                   <UButton
                     icon="i-lucide-chevrons-right"
-                    label="按区间续跑"
+                    :label="t('renderQueue.retry.rangeContinue')"
                     color="neutral"
                     variant="outline"
                     size="sm"
@@ -269,7 +269,7 @@
                   />
                   <UButton
                     icon="i-lucide-refresh-ccw"
-                    label="按区间覆盖"
+                    :label="t('renderQueue.retry.rangeRestart')"
                     color="neutral"
                     variant="outline"
                     size="sm"
@@ -285,7 +285,7 @@
                 </div>
                 <div class="choice-card-note-stack">
                   <p class="choice-card-inline-note">{{ retryCustomActionDescription }}</p>
-                  <p v-if="retryCustomInspectLoading" class="choice-card-inline-note">正在检查所选区间…</p>
+                  <p v-if="retryCustomInspectLoading" class="choice-card-inline-note">{{ t('renderQueue.retry.checkingRange') }}</p>
                   <p v-else-if="retryCustomRangeSummary" class="choice-card-inline-note">{{ retryCustomRangeSummary }}</p>
                 </div>
                 <UAlert
@@ -299,22 +299,22 @@
 
             <section v-if="retryConfirmJob && !retryIsQuickMp4 && !['OPEN_EXR', 'EXR'].includes(retryConfirmJob.outputFormat)" class="surface-panel transcode-submit-section retry-transcode-panel">
               <div class="retry-transcode-head">
-                <p class="choice-card-mode">自动转码</p>
-                <h3 class="choice-card-title">补渲后自动创建转码任务</h3>
+                <p class="choice-card-mode">{{ t('renderQueue.retry.autoTranscodeMode') }}</p>
+                <h3 class="choice-card-title">{{ t('renderQueue.retry.autoTranscodeTitle') }}</h3>
               </div>
               <p class="choice-card-desc">
-                决定这次补渲结束后，是否自动生成 FFmpeg Job。
+                {{ t('renderQueue.retry.autoTranscodeDescription') }}
               </p>
               <USwitch
                 v-model="retryAutoTranscodeEnabled"
                 color="neutral"
-                label="补渲完成后自动转码"
+                :label="t('renderQueue.retry.autoTranscodeSwitch')"
                 class="choice-card-switch"
               />
               <div class="choice-card-toggle-group">
                 <UButton
                   icon="i-lucide-scan-line"
-                  :label="`目标片段 ${retryCurrentTargetRangeLabel}`"
+                  :label="t('renderQueue.retry.targetSegment', { range: retryCurrentTargetRangeLabel })"
                   :color="retryTranscodeRangeMode === 'current' ? 'primary' : 'neutral'"
                   :variant="retryTranscodeRangeMode === 'current' ? 'solid' : 'outline'"
                   size="sm"
@@ -339,7 +339,7 @@
             </section>
           </div>
           <div class="modal-actions">
-            <UButton icon="i-lucide-x" label="取消" color="warning" variant="outline" size="sm" :disabled="retrySubmittingMode !== null" @click="closeRetryConfirm" />
+            <UButton icon="i-lucide-x" :label="t('common.cancel')" color="warning" variant="outline" size="sm" :disabled="retrySubmittingMode !== null" @click="closeRetryConfirm" />
           </div>
         </div>
       </template>
@@ -348,18 +348,18 @@
     <UModal
       :open="!!deleteConfirmJob"
       :close="false"
-      title="删除任务"
+      :title="t('renderQueue.delete.title')"
       :ui="{ content: 'job-modal-content' }"
       @update:open="v => { if (!v) deleteConfirmJob = null }"
     >
       <template #body>
         <div class="modal-stack">
           <p class="modal-copy">
-            确定删除 <strong>{{ deleteConfirmJob?.name }}</strong>？此操作不可撤销。
+            {{ t('renderQueue.delete.message', { name: deleteConfirmJob?.name ?? '' }) }}
           </p>
           <div class="modal-actions">
-            <UButton icon="i-lucide-x" label="取消" color="warning" variant="outline" @click="deleteConfirmJob = null" />
-            <UButton icon="i-lucide-trash-2" label="删除" color="error" variant="outline" @click="confirmDelete" />
+            <UButton icon="i-lucide-x" :label="t('common.cancel')" color="warning" variant="outline" @click="deleteConfirmJob = null" />
+            <UButton icon="i-lucide-trash-2" :label="t('common.delete')" color="error" variant="outline" @click="confirmDelete" />
           </div>
         </div>
       </template>
@@ -368,21 +368,19 @@
     <UModal
       :open="showClearCompletedConfirm"
       :close="false"
-      title="清理已完成任务"
+      :title="t('renderQueue.clearCompleted.title')"
       :ui="{ content: 'job-modal-content' }"
       @update:open="v => { if (!v) showClearCompletedConfirm = false }"
     >
       <template #body>
         <div class="modal-stack">
           <p class="modal-copy">
-            确定清理当前所有
-            <strong>{{ jobsStore.doneJobs.length }}</strong>
-            个已完成渲染任务？此操作不可撤销。
+            {{ t('renderQueue.clearCompleted.message', { count: jobsStore.doneJobs.length }) }}
           </p>
           <div class="modal-actions">
             <UButton
               icon="i-lucide-x"
-              label="取消"
+              :label="t('common.cancel')"
               color="warning"
               variant="outline"
               :disabled="clearingCompletedRenderJobs"
@@ -390,7 +388,7 @@
             />
             <UButton
               icon="i-lucide-trash-2"
-              label="确认清理"
+              :label="t('renderQueue.actions.clearCompletedConfirm')"
               color="error"
               variant="outline"
               :loading="clearingCompletedRenderJobs"
@@ -403,7 +401,7 @@
 
     <UModal
       :open="showAddJob"
-      title="新建渲染任务"
+      :title="t('renderQueue.form.title')"
       :ui="{ content: 'job-modal-content job-form-modal' }"
       @update:open="v => { if (!v) closeAddJob() }"
     >
@@ -413,35 +411,35 @@
             <section class="surface-panel transcode-submit-section">
               <div class="transcode-submit-head">
                 <div>
-                  <p class="choice-card-mode">基础项</p>
-                  <h2 class="choice-card-title">项目与输出</h2>
+                  <p class="choice-card-mode">{{ t('renderQueue.form.basicMode') }}</p>
+                  <h2 class="choice-card-title">{{ t('renderQueue.form.projectOutput') }}</h2>
                 </div>
               </div>
 
               <div class="job-form-fields">
-                <UFormField label="任务名称" size="lg" class="job-form-field">
-                  <UTextarea v-model.trim="form.name" :rows="1" autoresize class="job-name-textarea" placeholder="潜行瞬鲨_镜头010_终版" :ui="{ root: 'w-full' }" />
+                <UFormField :label="t('renderQueue.form.jobName')" size="lg" class="job-form-field">
+                  <UTextarea v-model.trim="form.name" :rows="1" autoresize class="job-name-textarea" :placeholder="t('renderQueue.form.jobNamePlaceholder')" :ui="{ root: 'w-full' }" />
                 </UFormField>
 
-                <UFormField label="任务备注" size="lg" class="job-form-field">
+                <UFormField :label="t('renderQueue.form.jobNote')" size="lg" class="job-form-field">
                   <UTextarea
                     v-model="formNote"
                     :rows="2"
                     autoresize
                     class="path-textarea"
-                    placeholder="例如：重渲 120-180 帧，使用 OpenEXR 输出，完成后自动转码。"
+                    :placeholder="t('renderQueue.form.jobNotePlaceholder')"
                     :ui="{ root: 'w-full' }"
                   />
                 </UFormField>
 
-                <UFormField label="Blend 文件" class="job-form-field">
+                <UFormField :label="t('renderQueue.form.blendFile')" class="job-form-field">
                   <div class="transcode-submit-path-row">
-                    <UTextarea v-model.trim="form.blend_file" :rows="1" autoresize class="w-full path-textarea path-textarea-lg" placeholder="F:\项目\潜行瞬鲨\潜行瞬鲨.blend" :ui="{ root: 'w-full' }" />
-                    <UButton type="button" icon="i-lucide-folder-open" label="浏览" color="neutral" variant="outline" @click="browseBlendFile" />
+                    <UTextarea v-model.trim="form.blend_file" :rows="1" autoresize class="w-full path-textarea path-textarea-lg" :placeholder="t('renderQueue.form.blendFilePlaceholder')" :ui="{ root: 'w-full' }" />
+                    <UButton type="button" icon="i-lucide-folder-open" :label="t('common.browse')" color="neutral" variant="outline" @click="browseBlendFile" />
                   </div>
                 </UFormField>
 
-                <UFormField label="输出路径" class="job-form-field">
+                <UFormField :label="t('renderQueue.form.outputPath')" class="job-form-field">
                   <div class="transcode-submit-path-row">
                     <UTextarea
                       v-model.trim="form.output_path"
@@ -451,7 +449,7 @@
                       :placeholder="outputPathPlaceholder"
                       :ui="{ root: 'w-full' }"
                     />
-                    <UButton type="button" icon="i-lucide-folder-open" label="浏览" color="neutral" variant="outline" @click="browseRenderOutputDirectory" />
+                    <UButton type="button" icon="i-lucide-folder-open" :label="t('common.browse')" color="neutral" variant="outline" @click="browseRenderOutputDirectory" />
                   </div>
                 </UFormField>
               </div>
@@ -460,13 +458,13 @@
             <section class="surface-panel transcode-submit-section">
               <div class="transcode-submit-head">
                 <div>
-                  <p class="choice-card-mode">渲染控制</p>
-                  <h2 class="choice-card-title">执行参数</h2>
+                  <p class="choice-card-mode">{{ t('renderQueue.form.renderControlMode') }}</p>
+                  <h2 class="choice-card-title">{{ t('renderQueue.form.executionParams') }}</h2>
                 </div>
               </div>
 
               <div v-if="settingsStore.blenderVersions.length" class="job-form-fields">
-                <UFormField label="Blender 版本" class="job-form-field">
+                <UFormField :label="t('renderQueue.form.blenderVersion')" class="job-form-field">
                   <div class="chip-row version-chip-row">
                     <UButton
                       v-for="b in settingsStore.blenderVersions"
@@ -482,7 +480,7 @@
                 </UFormField>
 
                 <div class="job-form-modern-grid">
-                  <UFormField label="格式" class="job-format-field">
+                  <UFormField :label="t('renderQueue.form.format')" class="job-format-field">
                     <USelect
                       v-model="selectedOutputMode"
                       :items="outputFormatOptions"
@@ -499,25 +497,25 @@
                     >
                       <template #default="{ modelValue }">
                         <span class="min-w-0 flex-1 truncate opacity-0 pointer-events-none select-none" aria-hidden="true">
-                          {{ outputModeLabelMap[modelValue as OutputMode] || '选择格式' }}
+                          {{ outputModeLabel(modelValue as OutputMode) }}
                         </span>
                         <span class="absolute inset-0 flex items-center justify-center px-6 pointer-events-none">
-                          {{ outputModeLabelMap[modelValue as OutputMode] || '选择格式' }}
+                          {{ outputModeLabel(modelValue as OutputMode) }}
                         </span>
                       </template>
                     </USelect>
                   </UFormField>
 
-                  <UFormField label="起始帧">
+                  <UFormField :label="t('renderQueue.retry.startFrame')">
                     <UInputNumber v-model="form.frame_start" :min="1" :ui="{ root: 'w-full' }" />
                   </UFormField>
 
-                  <UFormField label="结束帧">
+                  <UFormField :label="t('renderQueue.retry.endFrame')">
                     <UInputNumber v-model="form.frame_end" :min="1" :ui="{ root: 'w-full' }" />
                   </UFormField>
                 </div>
 
-                <UFormField label="输出参数">
+                <UFormField :label="t('renderQueue.form.outputParams')">
                   <div class="job-form-transcode-panel surface-panel">
                     <div class="job-form-transcode-toggle-row">
                       <div class="job-form-transcode-copy">
@@ -528,7 +526,7 @@
                         v-if="!isQuickMp4Output"
                         type="button"
                         icon="i-lucide-image-up"
-                        label="输出设置"
+                        :label="t('renderQueue.form.outputSettings')"
                         color="neutral"
                         variant="outline"
                         @click="addJobOutputSettingsOpen = true"
@@ -537,13 +535,13 @@
                   </div>
                 </UFormField>
 
-                <UFormField v-if="!isQuickMp4Output" label="渲染后转码">
+                <UFormField v-if="!isQuickMp4Output" :label="t('renderQueue.form.transcodeAfterRender')">
                   <div class="job-form-transcode-panel surface-panel">
                     <div class="job-form-transcode-toggle-row">
                       <div class="job-form-transcode-copy">
-                        <p class="job-form-transcode-title">自动提交到转码队列</p>
+                        <p class="job-form-transcode-title">{{ t('renderQueue.form.autoSubmitTranscode') }}</p>
                         <p class="hint-text">
-                          {{ isExrOutput ? 'OpenEXR 序列暂不支持 FFmpeg 转码，已自动禁用。' : '开启后会在渲染完成时自动提交转码。' }}
+                          {{ isExrOutput ? t('renderQueue.form.exrTranscodeDisabled') : t('renderQueue.form.autoSubmitTranscodeHint') }}
                         </p>
                       </div>
                       <USwitch v-model="form.auto_transcode_mp4" color="primary" :disabled="isExrOutput" />
@@ -553,7 +551,7 @@
                       <UButton
                         type="button"
                         icon="i-lucide-sliders-horizontal"
-                        label="转码设置"
+                        :label="t('renderQueue.form.transcodeSettings')"
                         color="neutral"
                         variant="outline"
                         @click="addJobTranscodeSettingsOpen = true"
@@ -563,17 +561,17 @@
                 </UFormField>
               </div>
               <p v-else class="hint-text">
-                未检测到 Blender，请前往
-                <UButton type="button" color="neutral" variant="link" size="sm" label="设置" @click="goToSettings" />
-                添加。
+                {{ t('renderQueue.form.noBlenderPrefix') }}
+                <UButton type="button" color="neutral" variant="link" size="sm" :label="t('nav.settings')" @click="goToSettings" />
+                {{ t('renderQueue.form.noBlenderSuffix') }}
               </p>
             </section>
 
             <section class="surface-panel transcode-submit-section">
               <div class="transcode-submit-head">
                 <div>
-                  <p class="choice-card-mode">检查结果</p>
-                  <h2 class="choice-card-title">工程参数</h2>
+                  <p class="choice-card-mode">{{ t('renderQueue.form.checkMode') }}</p>
+                  <h2 class="choice-card-title">{{ t('renderQueue.form.projectParams') }}</h2>
                 </div>
               </div>
 
@@ -586,7 +584,7 @@
                     icon="i-lucide-search"
                     :loading="inspectingProject"
                     :disabled="!canInspectProject"
-                    :label="inspectingProject ? '读取中…' : '读取工程参数'"
+                    :label="inspectingProject ? t('renderQueue.form.reading') : t('renderQueue.form.readProjectParams')"
                     @click="inspectProjectSettings(true)"
                   />
                 </div>
@@ -595,15 +593,15 @@
 
                 <div v-if="projectSettings" class="job-form-stats">
                   <div class="job-form-stat">
-                    <span class="job-form-stat-label">渲染引擎</span>
+                    <span class="job-form-stat-label">{{ t('renderQueue.form.renderEngine') }}</span>
                     <strong>{{ displayEngine(projectSettings.engine) }}</strong>
                   </div>
                   <div class="job-form-stat">
-                    <span class="job-form-stat-label">工程帧段</span>
+                    <span class="job-form-stat-label">{{ t('renderQueue.form.projectFrames') }}</span>
                     <strong>{{ projectSettings.frameStart }}–{{ projectSettings.frameEnd }}</strong>
                   </div>
                   <div class="job-form-stat">
-                    <span class="job-form-stat-label">分辨率</span>
+                    <span class="job-form-stat-label">{{ t('renderQueue.form.resolution') }}</span>
                     <strong>{{ projectSettings.resolutionX }}×{{ projectSettings.resolutionY }}</strong>
                   </div>
                   <div class="job-form-stat">
@@ -613,7 +611,7 @@
                 </div>
                 <div v-else class="job-form-empty">
                   <UIcon name="i-lucide-scan-search" class="job-form-empty-icon" />
-                  <p>点击“读取工程参数”后，这里会显示 Blender 工程内的渲染信息。</p>
+                  <p>{{ t('renderQueue.form.emptyProjectInfo') }}</p>
                 </div>
               </div>
             </section>
@@ -621,8 +619,8 @@
             <section v-if="notices.length" class="surface-panel transcode-submit-section">
               <div class="transcode-submit-head">
                 <div>
-                  <p class="choice-card-mode">辅助信息</p>
-                  <h2 class="choice-card-title">提示</h2>
+                  <p class="choice-card-mode">{{ t('renderQueue.form.noticesMode') }}</p>
+                  <h2 class="choice-card-title">{{ t('renderQueue.form.noticesTitle') }}</h2>
                 </div>
               </div>
 
@@ -643,14 +641,14 @@
           <div class="modal-actions settings-modal-actions">
             <div class="settings-modal-actions-start" />
             <div class="settings-modal-actions-end">
-              <UButton type="button" icon="i-lucide-x" label="取消" color="neutral" variant="outline" @click="handleCloseAddJob" />
+              <UButton type="button" icon="i-lucide-x" :label="t('common.cancel')" color="neutral" variant="outline" @click="handleCloseAddJob" />
               <UButton
                 type="submit"
                 icon="i-lucide-plus"
                 color="primary"
                 variant="solid"
                 :loading="submitting"
-                :label="submitting ? '提交中…' : '加入渲染队列'"
+                :label="submitting ? t('renderQueue.form.submitting') : t('renderQueue.form.submit')"
               />
             </div>
           </div>
@@ -680,7 +678,7 @@
     <UModal
       :open="showAddJobConfirm"
       :close="false"
-      title="选择渲染方式"
+      :title="t('renderQueue.addConfirm.title')"
       :ui="{ content: 'job-modal-content' }"
       @update:open="v => { if (!v) closeAddJobConfirm() }"
     >
@@ -688,22 +686,22 @@
         <div class="modal-stack">
           <template v-if="addJobConflictKind === 'file'">
             <p class="modal-copy">
-              检测到输出文件已存在：
+              {{ t('renderQueue.addConfirm.fileExists') }}
               <strong>{{ addJobExistingOutputPath }}</strong>
             </p>
             <div class="choice-grid">
               <UCard variant="subtle" class="choice-card" :ui="{ body: 'choice-card-body' }">
                 <div class="choice-card-head">
-                  <p class="choice-card-mode">快速 MP4</p>
-                  <h3 class="choice-card-title">覆盖现有文件并重新渲染</h3>
+                  <p class="choice-card-mode">{{ t('renderQueue.addConfirm.quickMode') }}</p>
+                  <h3 class="choice-card-title">{{ t('renderQueue.addConfirm.overwriteFileTitle') }}</h3>
                 </div>
                 <p class="choice-card-desc">
-                  该模式会直接输出单个 MP4 文件，不支持续跑或按区间补渲。
+                  {{ t('renderQueue.addConfirm.overwriteFileDescription') }}
                 </p>
                 <UButton
                   color="neutral"
                   variant="outline"
-                  label="覆盖并渲染"
+                  :label="t('renderQueue.addConfirm.overwriteRender')"
                   class="choice-card-action"
                   :loading="submitting && addJobSubmitMode === 'restart'"
                   :disabled="submitting"
@@ -714,28 +712,24 @@
           </template>
           <template v-else>
             <p class="modal-copy">
-              检测到当前输出范围已存在
-              <strong>{{ addJobFrameStatus?.frameCount ?? 0 }} 帧</strong>
+              {{ t('renderQueue.addConfirm.framesExist', { count: addJobFrameStatus?.frameCount ?? 0 }) }}
               <template v-if="addJobFrameStatus?.lastFrame != null">
-                ，当前最后一帧为 <strong>{{ addJobFrameStatus.lastFrame }}</strong>
+                {{ t('renderQueue.addConfirm.lastFrame', { frame: addJobFrameStatus.lastFrame }) }}
               </template>
-              。
             </p>
             <div class="choice-grid">
               <UCard variant="subtle" class="choice-card" :ui="{ body: 'choice-card-body' }">
                 <div class="choice-card-head">
-                  <p class="choice-card-mode">覆盖模式</p>
-                  <h3 class="choice-card-title">重新开始渲染</h3>
+                  <p class="choice-card-mode">{{ t('renderQueue.addConfirm.overwriteMode') }}</p>
+                  <h3 class="choice-card-title">{{ t('renderQueue.addConfirm.restartTitle') }}</h3>
                 </div>
                 <p class="choice-card-desc">
-                  从第 <span class="choice-card-accent">{{ form.frame_start }}</span> 帧开始渲染，直接覆盖
-                  <span class="choice-card-accent">{{ form.frame_start }}–{{ form.frame_end }}</span>
-                  范围内的同名帧
+                  {{ t('renderQueue.addConfirm.restartDescription', { start: form.frame_start, range: `${form.frame_start}–${form.frame_end}` }) }}
                 </p>
                 <UButton
                   color="neutral"
                   variant="outline"
-                  label="从头覆盖"
+                  :label="t('renderQueue.addConfirm.restartButton')"
                   class="choice-card-action"
                   :loading="submitting && addJobSubmitMode === 'restart'"
                   :disabled="submitting"
@@ -745,21 +739,21 @@
 
               <UCard variant="subtle" class="choice-card" :ui="{ body: 'choice-card-body' }">
                 <div class="choice-card-head">
-                  <p class="choice-card-mode">续跑模式</p>
-                  <h3 class="choice-card-title">从最后一帧继续</h3>
+                  <p class="choice-card-mode">{{ t('renderQueue.addConfirm.resumeMode') }}</p>
+                  <h3 class="choice-card-title">{{ t('renderQueue.addConfirm.resumeTitle') }}</h3>
                 </div>
                 <p class="choice-card-desc">
                   <template v-if="addJobFrameStatus && addJobFrameStatus.nextFrame <= form.frame_end">
-                    从第 <span class="choice-card-accent">{{ addJobFrameStatus.nextFrame }}</span> 帧继续渲染
+                    {{ t('renderQueue.addConfirm.resumeDescription', { frame: addJobFrameStatus.nextFrame }) }}
                   </template>
                   <template v-else>
-                    当前帧段已完整存在，继续将直接完成
+                    {{ t('renderQueue.addConfirm.resumeAlreadyComplete') }}
                   </template>
                 </p>
                 <UButton
                   color="neutral"
                   variant="outline"
-                  label="继续渲染"
+                  :label="t('renderQueue.addConfirm.resumeButton')"
                   class="choice-card-action"
                   :loading="submitting && addJobSubmitMode === 'continue'"
                   :disabled="submitting"
@@ -769,7 +763,7 @@
             </div>
           </template>
           <div class="modal-actions">
-            <UButton icon="i-lucide-x" label="取消" color="warning" variant="outline" :disabled="submitting" @click="closeAddJobConfirm" />
+            <UButton icon="i-lucide-x" :label="t('common.cancel')" color="warning" variant="outline" :disabled="submitting" @click="closeAddJobConfirm" />
           </div>
         </div>
       </template>
@@ -790,6 +784,7 @@ const route = useRoute()
 const jobsStore = useJobsStore()
 const settingsStore = useSettingsStore()
 const toast = useToast()
+const { t } = useI18n()
 const activeQueueTab = ref<'all' | 'queue' | 'done' | 'error'>('all')
 
 const initializingTools = ref(false)
@@ -827,36 +822,36 @@ async function initializeTools(options?: { silent?: boolean }) {
 
     if (blenderCount > 0 && toolchain.ffmpegFound) {
       const autoFilledDescription = blenderAutoFilled && ffmpegAutoFilled
-        ? '已自动补全 Blender 和 FFmpeg 路径。'
+        ? t('renderQueue.toolchain.bothAutoFilled')
         : blenderAutoFilled
-          ? '已自动设置默认 Blender。'
+          ? t('renderQueue.toolchain.blenderAutoFilled')
           : ffmpegAutoFilled
-            ? '已自动补全 FFmpeg 路径。'
-            : 'Blender 和 FFmpeg 都可用。'
+            ? t('renderQueue.toolchain.ffmpegAutoFilled')
+            : t('renderQueue.toolchain.bothReady')
       toast.add({
-        title: '渲染工具已就绪',
+        title: t('renderQueue.toolchain.readyTitle'),
         description: autoFilledDescription,
         color: 'success',
         icon: 'i-lucide-check',
       })
     } else if (blenderCount > 0) {
       toast.add({
-        title: '已找到 Blender',
-        description: '未找到 FFmpeg，可在设置页补充路径。',
+        title: t('renderQueue.toolchain.blenderFoundTitle'),
+        description: t('renderQueue.toolchain.blenderFoundNoFfmpeg'),
         color: 'warning',
         icon: 'i-lucide-triangle-alert',
       })
     } else if (toolchain.ffmpegFound) {
       toast.add({
-        title: '已找到 FFmpeg',
-        description: '未找到 Blender，请在设置页添加 Blender 路径。',
+        title: t('renderQueue.toolchain.ffmpegFoundTitle'),
+        description: t('renderQueue.toolchain.ffmpegFoundNoBlender'),
         color: 'warning',
         icon: 'i-lucide-triangle-alert',
       })
     } else {
       toast.add({
-        title: '需要配置渲染工具',
-        description: '未找到 Blender 和 FFmpeg，请前往设置页补充路径。',
+        title: t('renderQueue.toolchain.needsConfigTitle'),
+        description: t('renderQueue.toolchain.needsConfigDescription'),
         color: 'warning',
         icon: 'i-lucide-triangle-alert',
       })
@@ -864,8 +859,8 @@ async function initializeTools(options?: { silent?: boolean }) {
   } catch {
     if (!silent) {
       toast.add({
-        title: '工具初始化失败',
-        description: '请检查设置页中的工具路径。',
+        title: t('renderQueue.toolchain.initFailedTitle'),
+        description: t('renderQueue.toolchain.initFailedDescription'),
         color: 'error',
         icon: 'i-lucide-circle-alert',
       })
@@ -880,15 +875,15 @@ async function handleStartQueue() {
   try {
     await jobsStore.startQueue()
     toast.add({
-      title: '队列已开始',
+      title: t('renderQueue.queueToast.startedTitle'),
       description: hadPausedJob
-        ? '已恢复被暂停的任务，将从断点继续渲染。'
-        : '等待中的任务会按当前队列顺序依次启动。',
+        ? t('renderQueue.queueToast.resumedDescription')
+        : t('renderQueue.queueToast.startedDescription'),
       color: 'success',
     })
   } catch (error) {
     toast.add({
-      title: '开始失败',
+      title: t('renderQueue.queueToast.startFailedTitle'),
       description: error instanceof Error ? error.message : String(error),
       color: 'error',
     })
@@ -899,13 +894,13 @@ async function handlePauseQueue() {
   try {
     await jobsStore.pauseQueue()
     toast.add({
-      title: '队列已暂停',
-      description: '当前渲染任务已中止，点击“开始任务队列”可从断点自动续跑。',
+      title: t('renderQueue.queueToast.pausedTitle'),
+      description: t('renderQueue.queueToast.pausedDescription'),
       color: 'warning',
     })
   } catch (error) {
     toast.add({
-      title: '暂停失败',
+      title: t('renderQueue.queueToast.pauseFailedTitle'),
       description: error instanceof Error ? error.message : String(error),
       color: 'error',
     })
@@ -930,14 +925,14 @@ const queueToggleDisabled = computed(() =>
 
 const queueToggleButton = computed(() => ({
   icon: jobsStore.queuePaused ? 'i-lucide-play' : 'i-lucide-pause',
-  label: jobsStore.queuePaused ? '开始任务队列' : '暂停任务队列',
+  label: jobsStore.queuePaused ? t('renderQueue.actions.startQueue') : t('renderQueue.actions.pauseQueue'),
   color: jobsStore.queuePaused ? 'success' as const : 'warning' as const,
 }))
 
 const queueToggleTooltip = computed(() =>
   jobsStore.queuePaused
-    ? '按当前顺序启动等待中的任务'
-    : '立即中止当前渲染任务并暂停队列，恢复时会从断点自动续跑',
+    ? t('renderQueue.actions.startQueueTooltip')
+    : t('renderQueue.actions.pauseQueueTooltip'),
 )
 
 const { validateBlendFile, inspectBlendFile, inspectRenderedFrames, inspectToolchain, previewOutputPathTemplate, pathExists } = useTauri()
@@ -1045,23 +1040,26 @@ function displayEngine(engine: string) {
 
 type OutputMode = 'PNG' | 'OPEN_EXR' | 'QUICK_MP4'
 
-const QUICK_MP4_OUTPUT_PATH_TEMPLATE = './快速预览/{blendFileName}_{frameStart}-{frameEnd}.mp4'
+const QUICK_MP4_OUTPUT_PATH_TEMPLATE = './quick-preview/{blendFileName}_{frameStart}-{frameEnd}.mp4'
 const SEQUENCE_FORMATS = ['PNG', 'OPEN_EXR']
-const outputFormatOptions = [
-  { label: 'PNG 序列', value: 'PNG' },
-  { label: 'OpenEXR 序列', value: 'OPEN_EXR' },
-  { label: '快速 MP4', value: 'QUICK_MP4' },
-] satisfies Array<{ label: string, value: OutputMode }>
-const outputModeLabelMap: Record<OutputMode, string> = {
-  PNG: 'PNG 序列',
-  OPEN_EXR: 'OpenEXR 序列',
-  QUICK_MP4: '快速 MP4',
+const outputFormatOptions = computed<Array<{ label: string, value: OutputMode }>>(() => [
+  { label: t('renderQueue.outputMode.PNG'), value: 'PNG' },
+  { label: t('renderQueue.outputMode.OPEN_EXR'), value: 'OPEN_EXR' },
+  { label: t('renderQueue.outputMode.QUICK_MP4'), value: 'QUICK_MP4' },
+])
+const outputModeLabelMap = computed<Record<OutputMode, string>>(() => ({
+  PNG: t('renderQueue.outputMode.PNG'),
+  OPEN_EXR: t('renderQueue.outputMode.OPEN_EXR'),
+  QUICK_MP4: t('renderQueue.outputMode.QUICK_MP4'),
+}))
+function outputModeLabel(mode: OutputMode) {
+  return outputModeLabelMap.value[mode] || t('renderQueue.form.selectFormat')
 }
 const queueTabItems = computed<TabsItem[]>(() => [
-  { label: '全部', value: 'all', badge: { label: String(jobsStore.jobs.length), color: 'neutral' as const, variant: 'subtle' as const }, icon: 'i-lucide-layers', class: 'queue-tab-tone-all', ui: { trigger: 'queue-tab-tone-all' } },
-  { label: '排队中', value: 'queue', badge: { label: String(jobsStore.queueJobs.length), color: 'info' as const, variant: 'subtle' as const }, icon: 'i-lucide-loader-circle', class: 'queue-tab-tone-queue', ui: { trigger: 'queue-tab-tone-queue' } },
-  { label: '已完成', value: 'done', badge: { label: String(jobsStore.doneJobs.length), color: 'success' as const, variant: 'subtle' as const }, icon: 'i-lucide-circle-check-big', class: 'queue-tab-tone-done', ui: { trigger: 'queue-tab-tone-done' } },
-  { label: '已中止', value: 'error', badge: { label: String(jobsStore.errorJobs.length), color: 'warning' as const, variant: 'subtle' as const }, icon: 'i-lucide-triangle-alert', class: 'queue-tab-tone-error', ui: { trigger: 'queue-tab-tone-error' } },
+  { label: t('renderQueue.tabs.all'), value: 'all', badge: { label: String(jobsStore.jobs.length), color: 'neutral' as const, variant: 'subtle' as const }, icon: 'i-lucide-layers', class: 'queue-tab-tone-all', ui: { trigger: 'queue-tab-tone-all' } },
+  { label: t('renderQueue.tabs.queue'), value: 'queue', badge: { label: String(jobsStore.queueJobs.length), color: 'info' as const, variant: 'subtle' as const }, icon: 'i-lucide-loader-circle', class: 'queue-tab-tone-queue', ui: { trigger: 'queue-tab-tone-queue' } },
+  { label: t('renderQueue.tabs.done'), value: 'done', badge: { label: String(jobsStore.doneJobs.length), color: 'success' as const, variant: 'subtle' as const }, icon: 'i-lucide-circle-check-big', class: 'queue-tab-tone-done', ui: { trigger: 'queue-tab-tone-done' } },
+  { label: t('renderQueue.tabs.error'), value: 'error', badge: { label: String(jobsStore.errorJobs.length), color: 'warning' as const, variant: 'subtle' as const }, icon: 'i-lucide-triangle-alert', class: 'queue-tab-tone-error', ui: { trigger: 'queue-tab-tone-error' } },
 ])
 const filteredJobs = computed(() => {
   switch (activeQueueTab.value) {
@@ -1078,25 +1076,25 @@ const filteredJobs = computed(() => {
 const emptyTabTitle = computed(() => {
   switch (activeQueueTab.value) {
     case 'queue':
-      return '当前没有排队中任务'
+      return t('renderQueue.empty.queueTitle')
     case 'done':
-      return '当前没有已完成任务'
+      return t('renderQueue.empty.doneTitle')
     case 'error':
-      return '当前没有已中止任务'
+      return t('renderQueue.empty.errorTitle')
     default:
-      return '当前没有任务'
+      return t('renderQueue.empty.allTitle')
   }
 })
 const emptyTabNote = computed(() => {
   switch (activeQueueTab.value) {
     case 'queue':
-      return '新建任务后会先进入队列，点击上方“开始任务”后再按顺序执行。'
+      return t('renderQueue.empty.queueNote')
     case 'done':
-      return '完成的任务会显示在这里，方便单独查看已结束项目。'
+      return t('renderQueue.empty.doneNote')
     case 'error':
-      return '失败、已取消和已中断的任务会集中显示在这里。'
+      return t('renderQueue.empty.errorNote')
     default:
-      return '这里会显示当前筛选下的任务卡片。'
+      return t('renderQueue.empty.allNote')
   }
 })
 const emptyTabToneClass = computed(() => {
@@ -1113,7 +1111,7 @@ const emptyTabToneClass = computed(() => {
 })
 const renderQueueActionItems = computed<DropdownMenuItem[][]>(() => [[
   {
-    label: '清理已完成',
+    label: t('renderQueue.actions.clearCompleted'),
     icon: 'i-lucide-trash-2',
     disabled: clearingCompletedRenderJobs.value || jobsStore.doneJobs.length === 0,
     onSelect: () => {
@@ -1134,14 +1132,16 @@ async function confirmClearCompletedRenderJobs() {
     const { removed, failed } = await jobsStore.clearCompletedJobs()
     if (removed > 0) {
       toast.add({
-        title: '已清理完成任务',
-        description: failed > 0 ? `成功清理 ${removed} 个，另有 ${failed} 个失败。` : `成功清理 ${removed} 个已完成任务。`,
+        title: t('renderQueue.queueToast.clearSuccessTitle'),
+        description: failed > 0
+          ? t('renderQueue.queueToast.clearPartialDescription', { removed, failed })
+          : t('renderQueue.queueToast.clearSuccessDescription', { removed }),
         color: failed > 0 ? 'warning' : 'success',
       })
     } else if (failed > 0) {
       toast.add({
-        title: '清理完成任务失败',
-        description: `共有 ${failed} 个任务未能删除。`,
+        title: t('renderQueue.queueToast.clearFailedTitle'),
+        description: t('renderQueue.queueToast.clearFailedDescription', { failed }),
         color: 'error',
       })
     }
@@ -1227,7 +1227,7 @@ async function commitQueuePointerDrop() {
     await jobsStore.reorderQueueJobs(remainingIds)
   } catch (error) {
     toast.add({
-      title: '顺序更新失败',
+      title: t('renderQueue.queueToast.reorderFailedTitle'),
       description: error instanceof Error ? error.message : String(error),
       color: 'error',
     })
@@ -1327,7 +1327,7 @@ async function browseBlendFile() {
   const selected = await open({
     multiple: false,
     directory: false,
-    title: '选择 Blend 文件',
+    title: t('renderQueue.dialog.blendFileTitle'),
     defaultPath: form.blend_file || undefined,
     filters: [{ name: 'Blender Project', extensions: ['blend'] }],
   })
@@ -1353,7 +1353,7 @@ async function browseRenderOutputDirectory() {
   const selected = await open({
     directory: true,
     multiple: false,
-    title: '选择输出目录',
+    title: t('renderQueue.dialog.outputDirectoryTitle'),
     defaultPath: defaultDirectory,
   })
 
@@ -1439,7 +1439,7 @@ function openMetadataDialog(job: RenderJob) {
 function buildJobContextMenuItems(job: RenderJob) {
   return [
     {
-      label: '编辑项目信息',
+      label: t('renderQueue.actions.editMetadata'),
       icon: 'i-lucide-notebook-pen',
       onSelect: () => openMetadataDialog(job),
     },
@@ -1585,17 +1585,17 @@ const addJobTranscodeSummary = computed(() => {
 const isQuickMp4Output = computed(() => form.render_mode === 'quick_mp4')
 const outputPathPlaceholder = computed(() => (
   isQuickMp4Output.value
-    ? 'F:\\项目\\快速预览\\潜行瞬鲨_1-250.mp4'
-    : 'F:\\项目\\潜行瞬鲨_1-250\\潜行瞬鲨_######'
+    ? 'F:\\Project\\quick-preview\\Shot_010_1-250.mp4'
+    : 'F:\\Project\\Shot_010_1-250\\Shot_010_######'
 ))
 
 const outputSettingsTitle = computed(() => (
-  isQuickMp4Output.value ? '快速 MP4 固定预设' : '图像序列输出设置'
+  isQuickMp4Output.value ? t('renderQueue.outputSettings.quickTitle') : t('renderQueue.outputSettings.sequenceTitle')
 ))
 
 const outputSettingsSummary = computed(() => {
   if (isQuickMp4Output.value) {
-    return 'Blender 直出 H.264 MP4 · 固定预设 · 不进入转码队列'
+    return t('renderQueue.outputSettings.quickSummary')
   }
   if (form.output_format === 'OPEN_EXR') {
     return [
@@ -1603,7 +1603,7 @@ const outputSettingsSummary = computed(() => {
       settingsStore.settings.exrColorMode,
       `${settingsStore.settings.exrColorDepth}-bit`,
       settingsStore.settings.exrCodec,
-      `质量 ${settingsStore.settings.exrQuality}%`,
+      t('renderQueue.outputSettings.quality', { quality: settingsStore.settings.exrQuality }),
     ].join(' · ')
   }
 
@@ -1611,7 +1611,7 @@ const outputSettingsSummary = computed(() => {
     'PNG',
     settingsStore.settings.pngColorMode,
     `${settingsStore.settings.pngColorDepth}-bit`,
-    `压缩 ${settingsStore.settings.pngCompression}`,
+    t('renderQueue.outputSettings.compression', { compression: settingsStore.settings.pngCompression }),
   ].join(' · ')
 })
 
@@ -1628,16 +1628,24 @@ const notices = computed(() => {
     list.push({
       type: 'warn',
       text: isQuickMp4Output.value
-        ? '工程原输出为视频 (FFMPEG)，当前将直接输出 MP4。'
-        : '工程原输出为视频 (FFMPEG)，将按所选图像格式渲染序列帧。',
+        ? t('renderQueue.notices.projectVideoQuick')
+        : t('renderQueue.notices.projectVideoSequence'),
     })
   }
   if (isQuickMp4Output.value && addJobExistingOutputPath.value) {
-    list.push({ type: 'warn', text: `检测到目标 MP4 已存在：${addJobExistingOutputPath.value}` })
+    list.push({ type: 'warn', text: t('renderQueue.notices.mp4Exists', { path: addJobExistingOutputPath.value }) })
   }
   if ((outputFrameStatus.value?.frameCount ?? 0) > 0) {
-    const suffix = outputFrameStatus.value?.lastFrame != null ? `，最后一帧 ${outputFrameStatus.value.lastFrame}` : ''
-    list.push({ type: 'warn', text: `检测到当前帧段已存在 ${outputFrameStatus.value?.frameCount} 帧${suffix}，提交时会询问从头覆盖还是断点继续。` })
+    const suffix = outputFrameStatus.value?.lastFrame != null
+      ? t('renderQueue.notices.lastFrameSuffix', { frame: outputFrameStatus.value.lastFrame })
+      : ''
+    list.push({
+      type: 'warn',
+      text: t('renderQueue.notices.framesExist', {
+        count: outputFrameStatus.value?.frameCount,
+        suffix,
+      }),
+    })
   }
   return list
 })
@@ -1650,7 +1658,7 @@ async function inspectProjectSettings(showErrors = false) {
     const shouldRefreshAutoOutputPath = !form.output_path || isAutoResolvedRenderOutputPath(form.output_path)
     const settings = await inspectBlendFile(form.blender_executable, form.blend_file)
     projectSettings.value = settings
-    projectSettingsMessage.value = '已从工程读取渲染参数。'
+    projectSettingsMessage.value = t('renderQueue.notices.projectRead')
     form.frame_start = settings.frameStart
     form.frame_end = settings.frameEnd
 
@@ -1823,16 +1831,16 @@ async function submitNewJob() {
   formError.value = ''
 
   if (!form.blend_file || !form.blender_executable || !form.output_path) {
-    formError.value = 'Blend 文件、Blender 可执行文件和输出路径不能为空。'
+    formError.value = t('renderQueue.validation.requiredFields')
     return
   }
   if (outputPathTemplateHasErrors.value) {
-    formError.value = outputPathPreview.value?.errors[0] || '输出路径模板无效。'
+    formError.value = outputPathPreview.value?.errors[0] || t('renderQueue.validation.invalidOutputTemplate')
     return
   }
 
   if (form.frame_start > form.frame_end) {
-    formError.value = '起始帧不能大于结束帧。'
+    formError.value = t('renderQueue.validation.startGreaterThanEnd')
     return
   }
 
@@ -1842,7 +1850,7 @@ async function submitNewJob() {
     await validateBlendFile(form.blend_file)
     const resolvedOutputPath = outputPathPreview.value?.resolvedPath
     if (!resolvedOutputPath) {
-      formError.value = '当前输出路径还无法解析，请先检查模板变量。'
+      formError.value = t('renderQueue.validation.unresolvedOutputPath')
       return
     }
     if (isQuickMp4Output.value) {

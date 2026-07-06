@@ -12,13 +12,13 @@
           <section v-if="showManualFolderSourceSection" class="surface-panel transcode-submit-section">
             <div class="transcode-submit-head">
               <div>
-                <p class="choice-card-mode">输入项</p>
-                <h2 class="choice-card-title">序列帧来源</h2>
+                <p class="choice-card-mode">{{ t('transcodeSubmit.sections.inputMode') }}</p>
+                <h2 class="choice-card-title">{{ t('transcodeSubmit.sections.source') }}</h2>
               </div>
             </div>
 
             <div class="transcode-submit-fields">
-              <UFormField label="序列帧目录">
+              <UFormField :label="t('transcodeSubmit.fields.sourceDirectory')">
                 <div class="transcode-submit-path-row">
                   <UTextarea
                     v-model.trim="selectedSourceFolder"
@@ -26,11 +26,11 @@
                     autoresize
                     :disabled="saving || sourceLoading"
                     class="w-full path-textarea"
-                    placeholder="F:\项目\潜行瞬鲨1-250"
+                    :placeholder="t('transcodeSubmit.placeholders.sourceDirectory')"
                   />
                   <UButton
                     icon="i-lucide-folder-open"
-                    label="选择"
+                    :label="t('common.choose')"
                     color="neutral"
                     variant="outline"
                     :disabled="saving || sourceLoading"
@@ -40,7 +40,7 @@
                 </div>
               </UFormField>
 
-              <UFormField v-if="sourceItems.length > 1" label="序列选择">
+              <UFormField v-if="sourceItems.length > 1" :label="t('transcodeSubmit.fields.sequenceSelect')">
                 <USelect
                   v-model="selectedSourceInputPath"
                   :items="sourceItems"
@@ -56,23 +56,23 @@
                 color="neutral"
                 variant="subtle"
                 :title="`${selectedSourceOption.name} · ${selectedSourceOption.frameStart}–${selectedSourceOption.frameEnd}`"
-                :description="`输入序列：${selectedSourceOption.inputPath}`"
+                :description="t('transcodeSubmit.sourceDescription', { path: selectedSourceOption.inputPath })"
               />
-              <p v-else class="hint-text">先选择一个包含序列帧的目录，再继续配置输出参数。</p>
+              <p v-else class="hint-text">{{ t('transcodeSubmit.emptySource') }}</p>
             </div>
           </section>
 
           <section class="surface-panel transcode-submit-section">
             <div class="transcode-submit-head">
               <div>
-                <p class="choice-card-mode">基础项</p>
-                <h2 class="choice-card-title">输出配置</h2>
+                <p class="choice-card-mode">{{ t('transcodeSubmit.sections.basicMode') }}</p>
+                <h2 class="choice-card-title">{{ t('transcodeSubmit.sections.output') }}</h2>
               </div>
             </div>
 
             <div class="transcode-submit-fields">
               <div v-if="showBlenderFrameRangeSection" class="transcode-submit-inline-grid">
-                <UFormField label="转码起始帧">
+                <UFormField :label="t('transcodeSubmit.fields.startFrame')">
                   <UInputNumber
                     v-model="selectedFrameStart"
                     :min="blenderFrameRangeMin"
@@ -85,7 +85,7 @@
                   />
                 </UFormField>
 
-                <UFormField label="转码结束帧">
+                <UFormField :label="t('transcodeSubmit.fields.endFrame')">
                   <UInputNumber
                     v-model="selectedFrameEnd"
                     :min="blenderFrameRangeMin"
@@ -98,18 +98,18 @@
                   />
                 </UFormField>
               </div>
-              <UFormField label="任务名">
+              <UFormField :label="t('transcodeSubmit.fields.jobName')">
                 <UTextarea
                   v-model.trim="form.name"
                   :rows="1"
                   autoresize
                   :disabled="saving"
                   class="w-full"
-                  placeholder="潜行瞬鲨_1-250_转码"
+                  :placeholder="t('transcodeSubmit.placeholders.jobName')"
                 />
               </UFormField>
 
-              <UFormField label="输出目录">
+              <UFormField :label="t('transcodeSubmit.fields.outputDirectory')">
                 <div class="transcode-submit-path-row">
                   <UTextarea
                     v-model.trim="form.outputDir"
@@ -117,11 +117,11 @@
                     autoresize
                     :disabled="saving"
                     class="w-full path-textarea"
-                    placeholder="F:\项目\转码"
+                    :placeholder="t('transcodeSubmit.placeholders.outputDirectory')"
                   />
                   <UButton
                     icon="i-lucide-folder-open"
-                    label="更改"
+                    :label="t('common.change')"
                     color="neutral"
                     variant="outline"
                     :disabled="saving"
@@ -130,7 +130,7 @@
                 </div>
               </UFormField>
 
-              <UFormField label="输出文件名">
+              <UFormField :label="t('transcodeSubmit.fields.outputFileName')">
                 <div class="transcode-submit-filename-row">
                   <UTextarea
                     v-model.trim="form.outputStem"
@@ -138,7 +138,7 @@
                     autoresize
                     :disabled="saving"
                     class="w-full"
-                    placeholder="潜行瞬鲨_1-250"
+                    :placeholder="t('transcodeSubmit.placeholders.outputFileName')"
                   />
                   <span class="transcode-submit-suffix">.mp4</span>
                 </div>
@@ -149,13 +149,13 @@
           <section class="surface-panel transcode-submit-section">
             <div class="transcode-submit-head">
               <div>
-                <p class="choice-card-mode">高级项</p>
-                <h2 class="choice-card-title">编码参数</h2>
+                <p class="choice-card-mode">{{ t('transcodeSubmit.sections.advancedMode') }}</p>
+                <h2 class="choice-card-title">{{ t('transcodeSubmit.sections.encoding') }}</h2>
               </div>
             </div>
 
             <div class="transcode-submit-inline-grid">
-              <UFormField label="输出 FPS">
+              <UFormField :label="t('transcodeSubmit.fields.outputFps')">
                 <UInputNumber
                   v-model="form.fps"
                   :min="1"
@@ -203,7 +203,7 @@
             <UButton
               v-if="mode === 'settings'"
               icon="i-lucide-rotate-ccw"
-              label="恢复默认"
+              :label="t('common.resetDefaults')"
               color="neutral"
               variant="ghost"
               :disabled="saving"
@@ -213,7 +213,7 @@
           <div class="settings-modal-actions-end">
             <UButton
               icon="i-lucide-x"
-              label="取消"
+              :label="t('common.cancel')"
               color="neutral"
               variant="outline"
               :disabled="saving"
@@ -221,7 +221,7 @@
             />
             <UButton
               :icon="mode === 'settings' ? 'i-lucide-save' : 'i-lucide-clapperboard'"
-              :label="mode === 'settings' ? '保存' : '提交'"
+              :label="mode === 'settings' ? t('common.save') : t('common.submit')"
               color="primary"
               variant="solid"
               :loading="saving"
@@ -281,11 +281,12 @@ const emit = defineEmits<{
 
 const settingsStore = useSettingsStore()
 const { previewOutputPathTemplate, scanFolderFrameGroups } = useTauri()
+const { t } = useI18n()
 
 const mode = computed(() => props.mode ?? 'submit')
 const modalTitle = computed(() => {
-  if (mode.value === 'settings') return '转码设置'
-  return props.blenderJobId ? '提交转码' : '新建转码任务'
+  if (mode.value === 'settings') return t('transcodeSubmit.title.settings')
+  return props.blenderJobId ? t('transcodeSubmit.title.blender') : t('transcodeSubmit.title.new')
 })
 const presetOptions: string[] = [...TRANSCODE_PRESET_OPTIONS]
 
@@ -511,7 +512,7 @@ async function loadSourceFolder(folderPath: string) {
       selectedSourceInputPath.value = ''
       resolvedDefaultOutputPath.value = ''
       applyConfig(buildDerivedConfig())
-      errorMessage.value = '这个目录里没有检测到可转码的序列帧。'
+      errorMessage.value = t('transcodeSubmit.validation.noSequence')
       return
     }
 
@@ -534,7 +535,7 @@ async function browseSourceFolder() {
   const selected = await openDialog({
     directory: true,
     multiple: false,
-    title: '选择序列帧目录',
+    title: t('transcodeSubmit.dialog.sourceDirectory'),
     defaultPath: selectedSourceFolder.value || undefined,
   })
   if (typeof selected === 'string' && selected) {
@@ -547,7 +548,7 @@ async function browseOutputDirectory() {
   const selected = await openDialog({
     directory: true,
     multiple: false,
-    title: '选择输出目录',
+    title: t('transcodeSubmit.dialog.outputDirectory'),
     defaultPath: form.outputDir || undefined,
   })
   if (typeof selected === 'string' && selected) {
@@ -663,33 +664,36 @@ async function submit() {
   const folderSource = currentFolderSource()
 
   if (!name) {
-    errorMessage.value = '任务名不能为空。'
+    errorMessage.value = t('transcodeSubmit.validation.nameRequired')
     return
   }
   if (showBlenderFrameRangeSection.value) {
     if (selectedFrameStart.value > selectedFrameEnd.value) {
-      errorMessage.value = '转码起始帧不能大于结束帧。'
+      errorMessage.value = t('transcodeSubmit.validation.startGreaterThanEnd')
       return
     }
     if (selectedFrameStart.value < blenderFrameRangeMin.value || selectedFrameEnd.value > blenderFrameRangeMax.value) {
-      errorMessage.value = `转码帧范围必须在项目范围 ${blenderFrameRangeMin.value}–${blenderFrameRangeMax.value} 内。`
+      errorMessage.value = t('transcodeSubmit.validation.rangeOutside', {
+        min: blenderFrameRangeMin.value,
+        max: blenderFrameRangeMax.value,
+      })
       return
     }
   }
   if (!outputDir) {
-    errorMessage.value = '输出目录不能为空。'
+    errorMessage.value = t('transcodeSubmit.validation.outputDirRequired')
     return
   }
   if (!outputStem) {
-    errorMessage.value = '输出文件名不能为空。'
+    errorMessage.value = t('transcodeSubmit.validation.outputStemRequired')
     return
   }
   if (hasTemplateErrors.value) {
-    errorMessage.value = outputPathPreview.value?.errors[0] || '输出路径模板无效。'
+    errorMessage.value = outputPathPreview.value?.errors[0] || t('transcodeSubmit.validation.invalidTemplate')
     return
   }
   if (!Number.isFinite(fps) || fps <= 0) {
-    errorMessage.value = '输出 FPS 必须大于 0。'
+    errorMessage.value = t('transcodeSubmit.validation.fpsPositive')
     return
   }
 
@@ -713,7 +717,7 @@ async function submit() {
     }
 
     if (!props.blenderJobId && !folderSource) {
-      errorMessage.value = '请先选择序列帧目录。'
+      errorMessage.value = t('transcodeSubmit.validation.sourceRequired')
       return
     }
 

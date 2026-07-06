@@ -14,20 +14,20 @@
           <div class="job-title-stack">
             <div class="job-head-badges">
               <UBadge
-                :label="STATUS_LABEL[job.status] ?? job.status"
+                :label="statusLabel(job.status)"
                 :color="statusColor"
                 variant="subtle"
               />
               <UBadge
                 v-if="job.renderMode === 'quick_mp4'"
-                label="快速 MP4"
+                :label="t('jobCard.quickMp4')"
                 color="neutral"
                 variant="subtle"
               />
               <UBadge v-if="orderBadgeLabel" :label="orderBadgeLabel" color="neutral" variant="subtle" />
               <UBadge
                 v-if="job.crashCount > 0"
-                :label="`崩溃 ${job.crashCount} 次`"
+                :label="t('jobCard.crashCount', { count: job.crashCount })"
                 color="warning"
                 variant="subtle"
               />
@@ -40,19 +40,19 @@
         <div class="job-footer">
           <div class="job-meta">
             <span class="job-meta-item">
-              <span class="job-meta-label">帧范围</span>
+              <span class="job-meta-label">{{ t('jobCard.frameRange') }}</span>
               <strong>{{ displayFrameRange }}</strong>
             </span>
             <template v-if="showCurrentExecutionRange">
               <span class="job-meta-divider" aria-hidden="true" />
               <span class="job-meta-item">
-                <span class="job-meta-label">当前执行</span>
+                <span class="job-meta-label">{{ t('jobCard.currentExecution') }}</span>
                 <strong>{{ currentExecutionRange }}</strong>
               </span>
             </template>
             <span class="job-meta-divider" aria-hidden="true" />
             <span class="job-meta-item">
-              <span class="job-meta-label">渲染时间</span>
+              <span class="job-meta-label">{{ t('jobCard.renderTime') }}</span>
               <strong>{{ renderTime }}</strong>
             </span>
             <span class="job-meta-divider" aria-hidden="true" />
@@ -63,8 +63,8 @@
           </div>
 
           <div class="job-actions" data-no-drag @dblclick.stop>
-            <UTooltip v-if="job.status === 'running' || job.status === 'pending'" text="停止当前任务或将其标记为取消" arrow :content="{ side: 'bottom', sideOffset: 8 }">
-              <UButton icon="i-lucide-x" label="取消" color="warning" variant="outline" size="sm" @click="$emit('cancel')" />
+            <UTooltip v-if="job.status === 'running' || job.status === 'pending'" :text="t('jobCard.actions.cancelTooltip')" arrow :content="{ side: 'bottom', sideOffset: 8 }">
+              <UButton icon="i-lucide-x" :label="t('common.cancel')" color="warning" variant="outline" size="sm" @click="$emit('cancel')" />
             </UTooltip>
             <UTooltip
               v-if="job.status === 'done' || job.status === 'failed' || job.status === 'cancelled' || job.status === 'interrupted'"
@@ -83,31 +83,31 @@
             </UTooltip>
             <UTooltip
               v-if="job.status === 'done' || job.status === 'failed' || job.status === 'cancelled' || job.status === 'interrupted'"
-              text="从队列中删除这个任务"
+              :text="t('jobCard.actions.deleteTooltip')"
               arrow
               :content="{ side: 'bottom', sideOffset: 8 }"
             >
               <UButton
                 icon="i-lucide-trash-2"
-                label="删除"
+                :label="t('common.delete')"
                 color="error"
                 variant="outline"
                 size="sm"
                 @click="$emit('remove')"
               />
             </UTooltip>
-            <UTooltip text="打开输出目录" arrow :content="{ side: 'bottom', sideOffset: 8 }">
+            <UTooltip :text="t('jobCard.actions.openOutputTooltip')" arrow :content="{ side: 'bottom', sideOffset: 8 }">
               <UButton
                 icon="i-lucide-folder-open"
-                label="输出目录"
+                :label="t('common.outputDirectory')"
                 color="neutral"
                 variant="outline"
                 size="sm"
                 @click="openOutput"
               />
             </UTooltip>
-            <UTooltip text="查看任务详情" arrow :content="{ side: 'bottom', sideOffset: 8 }">
-              <UButton :to="`/jobs/${job.id}`" icon="i-lucide-external-link" label="详情" color="neutral" variant="outline" size="sm" />
+            <UTooltip :text="t('jobCard.actions.detailsTooltip')" arrow :content="{ side: 'bottom', sideOffset: 8 }">
+              <UButton :to="`/jobs/${job.id}`" icon="i-lucide-external-link" :label="t('common.details')" color="neutral" variant="outline" size="sm" />
             </UTooltip>
           </div>
         </div>
@@ -151,7 +151,7 @@
         </div>
         <UBadge
           v-if="previewFrame && displayPreviewUrl"
-          :label="`第 ${previewFrame} 帧`"
+          :label="t('jobCard.preview.frameBadge', { frame: previewFrame })"
           color="neutral"
           variant="subtle"
           class="job-preview-badge"
@@ -186,8 +186,8 @@ import { convertFileSrc } from '@tauri-apps/api/core'
 import { computed } from 'vue'
 import { useRouter } from 'vue-router'
 import type { RenderJob } from '~/types'
-import { JOB_STATUS_COLOR, JOB_STATUS_LABEL } from '~/composables/useJobStatus'
-import { formatQueueOrderLabel, RENDER_QUEUE_ORDER_HIDDEN_STATUSES, resolveQueueOrder } from '~/composables/useQueueOrder'
+import { JOB_STATUS_COLOR, useJobStatusLabel } from '~/composables/useJobStatus'
+import { RENDER_QUEUE_ORDER_HIDDEN_STATUSES, resolveQueueOrder, useQueueOrderLabel } from '~/composables/useQueueOrder'
 import { formatDuration, formatShortTimestamp } from '~/utils/date-format'
 import { resolveOutputDirectory } from '~/utils/output-path'
 import { captureVideoPoster } from '~/utils/video-preview'
@@ -197,14 +197,16 @@ defineEmits(['cancel', 'remove', 'retry'])
 const router = useRouter()
 const jobsStore = useJobsStore()
 const { openPath, getLastRenderedFrame, updateJobPreviewDimensions, pathExists } = useTauri()
+const { t } = useI18n()
 
-const STATUS_LABEL = JOB_STATUS_LABEL
+const statusLabel = useJobStatusLabel()
+const queueOrderLabel = useQueueOrderLabel()
 const statusColor = computed(() => JOB_STATUS_COLOR[props.job.status] ?? 'neutral')
 
 const retryButtonLabel = computed(() => {
-  if (props.job.status === 'interrupted') return '继续'
-  if (props.job.status === 'failed') return '重试'
-  return '重新渲染'
+  if (props.job.status === 'interrupted') return t('jobCard.actions.continue')
+  if (props.job.status === 'failed') return t('jobCard.actions.retry')
+  return t('jobCard.actions.rerender')
 })
 
 const retryButtonColor = computed(() =>
@@ -212,18 +214,18 @@ const retryButtonColor = computed(() =>
 )
 
 const retryButtonTooltip = computed(() => {
-  if (props.job.status === 'interrupted') return '继续当前任务'
-  if (props.job.status === 'failed') return '重试这个任务'
-  return '重新渲染这个任务'
+  if (props.job.status === 'interrupted') return t('jobCard.actions.continueTooltip')
+  if (props.job.status === 'failed') return t('jobCard.actions.retryTooltip')
+  return t('jobCard.actions.rerenderTooltip')
 })
 const queueOrder = computed(() => {
   return resolveQueueOrder(jobsStore.jobs, props.job, RENDER_QUEUE_ORDER_HIDDEN_STATUSES)
 })
-const orderBadgeLabel = computed(() => formatQueueOrderLabel(queueOrder.value))
+const orderBadgeLabel = computed(() => queueOrderLabel(queueOrder.value))
 
 const renderTime = computed(() => {
   const job = props.job
-  if (!job.startedAt) return '未开始'
+  if (!job.startedAt) return t('jobCard.notStarted')
   return formatDuration((job.finishedAt ?? Date.now()) - job.startedAt)
 })
 const displayFrameRange = computed(() => `${props.job.originalFrameStart}–${props.job.originalFrameEnd}`)
@@ -234,33 +236,33 @@ const showCurrentExecutionRange = computed(() =>
 const finishedAtLabel = computed(() => {
   switch (props.job.status) {
     case 'done':
-      return '完成时间'
+      return t('jobCard.finishedAt.done')
     case 'cancelled':
-      return '取消时间'
+      return t('jobCard.finishedAt.cancelled')
     case 'interrupted':
-      return '中断时间'
+      return t('jobCard.finishedAt.interrupted')
     case 'failed':
-      return '失败时间'
+      return t('jobCard.finishedAt.failed')
     case 'running':
-      return '当前状态'
+      return t('jobCard.finishedAt.running')
     default:
-      return '结束时间'
+      return t('jobCard.finishedAt.default')
   }
 })
 const completedAt = computed(() => {
   if (!props.job.finishedAt) {
-    return props.job.status === 'running' ? '进行中' : '未完成'
+    return props.job.status === 'running' ? t('jobCard.running') : t('jobCard.unfinished')
   }
   return formatShortTimestamp(props.job.finishedAt)
 })
 const previewText = computed(() => {
   if (props.job.renderMode === 'quick_mp4') {
     return props.job.status === 'done'
-      ? '已生成最终帧预览'
-      : '等待任务完成后可预览最终帧'
+      ? t('jobCard.preview.generatedFinalFrame')
+      : t('jobCard.preview.waitingFinalFrame')
   }
-  if (props.job.outputFormat === 'OPEN_EXR') return 'EXR 不支持预览'
-  return props.job.status === 'running' ? '等待首帧输出' : '暂无已渲染帧'
+  if (props.job.outputFormat === 'OPEN_EXR') return t('jobCard.preview.exrUnsupported')
+  return props.job.status === 'running' ? t('jobCard.preview.waitingFirstFrame') : t('jobCard.preview.emptyRenderedFrame')
 })
 
 const previewUrl = ref<string | null>(null)

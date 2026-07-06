@@ -43,7 +43,7 @@
       <UButton
         type="button"
         icon="i-lucide-braces"
-        :label="showVariables ? '收起变量' : '插入变量'"
+        :label="showVariables ? t('pathTemplate.collapseVariables') : t('pathTemplate.insertVariable')"
         color="neutral"
         variant="ghost"
         size="xs"
@@ -119,6 +119,7 @@ const emit = defineEmits<{
 }>()
 
 const editorRef = ref<HTMLElement | null>(null)
+const { t, locale } = useI18n()
 const showVariables = ref(props.variablePanelMode === 'expanded')
 const dragOver = ref(false)
 const hasContent = ref(false)
@@ -141,29 +142,29 @@ function setSuggestionItemRef(element: Element | ComponentPublicInstance | null,
 }
 
 function tokenLabel(token: string) {
-  if (token === '{frame}' || token.startsWith('{frame:')) return '帧序号'
+  if (token === '{frame}' || token.startsWith('{frame:')) return t('pathTemplate.labels.frame')
 
   switch (token) {
     case '{year}':
-      return '年份'
+      return t('pathTemplate.labels.year')
     case '{month}':
-      return '月份'
+      return t('pathTemplate.labels.month')
     case '{day}':
-      return '日期'
+      return t('pathTemplate.labels.day')
     case '{hour}':
-      return '小时'
+      return t('pathTemplate.labels.hour')
     case '{date}':
-      return '完整日期'
+      return t('pathTemplate.labels.date')
     case '{user}':
-      return '用户名'
+      return t('pathTemplate.labels.user')
     case '{blendFileName}':
-      return '工程名'
+      return t('pathTemplate.labels.blendFileName')
     case '{folderName}':
-      return '文件夹名'
+      return t('pathTemplate.labels.folderName')
     case '{frameStart}':
-      return '起始帧'
+      return t('pathTemplate.labels.frameStart')
     case '{frameEnd}':
-      return '结束帧'
+      return t('pathTemplate.labels.frameEnd')
     default:
       return token
   }
@@ -179,7 +180,7 @@ function tokenMeta(token: string) {
           known: true,
           enabled: false,
           preview: null,
-          title: '{frame} 仅 Blender 序列帧输出可用',
+          title: t('pathTemplate.unavailable.frameBlenderOnly', { token }),
         }
       }
 
@@ -212,7 +213,7 @@ function tokenMeta(token: string) {
             known: true,
             enabled: false,
             preview: null,
-            title: '{blendFileName} 在当前上下文不可用',
+            title: t('pathTemplate.unavailable.blendFileNameContext', { token }),
           }
         }
         if (!props.blendFileName) {
@@ -220,7 +221,7 @@ function tokenMeta(token: string) {
             known: true,
             enabled: true,
             preview: null,
-            title: '选择 Blend 文件后才可以预览 {blendFileName}',
+            title: t('pathTemplate.unavailable.blendFileNamePreview', { token }),
           }
         }
         return {
@@ -235,7 +236,7 @@ function tokenMeta(token: string) {
             known: true,
             enabled: false,
             preview: null,
-            title: '{folderName} 仅独立转码任务可用',
+            title: t('pathTemplate.unavailable.folderNameContext', { token }),
           }
         }
         if (!props.folderName) {
@@ -243,7 +244,7 @@ function tokenMeta(token: string) {
             known: true,
             enabled: true,
             preview: null,
-            title: '选择序列帧目录后才可以预览 {folderName}',
+            title: t('pathTemplate.unavailable.folderNamePreview', { token }),
           }
         }
         return {
@@ -257,7 +258,7 @@ function tokenMeta(token: string) {
           known: false,
           enabled: false,
           preview: null,
-          title: `未知变量 ${token}`,
+          title: t('pathTemplate.unavailable.unknown', { token }),
         }
     }
   })()
@@ -792,7 +793,7 @@ function applySuggestion(token?: string) {
 const variableGroups = computed(() => {
   const groups: Array<{ label: string, items: VariableItem[] }> = [
     {
-      label: '项目',
+      label: t('pathTemplate.groups.project'),
       items: ['{blendFileName}', '{folderName}'].map(token => {
         const meta = tokenMeta(token)
         return {
@@ -805,7 +806,7 @@ const variableGroups = computed(() => {
       }),
     },
     {
-      label: '帧',
+      label: t('pathTemplate.groups.frame'),
       items: ['{frame}', '{frameStart}', '{frameEnd}'].map(token => {
         const meta = tokenMeta(token)
         return {
@@ -818,7 +819,7 @@ const variableGroups = computed(() => {
       }),
     },
     {
-      label: '时间',
+      label: t('pathTemplate.groups.time'),
       items: ['{date}', '{year}', '{month}', '{day}', '{hour}'].map(token => ({
         token,
         label: token,
@@ -828,7 +829,7 @@ const variableGroups = computed(() => {
       })),
     },
     {
-      label: '系统',
+      label: t('pathTemplate.groups.system'),
       items: [
         {
           token: '{user}',
@@ -892,6 +893,11 @@ watch(
     nextTick(refreshSuggestions)
   },
 )
+
+watch(locale, () => {
+  renderEditor(props.modelValue ?? '', lastCaretOffset.value)
+  nextTick(refreshSuggestions)
+})
 
 onMounted(() => {
   renderEditor(props.modelValue ?? '', null)

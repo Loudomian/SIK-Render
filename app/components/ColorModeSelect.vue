@@ -21,13 +21,15 @@ const emit = defineEmits<{
   'update:modelValue': [value: ThemeMode]
 }>()
 
-const items: Array<{ label: string, value: ThemeMode, icon: string }> = [
-  { label: '深色', value: 'dark', icon: 'i-lucide-moon-star' },
-  { label: '浅色', value: 'light', icon: 'i-lucide-sun-medium' },
-  { label: '系统', value: 'system', icon: 'i-lucide-computer' },
-]
+const { t } = useI18n()
+
+const items = computed<Array<{ label: string, value: ThemeMode, icon: string }>>(() => [
+  { label: t('theme.dark'), value: 'dark', icon: 'i-lucide-moon-star' },
+  { label: t('theme.light'), value: 'light', icon: 'i-lucide-sun-medium' },
+  { label: t('theme.system'), value: 'system', icon: 'i-lucide-computer' },
+])
 
 const selectedItem = computed(() => {
-  return items.find(item => item.value === props.modelValue) ?? items[0]!
+  return items.value.find(item => item.value === props.modelValue) ?? items.value[0]!
 })
 </script>

@@ -2,7 +2,7 @@
   <UModal
     :open="open"
     :close="false"
-    title="输出路径模板"
+    :title="t('settingsModals.outputTemplates.title')"
     :ui="{ content: 'job-modal-content settings-modal-content output-template-modal' }"
     @update:open="handleOpenChange"
   >
@@ -10,10 +10,10 @@
       <div class="modal-stack">
         <section class="surface-panel settings-field-panel settings-field-panel-stack output-template-modal-copy">
           <div class="settings-field-copy">
-            <p class="settings-field-title">统一管理默认模板</p>
-            <p class="hint-text">变量只负责插入模板。输入框下方只预览当前模板最终会生成的路径和帧名。</p>
-            <p class="hint-text">示例工程：{{ sampleBlendFile }}</p>
-            <p class="hint-text">示例帧范围：{{ sampleFrameStart }}-{{ sampleFrameEnd }}</p>
+            <p class="settings-field-title">{{ t('settingsModals.outputTemplates.introTitle') }}</p>
+            <p class="hint-text">{{ t('settingsModals.outputTemplates.introNote') }}</p>
+            <p class="hint-text">{{ t('settingsModals.outputTemplates.sampleProject', { path: sampleBlendFile }) }}</p>
+            <p class="hint-text">{{ t('settingsModals.outputTemplates.sampleFrameRange', { start: sampleFrameStart, end: sampleFrameEnd }) }}</p>
           </div>
         </section>
 
@@ -43,15 +43,15 @@
             />
 
             <div class="template-preview-panel">
-              <p class="template-subtitle">预览结果</p>
+              <p class="template-subtitle">{{ t('settingsModals.outputTemplates.previewTitle') }}</p>
               <div class="template-preview-grid">
                 <section class="surface-panel template-preview-card">
-                  <p class="template-preview-label">路径结果</p>
-                  <p class="template-preview-value">{{ previewDetails[section.key].resolvedPath || '当前模板还无法解析' }}</p>
+                  <p class="template-preview-label">{{ t('settingsModals.outputTemplates.pathResult') }}</p>
+                  <p class="template-preview-value">{{ previewDetails[section.key].resolvedPath || t('settingsModals.outputTemplates.unresolved') }}</p>
                 </section>
 
                 <section v-if="section.kind === 'blender'" class="surface-panel template-preview-card">
-                  <p class="template-preview-label">首尾帧名</p>
+                  <p class="template-preview-label">{{ t('settingsModals.outputTemplates.frameNameRange') }}</p>
                   <p class="template-preview-value">{{ previewDetails[section.key].frameNameRange || '—' }}</p>
                 </section>
               </div>
@@ -72,7 +72,7 @@
           <div class="settings-modal-actions-start">
             <UButton
               icon="i-lucide-rotate-ccw"
-              label="恢复默认"
+              :label="t('common.resetDefaults')"
               color="neutral"
               variant="ghost"
               :disabled="saving"
@@ -82,7 +82,7 @@
           <div class="settings-modal-actions-end">
             <UButton
               icon="i-lucide-x"
-              label="取消"
+              :label="t('common.cancel')"
               color="neutral"
               variant="outline"
               :disabled="saving"
@@ -90,7 +90,7 @@
             />
             <UButton
               icon="i-lucide-save"
-              label="保存"
+              :label="t('common.save')"
               color="primary"
               variant="solid"
               :loading="saving"
@@ -127,6 +127,7 @@ const emit = defineEmits<{
 
 const settingsStore = useSettingsStore()
 const { previewOutputPathTemplate } = useTauri()
+const { t } = useI18n()
 
 const sampleFrameStart = 1
 const sampleFrameEnd = 250
@@ -137,8 +138,8 @@ const sampleFolderName = '测试项目'
 
 const defaultTemplateSettings: Record<TemplateKey, string> = {
   renderOutputPathTemplate: './{blendFileName}_{frameStart}-{frameEnd}/{blendFileName}_{frame}',
-  blenderTranscodeOutputPathTemplate: './转码/{blendFileName}_{frameStart}-{frameEnd}.mp4',
-  standaloneTranscodeOutputPathTemplate: '../转码/{folderName}_{frameStart}-{frameEnd}.mp4',
+  blenderTranscodeOutputPathTemplate: './transcode/{blendFileName}_{frameStart}-{frameEnd}.mp4',
+  standaloneTranscodeOutputPathTemplate: '../transcode/{folderName}_{frameStart}-{frameEnd}.mp4',
 }
 
 const draft = reactive<Record<TemplateKey, string>>({
@@ -160,8 +161,8 @@ let previewTimer: ReturnType<typeof setTimeout> | null = null
 const sections = computed(() => [
   {
     key: 'renderOutputPathTemplate' as const,
-    title: 'Blender 序列帧路径模板',
-    description: '新建渲染任务时默认套用，适合序列帧目录和文件名规则。',
+    title: t('settingsModals.outputTemplates.renderTitle'),
+    description: t('settingsModals.outputTemplates.renderDescription'),
     kind: 'blender' as const,
     placeholder: './{blendFileName}_{frameStart}-{frameEnd}/{blendFileName}_{frame}',
     sampleBlendFileName,
@@ -169,19 +170,19 @@ const sections = computed(() => [
   },
   {
     key: 'blenderTranscodeOutputPathTemplate' as const,
-    title: 'Blender 转码路径模板',
-    description: '用于渲染完成后自动转码，以及从 Blender 任务页提交转码时的默认输出。',
+    title: t('settingsModals.outputTemplates.blenderTranscodeTitle'),
+    description: t('settingsModals.outputTemplates.blenderTranscodeDescription'),
     kind: 'blender-ffmpeg' as const,
-    placeholder: './转码/{blendFileName}_{frameStart}-{frameEnd}.mp4',
+    placeholder: './transcode/{blendFileName}_{frameStart}-{frameEnd}.mp4',
     sampleBlendFileName,
     sampleFolderName: null,
   },
   {
     key: 'standaloneTranscodeOutputPathTemplate' as const,
-    title: '独立转码路径模板',
-    description: '用于从序列帧目录创建 FFmpeg Job 时的默认输出。',
+    title: t('settingsModals.outputTemplates.standaloneTranscodeTitle'),
+    description: t('settingsModals.outputTemplates.standaloneTranscodeDescription'),
     kind: 'standalone-ffmpeg' as const,
-    placeholder: '../转码/{folderName}_{frameStart}-{frameEnd}.mp4',
+    placeholder: '../transcode/{folderName}_{frameStart}-{frameEnd}.mp4',
     sampleBlendFileName: null,
     sampleFolderName,
   },

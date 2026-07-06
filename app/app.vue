@@ -74,7 +74,7 @@
       <UModal
         :open="updateModalOpen"
         :close="false"
-        title="发现新版本"
+        :title="t('updater.newVersion')"
         :ui="{ content: 'job-modal-content settings-modal-content' }"
         @update:open="handleUpdateModalOpenChange"
       >
@@ -86,21 +86,21 @@
                   <p class="settings-field-title">SIK Render v{{ updateVersion }}</p>
                   <UButton
                     icon="i-lucide-external-link"
-                    label="前往发布页"
+                    :label="t('updater.releasePage')"
                     color="neutral"
                     variant="ghost"
                     size="xs"
                     @click="openUpdateReleasePage"
                   />
                 </div>
-                <p class="hint-text">当前版本：v{{ updateCurrentVersion }}</p>
-                <p v-if="updateDate" class="hint-text">发布时间：{{ updateDate }}</p>
+                <p class="hint-text">{{ t('updater.currentVersion', { version: updateCurrentVersion }) }}</p>
+                <p v-if="updateDate" class="hint-text">{{ t('updater.releaseDate', { date: updateDate }) }}</p>
               </div>
             </section>
 
             <section class="surface-panel settings-field-panel">
               <div class="settings-field-copy">
-                <p class="settings-field-title">更新说明</p>
+                <p class="settings-field-title">{{ t('updater.notes') }}</p>
                 <div class="settings-update-notes">
                   <template v-if="updateNoteBlocks.length">
                     <template v-for="(block, index) in updateNoteBlocks" :key="index">
@@ -121,7 +121,7 @@
                       </div>
                     </template>
                   </template>
-                  <p v-else>此版本没有提供更新说明。</p>
+                  <p v-else>{{ t('updater.emptyNotes') }}</p>
                 </div>
               </div>
             </section>
@@ -130,7 +130,7 @@
               v-if="updateError"
               color="error"
               variant="subtle"
-              title="更新失败"
+              :title="t('updater.failed')"
               :description="updateError"
             />
 
@@ -139,7 +139,7 @@
               <div class="settings-modal-actions-end">
                 <UButton
                   icon="i-lucide-clock"
-                  label="稍后"
+                  :label="t('updater.later')"
                   color="neutral"
                   variant="outline"
                   :disabled="installingUpdate"
@@ -147,7 +147,7 @@
                 />
                 <UButton
                   icon="i-lucide-download"
-                  label="下载并安装"
+                  :label="t('updater.install')"
                   color="primary"
                   variant="solid"
                   :loading="installingUpdate"
@@ -178,27 +178,28 @@ const shadowRecoveryToast = useShadowRecoveryToast()
 const updaterState = useUpdaterState()
 const toast = useToast()
 const runtimeConfig = useRuntimeConfig()
+const { t, setLocale } = useI18n()
 const CONTEXT_MENU_ALLOW_SELECTOR = '[data-context-menu]'
 
 const navItems = computed(() => [
   {
-    label: '渲染队列',
+    label: t('nav.renderQueue'),
     icon: 'i-lucide-layers',
     to: '/',
     badge: jobsStore.runningJobs.length || undefined,
   },
   {
-    label: '转码队列',
+    label: t('nav.transcodeQueue'),
     icon: 'i-lucide-film',
     to: '/transcode',
   },
   {
-    label: '节点',
+    label: t('nav.nodes'),
     icon: 'i-lucide-share-2',
     to: '/nodes',
   },
   {
-    label: '设置',
+    label: t('nav.settings'),
     icon: 'i-lucide-sliders',
     to: '/settings',
   },
@@ -217,13 +218,13 @@ function resolveTheme(theme: 'dark' | 'light' | 'system') {
 }
 
 const resolvedTheme = computed(() => resolveTheme(settingsStore.settings.theme))
-const brandToggleTitle = computed(() => resolvedTheme.value === 'dark' ? '切换到浅色模式' : '切换到深色模式')
+const brandToggleTitle = computed(() => resolvedTheme.value === 'dark' ? t('updater.switchLight') : t('updater.switchDark'))
 const updaterAvailable = computed(() => updaterState.available.value)
 const updateModalOpen = updaterState.modalOpen
 const installingUpdate = ref(false)
 const updateError = ref('')
-const updateVersion = computed(() => updaterState.version.value || '未知版本')
-const updateCurrentVersion = computed(() => updaterState.latestUpdate.value?.currentVersion || '未知版本')
+const updateVersion = computed(() => updaterState.version.value || t('updater.unknownVersion'))
+const updateCurrentVersion = computed(() => updaterState.latestUpdate.value?.currentVersion || t('updater.unknownVersion'))
 const updateDate = computed(() => formatUpdateDate(updaterState.latestUpdate.value?.date))
 const updateNoteBlocks = computed(() => parseUpdateNotes(updaterState.latestUpdate.value?.body))
 const updateReleaseUrl = computed(() => {
@@ -403,7 +404,7 @@ async function openUpdateReleasePage() {
     await openUrl(updateReleaseUrl.value)
   } catch (error) {
     toast.add({
-      title: '无法打开发布页',
+      title: t('updater.openReleaseFailed'),
       description: error instanceof Error ? error.message : String(error),
       color: 'error',
     })
@@ -415,7 +416,7 @@ async function installAvailableUpdate() {
 
   const update = updaterState.latestUpdate.value
   if (!update) {
-    updateError.value = '更新信息已失效，请稍后重新检查。'
+    updateError.value = t('updater.stale')
     return
   }
 
@@ -425,8 +426,8 @@ async function installAvailableUpdate() {
   try {
     await update.downloadAndInstall()
     toast.add({
-      title: '更新安装完成',
-      description: '应用将重启以完成更新。',
+      title: t('updater.installedTitle'),
+      description: t('updater.installedDescription'),
       color: 'success',
     })
     await relaunch()
@@ -445,6 +446,14 @@ if (import.meta.client) {
     () => settingsStore.settings.theme,
     (theme) => {
       applyThemeClass(theme)
+    },
+    { immediate: true },
+  )
+
+  watch(
+    () => settingsStore.settings.locale,
+    (locale) => {
+      void setLocale(locale)
     },
     { immediate: true },
   )

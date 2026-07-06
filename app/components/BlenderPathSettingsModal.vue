@@ -2,7 +2,7 @@
   <UModal
     :open="open"
     :close="false"
-    title="Blender 路径管理"
+    :title="t('settingsModals.blenderPaths.title')"
     :ui="{ content: 'job-modal-content settings-modal-content' }"
     @update:open="handleOpenChange"
   >
@@ -10,13 +10,13 @@
       <div class="modal-stack">
         <div class="settings-card-header settings-compact-header">
           <div class="settings-field-copy">
-            <p class="settings-field-title">已安装版本</p>
-            <p class="hint-text">管理 Blender 可执行文件、默认版本和备用路径。</p>
+            <p class="settings-field-title">{{ t('settingsModals.blenderPaths.installedTitle') }}</p>
+            <p class="hint-text">{{ t('settingsModals.blenderPaths.installedNote') }}</p>
           </div>
           <div class="settings-card-actions">
             <UButton
               icon="i-lucide-plus"
-              label="添加…"
+              :label="t('settingsModals.blenderPaths.add')"
               color="neutral"
               variant="outline"
               size="sm"
@@ -40,23 +40,23 @@
                 color="success"
                 :variant="settingsStore.settings.defaultBlender === b.executable ? 'subtle' : 'outline'"
                 size="xs"
-                :label="settingsStore.settings.defaultBlender === b.executable ? '已设为默认' : '设为默认'"
+                :label="settingsStore.settings.defaultBlender === b.executable ? t('settingsModals.blenderPaths.default') : t('settingsModals.blenderPaths.setDefault')"
                 @click="setDefaultBlender(b.executable)"
               />
-              <UTooltip text="移除此版本" :content="{ side: 'left', sideOffset: 6 }">
+              <UTooltip :text="t('settingsModals.blenderPaths.removeTooltip')" :content="{ side: 'left', sideOffset: 6 }">
                 <UButton icon="i-lucide-x" color="error" variant="outline" size="xs" square @click="removeBlenderVersion(b.executable)" />
               </UTooltip>
             </div>
           </li>
         </ul>
-        <p v-else class="hint-text">还没有 Blender 路径，点击右上角“添加”手动指定。</p>
+        <p v-else class="hint-text">{{ t('settingsModals.blenderPaths.empty') }}</p>
 
         <div class="modal-actions settings-modal-actions">
           <div class="settings-modal-actions-start" />
           <div class="settings-modal-actions-end">
             <UButton
               icon="i-lucide-check"
-              label="完成"
+              :label="t('common.done')"
               color="primary"
               variant="solid"
               @click="emit('update:open', false)"
@@ -78,6 +78,7 @@ const emit = defineEmits<{
 }>()
 
 const settingsStore = useSettingsStore()
+const { t } = useI18n()
 const errorMessage = ref('')
 const adding = ref(false)
 

@@ -19,6 +19,7 @@ export function useShadowRecoveryToast() {
   const toast = useToast()
   const jobsStore = useJobsStore()
   const { applyShadowResolutionRecovery } = useTauri()
+  const { t } = useI18n()
 
   function showForJob(job: RenderJob) {
     if (job.renderMode === 'quick_mp4') return
@@ -27,14 +28,15 @@ export function useShadowRecoveryToast() {
     if (activeToastIds.has(toastId)) return
 
     const targetScale = nextScale(job.shadowResolutionScaleOverride)
+    const targetPercent = targetScale == null ? null : Math.round(targetScale * 100)
     const description = targetScale == null
-      ? '阴影分辨率已经降到自动档位下限。请手动减少灯光阴影分辨率或拆分场景。'
-      : `检测到阴影缓冲满了。可将本任务阴影分辨率降到 ${Math.round(targetScale * 100)}%，并从当前镜头起点重渲。`
+      ? t('shadowRecovery.atLimit')
+      : t('shadowRecovery.detected', { percent: targetPercent })
 
     activeToastIds.add(toastId)
     toast.add({
       id: toastId,
-      title: '阴影缓冲已满',
+      title: t('shadowRecovery.title'),
       description,
       icon: 'i-lucide-triangle-alert',
       color: 'warning',
@@ -44,12 +46,12 @@ export function useShadowRecoveryToast() {
       actions: targetScale == null
         ? []
         : [{
-            label: `降到 ${Math.round(targetScale * 100)}% 并重渲镜头`,
+            label: t('shadowRecovery.action', { percent: targetPercent }),
             icon: 'i-lucide-rotate-ccw',
             variant: 'solid',
             onClick: async () => {
               toast.update(toastId, {
-                description: `正在应用 ${Math.round(targetScale * 100)}% 阴影分辨率，并准备从当前镜头起点重渲。`,
+                description: t('shadowRecovery.applying', { percent: targetPercent }),
                 actions: [],
               })
 
@@ -58,8 +60,11 @@ export function useShadowRecoveryToast() {
                 job.shadowResolutionScaleOverride = response.scale
                 job.frameStart = response.frameStart
                 toast.update(toastId, {
-                  title: '已应用阴影分辨率',
-                  description: `已降到 ${Math.round(response.scale * 100)}%，将从第 ${response.frameStart} 帧重渲当前镜头。`,
+                  title: t('shadowRecovery.appliedTitle'),
+                  description: t('shadowRecovery.appliedDescription', {
+                    percent: Math.round(response.scale * 100),
+                    frame: response.frameStart,
+                  }),
                   color: 'success',
                   icon: 'i-lucide-check',
                   duration: 6000,
@@ -68,7 +73,7 @@ export function useShadowRecoveryToast() {
                 activeToastIds.delete(toastId)
               } catch (error) {
                 toast.update(toastId, {
-                  title: '降低阴影分辨率失败',
+                  title: t('shadowRecovery.failedTitle'),
                   description: error instanceof Error ? error.message : String(error),
                   color: 'error',
                   icon: 'i-lucide-circle-alert',

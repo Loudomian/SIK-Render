@@ -2,7 +2,7 @@
   <UModal
     :open="open"
     :close="false"
-    title="节点网络参数"
+    :title="t('settingsModals.network.title')"
     :ui="{ content: 'job-modal-content settings-modal-content' }"
     @update:open="handleOpenChange"
   >
@@ -11,13 +11,13 @@
         <div class="settings-form-stack">
           <section class="surface-panel settings-field-panel">
             <div class="settings-field-copy">
-              <p class="settings-field-title">设备备注</p>
-              <p class="hint-text">显示在渲染节点卡片上，用于区分机器用途或位置，最多 80 个字符。</p>
+              <p class="settings-field-title">{{ t('settingsModals.network.nodeNoteTitle') }}</p>
+              <p class="hint-text">{{ t('settingsModals.network.nodeNoteNote') }}</p>
             </div>
             <UFormField>
               <UInput
                 v-model="draft.nodeNote"
-                placeholder="例如：主力渲染机 / 二楼工作站"
+                :placeholder="t('settingsModals.network.nodeNotePlaceholder')"
                 :maxlength="80"
                 :disabled="saving"
                 class="settings-network-input"
@@ -27,8 +27,8 @@
 
           <section class="surface-panel settings-field-panel">
             <div class="settings-field-copy">
-              <p class="settings-field-title">节点端口</p>
-              <p class="hint-text">HTTP 与 WebSocket 监听端口，默认 47878。保存后重启应用生效。</p>
+              <p class="settings-field-title">{{ t('settingsModals.network.nodePortTitle') }}</p>
+              <p class="hint-text">{{ t('settingsModals.network.nodePortNote') }}</p>
             </div>
             <UFormField>
               <UInputNumber
@@ -47,13 +47,13 @@
 
           <section class="surface-panel settings-field-panel">
             <div class="settings-field-copy">
-              <p class="settings-field-title">网卡网段</p>
-              <p class="hint-text">用于多网卡机器选择对外公布的 IPv4，可填写网关或同网段参考地址。</p>
+              <p class="settings-field-title">{{ t('settingsModals.network.interfaceTitle') }}</p>
+              <p class="hint-text">{{ t('settingsModals.network.interfaceNote') }}</p>
             </div>
             <UFormField>
               <UInput
                 v-model="draft.nodeInterfaceAddress"
-                placeholder="例如：192.168.1.1"
+                :placeholder="t('settingsModals.network.interfacePlaceholder')"
                 :disabled="saving"
                 class="settings-network-input"
               />
@@ -67,7 +67,7 @@
           <div class="settings-modal-actions-start">
             <UButton
               icon="i-lucide-rotate-ccw"
-              label="恢复默认"
+              :label="t('common.resetDefaults')"
               color="neutral"
               variant="ghost"
               :disabled="saving"
@@ -77,7 +77,7 @@
           <div class="settings-modal-actions-end">
             <UButton
               icon="i-lucide-x"
-              label="取消"
+              :label="t('common.cancel')"
               color="neutral"
               variant="outline"
               :disabled="saving"
@@ -85,7 +85,7 @@
             />
             <UButton
               icon="i-lucide-save"
-              label="保存"
+              :label="t('common.save')"
               color="primary"
               variant="solid"
               :loading="saving"
@@ -108,6 +108,7 @@ const emit = defineEmits<{
 }>()
 
 const settingsStore = useSettingsStore()
+const { t } = useI18n()
 const defaults = {
   nodePort: 47878,
   nodeInterfaceAddress: '192.168.1.1',

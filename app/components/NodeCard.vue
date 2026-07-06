@@ -13,33 +13,33 @@
         <div class="job-card-heading">
           <div class="job-title-stack">
             <div class="job-head-badges">
-              <UBadge v-if="isLocal" label="本机" color="info" variant="subtle" />
+              <UBadge v-if="isLocal" :label="t('nodeCard.local')" color="info" variant="subtle" />
               <UBadge
                 v-else
-                :label="connected ? '已连接' : '断开'"
+                :label="connected ? t('nodeCard.connected') : t('nodeCard.disconnected')"
                 :color="connected ? 'success' : 'neutral'"
                 variant="subtle"
               />
               <UBadge
-                :label="queuePaused ? '队列暂停' : '队列运行中'"
+                :label="queuePaused ? t('nodeCard.queuePaused') : t('nodeCard.queueRunning')"
                 :color="queuePaused ? 'warning' : 'success'"
                 variant="subtle"
               />
               <UBadge
                 v-if="activeJob?.renderMode === 'quick_mp4'"
-                label="快速 MP4"
+                :label="t('jobCard.quickMp4')"
                 color="neutral"
                 variant="subtle"
               />
               <UBadge
                 v-if="activeJob && activeJob.crashCount > 0"
-                :label="`崩溃 ${activeJob.crashCount} 次`"
+                :label="t('jobCard.crashCount', { count: activeJob.crashCount })"
                 color="warning"
                 variant="subtle"
               />
               <UBadge
                 v-if="activeJob?.shadowResolutionScaleOverride != null"
-                :label="`阴影 ${Math.round(activeJob.shadowResolutionScaleOverride * 100)}%`"
+                :label="t('nodeCard.shadowScale', { percent: Math.round(activeJob.shadowResolutionScaleOverride * 100) })"
                 color="warning"
                 variant="subtle"
               />
@@ -53,44 +53,44 @@
         <div class="job-footer node-footer">
           <div class="job-meta">
             <span class="job-meta-item">
-              <span class="job-meta-label">运行中</span>
+              <span class="job-meta-label">{{ t('nodeCard.running') }}</span>
               <strong>{{ runningJobs.length }}</strong>
             </span>
             <span class="job-meta-divider" aria-hidden="true" />
             <span class="job-meta-item">
-              <span class="job-meta-label">待渲染</span>
+              <span class="job-meta-label">{{ t('nodeCard.pending') }}</span>
               <strong>{{ pendingCount }}</strong>
             </span>
             <span class="job-meta-divider" aria-hidden="true" />
             <span class="job-meta-item">
-              <span class="job-meta-label">已完成</span>
+              <span class="job-meta-label">{{ t('nodeCard.done') }}</span>
               <strong>{{ doneCount }}</strong>
             </span>
             <span class="job-meta-divider" aria-hidden="true" />
             <span class="job-meta-item">
-              <span class="job-meta-label">{{ activeJob ? '当前任务' : '最近任务' }}</span>
+              <span class="job-meta-label">{{ activeJob ? t('nodeCard.currentJob') : t('nodeCard.latestJob') }}</span>
               <strong>{{ activeJobLabel }}</strong>
             </span>
             <template v-if="detailJob">
               <span class="job-meta-divider" aria-hidden="true" />
               <span class="job-meta-item">
-                <span class="job-meta-label">{{ activeJob ? '当前执行' : '执行范围' }}</span>
+                <span class="job-meta-label">{{ activeJob ? t('jobCard.currentExecution') : t('nodeCard.executionRange') }}</span>
                 <strong>{{ executionRangeLabel }}</strong>
               </span>
             </template>
           </div>
           <div v-if="activeJobDetailPath || showForgetAction" class="job-actions" data-no-drag @dblclick.stop>
-            <UTooltip v-if="activeJobDetailPath" text="查看节点任务详情" arrow :content="{ side: 'bottom', sideOffset: 8 }">
+            <UTooltip v-if="activeJobDetailPath" :text="t('nodeCard.detailsTooltip')" arrow :content="{ side: 'bottom', sideOffset: 8 }">
               <UButton
                 icon="i-lucide-external-link"
-                :label="activeJob ? '当前详情' : '最近任务'"
+                :label="activeJob ? t('nodeCard.currentDetails') : t('nodeCard.latestJob')"
                 color="neutral"
                 variant="outline"
                 size="sm"
                 @click="goToActiveJobDetails"
               />
             </UTooltip>
-            <UTooltip v-if="showForgetAction" text="忘记离线节点" arrow :content="{ side: 'bottom', sideOffset: 8 }">
+            <UTooltip v-if="showForgetAction" :text="t('nodeCard.forgetTooltip')" arrow :content="{ side: 'bottom', sideOffset: 8 }">
               <UButton
                 icon="i-lucide-trash-2"
                 color="error"
@@ -168,6 +168,7 @@ const props = withDefaults(defineProps<{
 })
 const router = useRouter()
 const nodesStore = useNodesStore()
+const { t } = useI18n()
 
 const runningJobs = computed(() => props.jobs.filter(job => job.status === 'running'))
 const activeJob = computed(() => runningJobs.value[0] ?? null)
@@ -189,11 +190,11 @@ const totalFrames = computed(() => {
   const job = activeJob.value
   return job?.totalFrames ?? (job ? job.frameEnd - job.frameStart + 1 : 0)
 })
-const activeJobLabel = computed(() => detailJob.value?.name ?? '空闲')
+const activeJobLabel = computed(() => detailJob.value?.name ?? t('nodeCard.idle'))
 const nodeAddressLabel = computed(() => {
   const base = `${props.node.ipAddress}:${props.node.port} · v${props.node.version}`
   if (props.connected || !props.lastSeenAt) return base
-  return `${base} · 上次在线 ${formatShortTimestamp(props.lastSeenAt)}`
+  return `${base} · ${t('nodeCard.lastSeen', { time: formatShortTimestamp(props.lastSeenAt) })}`
 })
 const activeJobDetailPath = computed(() => {
   const job = detailJob.value
@@ -204,7 +205,7 @@ const activeJobDetailPath = computed(() => {
 })
 const executionRangeLabel = computed(() => {
   const job = detailJob.value
-  return job ? `${job.frameStart}-${job.frameEnd}` : '无'
+  return job ? `${job.frameStart}-${job.frameEnd}` : t('common.none')
 })
 
 function openActiveJobDetails(event?: Event) {
@@ -260,16 +261,18 @@ let previewLoadToken = 0
 let previewRevealTimer = 0
 const previewText = computed(() => {
   const job = previewJob.value
-  if (!job) return '当前没有渲染预览'
-  if (job.renderMode === 'quick_mp4' && job.status !== 'done') return '等待任务完成后可预览最终帧'
-  if (job.outputFormat === 'OPEN_EXR' || job.outputFormat === 'EXR') return 'EXR 不支持预览'
-  if (job.renderMode === 'quick_mp4') return previewLoading.value ? '生成最终帧预览中' : '等待最终帧预览'
-  if (job.status === 'running') return previewLoading.value ? '加载渲染预览' : '等待首帧输出'
-  return previewLoading.value ? '加载最近预览' : '暂无预览'
+  if (!job) return t('nodeCard.preview.empty')
+  if (job.renderMode === 'quick_mp4' && job.status !== 'done') return t('nodeCard.preview.waitingFinalFrame')
+  if (job.outputFormat === 'OPEN_EXR' || job.outputFormat === 'EXR') return t('nodeCard.preview.exrUnsupported')
+  if (job.renderMode === 'quick_mp4') return previewLoading.value ? t('nodeCard.preview.generatingFinalFrame') : t('nodeCard.preview.waitingFinalPreview')
+  if (job.status === 'running') return previewLoading.value ? t('nodeCard.preview.loadingRenderPreview') : t('nodeCard.preview.waitingFirstFrame')
+  return previewLoading.value ? t('nodeCard.preview.loadingLatestPreview') : t('nodeCard.preview.emptyPreview')
 })
 const previewBadge = computed(() => {
-  if (!previewJob.value) return '预览'
-  return absoluteCurrentFrame.value ? `第 ${absoluteCurrentFrame.value} 帧` : '预览'
+  if (!previewJob.value) return t('nodeCard.preview.preview')
+  return absoluteCurrentFrame.value
+    ? t('nodeCard.preview.frameBadge', { frame: absoluteCurrentFrame.value })
+    : t('nodeCard.preview.preview')
 })
 const showPreviewBadge = computed(() => !!previewJob.value && previewJob.value.renderMode !== 'quick_mp4')
 const { cardInfoEl, cardInfoHeight, syncHeightAfterTick } = useCardInfoHeight()

@@ -22,6 +22,7 @@ export const useNodesStore = defineStore('nodes', () => {
   const unlisteners: Array<() => void> = []
   const { forgetPeer, getNodeInfo, getNodeJobEvents, getPeers } = useTauri()
   const toast = useToast()
+  const { t } = useI18n()
 
   async function init() {
     localNode.value = await getNodeInfo()
@@ -202,7 +203,7 @@ export const useNodesStore = defineStore('nodes', () => {
       await forgetPeer(nodeId)
     } catch (error) {
       toast.add({
-        title: '忘记节点失败',
+        title: t('nodeToasts.forgetFailed'),
         description: errorMessage(error),
         color: 'error',
         icon: 'i-lucide-circle-alert',

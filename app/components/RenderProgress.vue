@@ -8,14 +8,14 @@
       class="progress-bar"
     />
     <div class="progress-meta">
-      <span v-if="isWarmingUp" class="progress-label">Blender 预热中</span>
+      <span v-if="isWarmingUp" class="progress-label">{{ t('renderProgress.warmingUp') }}</span>
       <template v-else>
-        <span class="progress-label">第 {{ frame }} / {{ totalFrames }} 帧（{{ percent }}%）</span>
+        <span class="progress-label">{{ t('renderProgress.frameProgress', { frame, total: totalFrames, percent }) }}</span>
         <span class="progress-time">
-          单帧 {{ timeElapsed != null && timeElapsed > 0 ? fmtSecs(timeElapsed) : '计算中' }}
+          {{ t('renderProgress.singleFrame', { time: timeElapsed != null && timeElapsed > 0 ? fmtSecs(timeElapsed) : t('renderProgress.calculating') }) }}
         </span>
         <span class="progress-remaining">
-          预计 {{ displayRemainingSecs != null && displayRemainingSecs > 0 ? fmtSecs(displayRemainingSecs) : '计算中' }}
+          {{ t('renderProgress.remaining', { time: displayRemainingSecs != null && displayRemainingSecs > 0 ? fmtSecs(displayRemainingSecs) : t('renderProgress.calculating') }) }}
         </span>
       </template>
     </div>
@@ -30,6 +30,8 @@ const props = defineProps<{
   timeElapsed?: number
   remainingSecs?: number | null
 }>()
+
+const { t } = useI18n()
 
 const percent = computed(() =>
   props.totalFrames > 0 ? Math.round((props.frame / props.totalFrames) * 100) : 0,

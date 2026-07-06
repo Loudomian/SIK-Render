@@ -2,7 +2,7 @@
   <UModal
     :open="open"
     :close="false"
-    title="FFmpeg 转码参数"
+    :title="t('settingsModals.ffmpegTranscode.title')"
     :ui="{ content: 'job-modal-content settings-modal-content' }"
     @update:open="handleOpenChange"
   >
@@ -11,8 +11,8 @@
         <div class="settings-form-stack">
           <section class="surface-panel settings-field-panel">
             <div class="settings-field-copy">
-              <p class="settings-field-title">默认转码质量（CRF）</p>
-              <p class="hint-text">H.264 恒定质量参数，0 为无损，51 为最低质量，默认 18。数值越小文件越大、质量越高。</p>
+              <p class="settings-field-title">{{ t('settingsModals.ffmpegTranscode.crfTitle') }}</p>
+              <p class="hint-text">{{ t('settingsModals.ffmpegTranscode.crfNote') }}</p>
             </div>
             <UFormField>
               <UInputNumber
@@ -31,8 +31,8 @@
 
           <section class="surface-panel settings-field-panel">
             <div class="settings-field-copy">
-              <p class="settings-field-title">默认转码预设</p>
-              <p class="hint-text">控制编码速度与压缩率的权衡。`ultrafast` 最快但文件更大，`veryslow` 最慢但压缩率更高。</p>
+              <p class="settings-field-title">{{ t('settingsModals.ffmpegTranscode.presetTitle') }}</p>
+              <p class="hint-text">{{ t('settingsModals.ffmpegTranscode.presetNote') }}</p>
             </div>
             <UFormField>
               <USelect
@@ -47,8 +47,8 @@
 
           <section class="surface-panel settings-field-panel">
             <div class="settings-field-copy">
-              <p class="settings-field-title">最大并发转码数</p>
-              <p class="hint-text">FFmpeg Job 的最大并发执行数，范围 1 到 8，默认 2。</p>
+              <p class="settings-field-title">{{ t('settingsModals.ffmpegTranscode.concurrentTitle') }}</p>
+              <p class="hint-text">{{ t('settingsModals.ffmpegTranscode.concurrentNote') }}</p>
             </div>
             <UFormField>
               <UInputNumber
@@ -72,7 +72,7 @@
           <div class="settings-modal-actions-start">
             <UButton
               icon="i-lucide-rotate-ccw"
-              label="恢复默认"
+              :label="t('common.resetDefaults')"
               color="neutral"
               variant="ghost"
               :disabled="saving"
@@ -82,7 +82,7 @@
           <div class="settings-modal-actions-end">
             <UButton
               icon="i-lucide-x"
-              label="取消"
+              :label="t('common.cancel')"
               color="neutral"
               variant="outline"
               :disabled="saving"
@@ -90,7 +90,7 @@
             />
             <UButton
               icon="i-lucide-save"
-              label="保存"
+              :label="t('common.save')"
               color="primary"
               variant="solid"
               :loading="saving"
@@ -113,6 +113,7 @@ const emit = defineEmits<{
 }>()
 
 const settingsStore = useSettingsStore()
+const { t } = useI18n()
 const defaultFfmpegSettings = {
   transcodeCrf: 18,
   transcodePreset: 'medium',

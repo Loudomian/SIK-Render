@@ -2,22 +2,22 @@
   <div class="settings-page">
     <section class="page-hero settings-header">
       <div class="page-hero-copy">
-        <h1>设置</h1>
-        <p class="page-note">按路径和参数分组管理工具配置，所有细项都通过弹窗调整。</p>
+        <h1>{{ t('settingsPage.title') }}</h1>
+        <p class="page-note">{{ t('settingsPage.description') }}</p>
       </div>
     </section>
 
     <section class="settings-content">
       <section class="settings-section">
         <div class="settings-section-heading">
-          <h2 class="settings-section-title">路径管理</h2>
-          <p class="hint-text">集中管理 Blender 与 FFmpeg 的可执行文件和默认版本。</p>
+          <h2 class="settings-section-title">{{ t('settingsPage.pathManagement') }}</h2>
+          <p class="hint-text">{{ t('settingsPage.pathManagementNote') }}</p>
         </div>
 
         <UCard variant="subtle" class="settings-card" :ui="{ body: 'settings-card-body' }">
           <div class="settings-card-header">
             <div>
-              <h3 class="settings-card-title">工具路径</h3>
+              <h3 class="settings-card-title">{{ t('settingsPage.toolPaths') }}</h3>
             </div>
           </div>
 
@@ -41,7 +41,7 @@
                 <p class="hint-text">{{ blenderPathNote }}</p>
               </div>
               <div class="settings-card-actions">
-                <UButton icon="i-lucide-folder-open" label="管理路径" color="neutral" variant="outline" size="sm" @click="blenderPathModalOpen = true" />
+                <UButton icon="i-lucide-folder-open" :label="t('settingsPage.managePaths')" color="neutral" variant="outline" size="sm" @click="blenderPathModalOpen = true" />
               </div>
             </section>
 
@@ -51,7 +51,7 @@
                 <p class="hint-text">{{ ffmpegPathNote }}</p>
               </div>
               <div class="settings-card-actions">
-                <UButton icon="i-lucide-folder-open" label="管理路径" color="neutral" variant="outline" size="sm" @click="ffmpegPathModalOpen = true" />
+                <UButton icon="i-lucide-folder-open" :label="t('settingsPage.managePaths')" color="neutral" variant="outline" size="sm" @click="ffmpegPathModalOpen = true" />
               </div>
             </section>
           </div>
@@ -60,88 +60,88 @@
 
       <section class="settings-section">
       <div class="settings-section-heading">
-        <h2 class="settings-section-title">参数管理</h2>
-        <p class="hint-text">按功能查看当前摘要，需要修改时进入对应弹窗。</p>
+        <h2 class="settings-section-title">{{ t('settingsPage.parameterManagement') }}</h2>
+        <p class="hint-text">{{ t('settingsPage.parameterManagementNote') }}</p>
       </div>
 
       <div class="settings-grid-2">
         <UCard variant="subtle" class="settings-card" :ui="{ body: 'settings-card-body' }">
           <div class="settings-card-header">
             <div>
-              <h3 class="settings-card-title">Blender 渲染参数</h3>
-              <p class="hint-text">读取工程超时与崩溃自动重试。</p>
+              <h3 class="settings-card-title">{{ t('settingsPage.blenderRender') }}</h3>
+              <p class="hint-text">{{ t('settingsPage.blenderRenderNote') }}</p>
             </div>
           </div>
 
           <div class="settings-card-actions">
-            <UButton icon="i-lucide-sliders" label="编辑" color="neutral" variant="outline" size="sm" @click="blenderModalOpen = true" />
+            <UButton icon="i-lucide-sliders" :label="t('settingsPage.edit')" color="neutral" variant="outline" size="sm" @click="blenderModalOpen = true" />
           </div>
         </UCard>
 
         <UCard variant="subtle" class="settings-card" :ui="{ body: 'settings-card-body' }">
           <div class="settings-card-header">
             <div>
-              <h3 class="settings-card-title">Blender 输出参数</h3>
-              <p class="hint-text">PNG 与 OpenEXR 默认输出格式。</p>
+              <h3 class="settings-card-title">{{ t('settingsPage.blenderOutput') }}</h3>
+              <p class="hint-text">{{ t('settingsPage.blenderOutputNote') }}</p>
             </div>
           </div>
 
           <div class="settings-card-actions">
-            <UButton icon="i-lucide-image-up" label="编辑" color="neutral" variant="outline" size="sm" @click="blenderOutputModalOpen = true" />
+            <UButton icon="i-lucide-image-up" :label="t('settingsPage.edit')" color="neutral" variant="outline" size="sm" @click="blenderOutputModalOpen = true" />
           </div>
         </UCard>
 
         <UCard variant="subtle" class="settings-card" :ui="{ body: 'settings-card-body' }">
           <div class="settings-card-header">
             <div>
-              <h3 class="settings-card-title">FFmpeg 转码参数</h3>
-              <p class="hint-text">默认质量、预设与并发数。</p>
+              <h3 class="settings-card-title">{{ t('settingsPage.ffmpegTranscode') }}</h3>
+              <p class="hint-text">{{ t('settingsPage.ffmpegTranscodeNote') }}</p>
             </div>
           </div>
 
           <div class="settings-card-actions">
-            <UButton icon="i-lucide-sliders" label="编辑" color="neutral" variant="outline" size="sm" @click="ffmpegModalOpen = true" />
+            <UButton icon="i-lucide-sliders" :label="t('settingsPage.edit')" color="neutral" variant="outline" size="sm" @click="ffmpegModalOpen = true" />
           </div>
         </UCard>
 
         <UCard variant="subtle" class="settings-card" :ui="{ body: 'settings-card-body' }">
           <div class="settings-card-header">
             <div>
-              <h3 class="settings-card-title">输出路径模板</h3>
+              <h3 class="settings-card-title">{{ t('settingsPage.outputTemplates') }}</h3>
               <p class="hint-text">{{ outputTemplateSummary }}</p>
             </div>
           </div>
 
           <div class="settings-card-actions">
-            <UButton icon="i-lucide-braces" label="编辑" color="neutral" variant="outline" size="sm" @click="outputPathTemplateModalOpen = true" />
+            <UButton icon="i-lucide-braces" :label="t('settingsPage.edit')" color="neutral" variant="outline" size="sm" @click="outputPathTemplateModalOpen = true" />
           </div>
         </UCard>
 
         <UCard variant="subtle" class="settings-card" :ui="{ body: 'settings-card-body' }">
           <div class="settings-card-header">
             <div>
-              <h3 class="settings-card-title">节点网络参数</h3>
-              <p class="hint-text">端口、网段参考与设备备注。</p>
+              <h3 class="settings-card-title">{{ t('settingsPage.network') }}</h3>
+              <p class="hint-text">{{ t('settingsPage.networkNote') }}</p>
             </div>
           </div>
 
           <div class="settings-card-actions">
-            <UButton icon="i-lucide-network" label="编辑" color="neutral" variant="outline" size="sm" @click="networkModalOpen = true" />
+            <UButton icon="i-lucide-network" :label="t('settingsPage.edit')" color="neutral" variant="outline" size="sm" @click="networkModalOpen = true" />
           </div>
         </UCard>
 
         <UCard variant="subtle" class="settings-card" :ui="{ body: 'settings-card-body' }">
           <div class="settings-card-header">
             <div>
-              <h3 class="settings-card-title">界面与外观</h3>
-              <p class="hint-text">直接切换浅色、深色或跟随系统。</p>
+              <h3 class="settings-card-title">{{ t('settingsPage.appearance') }}</h3>
+              <p class="hint-text">{{ t('settingsPage.appearanceNote') }}</p>
             </div>
           </div>
 
           <div class="settings-theme-switcher">
             <UButton
               icon="i-lucide-sun-medium"
-              label="浅色"
+              :label="t('theme.light')"
               :color="settingsStore.settings.theme === 'light' ? 'primary' : 'neutral'"
               :variant="settingsStore.settings.theme === 'light' ? 'solid' : 'outline'"
               size="sm"
@@ -149,7 +149,7 @@
             />
             <UButton
               icon="i-lucide-moon-star"
-              label="深色"
+              :label="t('theme.dark')"
               :color="settingsStore.settings.theme === 'dark' ? 'primary' : 'neutral'"
               :variant="settingsStore.settings.theme === 'dark' ? 'solid' : 'outline'"
               size="sm"
@@ -157,11 +157,39 @@
             />
             <UButton
               icon="i-lucide-computer"
-              label="系统"
+              :label="t('theme.system')"
               :color="settingsStore.settings.theme === 'system' ? 'primary' : 'neutral'"
               :variant="settingsStore.settings.theme === 'system' ? 'solid' : 'outline'"
               size="sm"
               @click="setTheme('system')"
+            />
+          </div>
+        </UCard>
+
+        <UCard variant="subtle" class="settings-card" :ui="{ body: 'settings-card-body' }">
+          <div class="settings-card-header">
+            <div>
+              <h3 class="settings-card-title">{{ t('language.title') }}</h3>
+              <p class="hint-text">{{ t('language.note') }}</p>
+            </div>
+          </div>
+
+          <div class="settings-theme-switcher">
+            <UButton
+              icon="i-lucide-languages"
+              :label="t('language.zhCN')"
+              :color="settingsStore.settings.locale === 'zh-CN' ? 'primary' : 'neutral'"
+              :variant="settingsStore.settings.locale === 'zh-CN' ? 'solid' : 'outline'"
+              size="sm"
+              @click="setLocale('zh-CN')"
+            />
+            <UButton
+              icon="i-lucide-languages"
+              :label="t('language.enUS')"
+              :color="settingsStore.settings.locale === 'en-US' ? 'primary' : 'neutral'"
+              :variant="settingsStore.settings.locale === 'en-US' ? 'solid' : 'outline'"
+              size="sm"
+              @click="setLocale('en-US')"
             />
           </div>
         </UCard>
@@ -170,13 +198,13 @@
 
       <section class="settings-section">
       <div class="settings-section-heading">
-        <h2 class="settings-section-title">关于</h2>
+        <h2 class="settings-section-title">{{ t('settingsPage.about') }}</h2>
       </div>
 
       <div class="settings-form-stack">
         <section class="surface-panel settings-field-panel">
           <div class="settings-field-copy">
-            <p class="settings-field-title">版权信息</p>
+            <p class="settings-field-title">{{ t('settingsPage.copyright') }}</p>
             <p class="settings-brand-line">SIKFILM · 罐罐小狗</p>
             <p class="hint-text">Made with ❤️ by Loudomian and 空气小怪.</p>
           </div>
@@ -184,13 +212,13 @@
 
         <section class="surface-panel settings-field-panel">
           <div class="settings-field-copy">
-            <p class="settings-field-title">当前版本</p>
+            <p class="settings-field-title">{{ t('settingsPage.currentVersion') }}</p>
             <p class="settings-version-value">v{{ appVersion }}<span v-if="commitHash" class="settings-commit-hash"> ({{ commitHash }})</span></p>
           </div>
           <div class="settings-card-actions">
             <UButton
               icon="i-lucide-refresh-cw"
-              label="检查更新"
+              :label="t('settingsPage.checkUpdates')"
               color="neutral"
               variant="outline"
               size="sm"
@@ -199,7 +227,7 @@
             />
             <UButton
               icon="i-lucide-trash-2"
-              label="重新初始化"
+              :label="t('settingsPage.reset')"
               color="error"
               variant="outline"
               size="sm"
@@ -211,7 +239,7 @@
             <UAlert
               :color="runtimeResetResult.failedPaths.length ? 'warning' : 'success'"
               variant="subtle"
-              :title="runtimeResetResult.failedPaths.length ? '已完成，部分文件未删除' : '已重新初始化'"
+              :title="runtimeResetResult.failedPaths.length ? t('settingsPage.resetResultPartial') : t('settingsPage.resetResultDone')"
               :description="runtimeResetSummary"
             />
             <p class="settings-reset-path">{{ runtimeResetResult.rootPath }}</p>
@@ -232,7 +260,7 @@
     <UModal
       :open="runtimeResetModalOpen"
       :close="false"
-      title="确认重新初始化"
+      :title="t('settingsPage.resetModalTitle')"
       :ui="{ content: 'job-modal-content settings-modal-content' }"
       @update:open="handleRuntimeResetOpenChange"
     >
@@ -241,14 +269,14 @@
           <UAlert
             color="error"
             variant="subtle"
-            title="此操作会删除本机应用运行数据"
-            description="将终止当前渲染/转码进程，并删除配置、任务数据库、日志、节点 ID 和节点缓存。执行成功后应用会自动重启。"
+            :title="t('settingsPage.resetAlertTitle')"
+            :description="t('settingsPage.resetAlertDescription')"
           />
 
           <section class="surface-panel settings-field-panel">
             <div class="settings-field-copy">
-              <p class="settings-field-title">输入 RESET 确认</p>
-              <p class="hint-text">该操作只删除 SIK Render 自己的运行数据，不会删除你的 Blender 工程文件或渲染输出目录。</p>
+              <p class="settings-field-title">{{ t('settingsPage.resetConfirmTitle') }}</p>
+              <p class="hint-text">{{ t('settingsPage.resetConfirmNote') }}</p>
             </div>
             <UInput
               v-model="runtimeResetConfirmText"
@@ -262,7 +290,7 @@
             v-if="runtimeResetError"
             color="error"
             variant="subtle"
-            title="重新初始化失败"
+            :title="t('settingsPage.resetFailed')"
             :description="runtimeResetError"
           />
 
@@ -271,7 +299,7 @@
             <div class="settings-modal-actions-end">
               <UButton
                 icon="i-lucide-x"
-                label="取消"
+                :label="t('common.cancel')"
                 color="neutral"
                 variant="outline"
                 :disabled="runtimeResetting"
@@ -279,7 +307,7 @@
               />
               <UButton
                 icon="i-lucide-trash-2"
-                label="确认重新初始化"
+                :label="t('settingsPage.resetConfirm')"
                 color="error"
                 variant="solid"
                 :loading="runtimeResetting"
@@ -300,9 +328,11 @@ import { invoke } from '@tauri-apps/api/core'
 import { check } from '@tauri-apps/plugin-updater'
 import { relaunch } from '@tauri-apps/plugin-process'
 import type { RuntimeResetResult } from '~/types'
+import type { AppLocale } from '~/stores/settings'
 
 const settingsStore = useSettingsStore()
 const toast = useToast()
+const { t, setLocale: setI18nLocale } = useI18n()
 const { resetAppRuntimeData } = useTauri()
 const updaterState = useUpdaterState()
 const runtimeConfig = useRuntimeConfig()
@@ -332,26 +362,31 @@ const blenderVersionItems = computed(() => {
 })
 
 const blenderPathNote = computed(() => {
-  if (!settingsStore.blenderVersions.length) return '当前没有可用的 Blender 可执行文件。'
-  return settingsStore.settings.defaultBlender || '尚未设置默认 Blender 版本。'
+  if (!settingsStore.blenderVersions.length) return t('settingsPage.noBlender')
+  return settingsStore.settings.defaultBlender || t('settingsPage.noDefaultBlender')
 })
 
 const ffmpegPathNote = computed(() =>
-  settingsStore.settings.ffmpegExecutable || '配置后才可以提交和执行转码任务。',
+  settingsStore.settings.ffmpegExecutable || t('settingsPage.noFfmpeg'),
 )
 
-const outputTemplateSummary = computed(() => '集中管理渲染序列、Blender 转码和独立转码的默认输出模板。')
+const outputTemplateSummary = computed(() => t('settingsPage.outputTemplatesNote'))
 
 const runtimeResetSummary = computed(() => {
   if (!runtimeResetResult.value) return ''
   const removedCount = runtimeResetResult.value.removedPaths.length
   const failedCount = runtimeResetResult.value.failedPaths.length
-  if (!failedCount) return `已删除 ${removedCount} 项运行数据。应用将自动重启完成初始化。`
-  return `已删除 ${removedCount} 项运行数据，${failedCount} 项删除失败。请关闭应用后手动清理残留文件，或重启后再次执行。`
+  if (!failedCount) return t('settingsPage.resetSummaryDone', { removed: removedCount })
+  return t('settingsPage.resetSummaryPartial', { removed: removedCount, failed: failedCount })
 })
 
 async function setTheme(theme: 'dark' | 'light' | 'system') {
   await settingsStore.setTheme(theme)
+}
+
+async function setLocale(locale: AppLocale) {
+  await setI18nLocale(locale)
+  await settingsStore.setLocale(locale)
 }
 
 function handleRuntimeResetOpenChange(value: boolean) {
@@ -374,8 +409,8 @@ async function confirmRuntimeReset() {
     runtimeResetModalOpen.value = false
     runtimeResetConfirmText.value = ''
     toast.add({
-      title: runtimeResetResult.value.failedPaths.length ? '重新初始化完成，存在残留' : '重新初始化完成',
-      description: '应用将自动重启以完成初始化。',
+      title: runtimeResetResult.value.failedPaths.length ? t('settingsPage.resetToastPartial') : t('settingsPage.resetToastDone'),
+      description: t('settingsPage.resetToastDescription'),
       color: runtimeResetResult.value.failedPaths.length ? 'warning' : 'success',
     })
     window.setTimeout(() => {
@@ -397,8 +432,8 @@ async function checkForUpdates() {
     updaterState.setUpdate(update)
     if (!update) {
       toast.add({
-        title: '已是最新版本',
-        description: `当前版本 v${appVersion.value}`,
+        title: t('updater.latestTitle'),
+        description: t('updater.latestDescription', { version: appVersion.value }),
         color: 'success',
       })
       return
@@ -407,7 +442,7 @@ async function checkForUpdates() {
     updaterState.modalOpen.value = true
   } catch (error) {
     toast.add({
-      title: '检查更新失败',
+      title: t('updater.checkFailed'),
       description: error instanceof Error ? error.message : String(error),
       color: 'error',
     })

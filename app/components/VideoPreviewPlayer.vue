@@ -34,6 +34,7 @@ defineProps<{
 }>()
 
 const playerEl = ref<PreviewPlayerElement | null>(null)
+const { t } = useI18n()
 let keepPausedAfterSeekUntil = 0
 let resetSeekGuardTimer = 0
 
@@ -119,28 +120,28 @@ onUnmounted(() => {
   window.clearTimeout(resetSeekGuardTimer)
 })
 
-const translations: CommunitySkinTranslations = {
-  Audio: '音频',
-  Auto: '自动',
-  Captions: '字幕',
-  Chapters: '章节',
-  Default: '默认',
-  Mute: '静音',
-  Normal: '正常',
-  Off: '关闭',
-  Pause: '暂停',
-  Play: '播放',
-  Speed: '倍速',
-  Quality: '画质',
-  Settings: '设置',
-  Unmute: '取消静音',
-  'Seek Forward': '快进',
-  'Seek Backward': '后退',
-  'Closed-Captions On': '开启字幕',
-  'Closed-Captions Off': '关闭字幕',
-  'Enter Fullscreen': '进入全屏',
-  'Exit Fullscreen': '退出全屏',
-  'Enter PiP': '开启画中画',
-  'Exit PiP': '退出画中画',
-}
+const translations = computed<CommunitySkinTranslations>(() => ({
+  Audio: t('videoPlayer.audio'),
+  Auto: t('videoPlayer.auto'),
+  Captions: t('videoPlayer.captions'),
+  Chapters: t('videoPlayer.chapters'),
+  Default: t('videoPlayer.default'),
+  Mute: t('videoPlayer.mute'),
+  Normal: t('videoPlayer.normal'),
+  Off: t('videoPlayer.off'),
+  Pause: t('videoPlayer.pause'),
+  Play: t('videoPlayer.play'),
+  Speed: t('videoPlayer.speed'),
+  Quality: t('videoPlayer.quality'),
+  Settings: t('videoPlayer.settings'),
+  Unmute: t('videoPlayer.unmute'),
+  'Seek Forward': t('videoPlayer.seekForward'),
+  'Seek Backward': t('videoPlayer.seekBackward'),
+  'Closed-Captions On': t('videoPlayer.captionsOn'),
+  'Closed-Captions Off': t('videoPlayer.captionsOff'),
+  'Enter Fullscreen': t('videoPlayer.enterFullscreen'),
+  'Exit Fullscreen': t('videoPlayer.exitFullscreen'),
+  'Enter PiP': t('videoPlayer.enterPip'),
+  'Exit PiP': t('videoPlayer.exitPip'),
+}))
 </script>

@@ -1,11 +1,11 @@
 import type { FfmpegJobStatus } from '~/types'
 
-export const FFMPEG_STATUS_LABEL: Record<FfmpegJobStatus, string> = {
-  pending: '等待中',
-  running: '转码中',
-  done: '已完成',
-  failed: '失败',
-  cancelled: '已取消',
+export const FFMPEG_STATUS_KEY: Record<FfmpegJobStatus, string> = {
+  pending: 'ffmpegStatus.pending',
+  running: 'ffmpegStatus.running',
+  done: 'ffmpegStatus.done',
+  failed: 'ffmpegStatus.failed',
+  cancelled: 'ffmpegStatus.cancelled',
 }
 
 export const FFMPEG_STATUS_COLOR: Record<FfmpegJobStatus, 'neutral' | 'info' | 'success' | 'error' | 'warning'> = {
@@ -14,4 +14,9 @@ export const FFMPEG_STATUS_COLOR: Record<FfmpegJobStatus, 'neutral' | 'info' | '
   done: 'success',
   failed: 'error',
   cancelled: 'warning',
+}
+
+export function useFfmpegStatusLabel() {
+  const { t } = useI18n()
+  return (status: FfmpegJobStatus) => t(FFMPEG_STATUS_KEY[status] ?? status)
 }

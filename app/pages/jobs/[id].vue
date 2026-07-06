@@ -34,14 +34,14 @@
                   </UBreadcrumb>
                   <div class="detail-title-badges">
                     <UBadge
-                      :label="STATUS_LABEL[job.status] ?? job.status"
+                      :label="statusLabel(job.status)"
                       :color="statusBadgeColor"
                       variant="subtle"
                     />
                     <UBadge v-if="orderBadgeLabel" :label="orderBadgeLabel" color="neutral" variant="subtle" />
                     <UBadge
                       v-if="job.crashCount > 0"
-                      :label="`崩溃 ${job.crashCount} 次`"
+                      :label="t('jobCard.crashCount', { count: job.crashCount })"
                       color="warning"
                       variant="subtle"
                     />
@@ -87,7 +87,7 @@
                   <UButton
                     v-if="job.status === 'failed' || job.status === 'cancelled' || job.status === 'interrupted' || job.status === 'done'"
                     icon="i-lucide-rotate-ccw"
-                    :label="job.status === 'cancelled' || job.status === 'interrupted' ? '继续' : '重新渲染'"
+                    :label="job.status === 'cancelled' || job.status === 'interrupted' ? t('jobDetails.actions.continue') : t('jobDetails.actions.rerender')"
                     :color="job.status === 'cancelled' || job.status === 'interrupted' ? 'warning' : 'neutral'"
                     variant="outline"
                     size="md"
@@ -96,7 +96,7 @@
                   <UButton
                     v-if="job.status === 'running' || job.status === 'pending'"
                     icon="i-lucide-x"
-                    label="取消"
+                    :label="t('common.cancel')"
                     color="warning"
                     variant="outline"
                     size="md"
@@ -105,7 +105,7 @@
                   <UButton
                     v-if="job.status === 'done' || job.status === 'failed' || job.status === 'cancelled' || job.status === 'interrupted'"
                     icon="i-lucide-trash-2"
-                    label="删除"
+                    :label="t('common.delete')"
                     color="error"
                     variant="outline"
                     size="md"
@@ -123,17 +123,17 @@
     <UModal
       v-model:open="showDeleteConfirm"
       :close="false"
-      title="删除任务"
+      :title="t('renderQueue.delete.title')"
       :ui="{ content: 'job-modal-content' }"
     >
       <template #body>
         <div class="modal-stack">
           <p class="modal-copy">
-            确定删除 <strong>{{ job.name }}</strong>？此操作不可撤销。
+            {{ t('renderQueue.delete.message', { name: job.name }) }}
           </p>
           <div class="modal-actions">
-            <UButton icon="i-lucide-x" label="取消" color="warning" variant="outline" @click="showDeleteConfirm = false" />
-            <UButton icon="i-lucide-trash-2" label="删除" color="error" variant="outline" @click="removeAndBack" />
+            <UButton icon="i-lucide-x" :label="t('common.cancel')" color="warning" variant="outline" @click="showDeleteConfirm = false" />
+            <UButton icon="i-lucide-trash-2" :label="t('common.delete')" color="error" variant="outline" @click="removeAndBack" />
           </div>
         </div>
       </template>
@@ -185,7 +185,7 @@
     <UModal
       :open="showRetryConfirm"
       :close="false"
-      title="选择渲染方式"
+      :title="t('renderQueue.retry.title')"
       :ui="{ content: 'job-modal-content retry-modal-content' }"
       @update:open="v => { if (!v) closeRetryConfirm() }"
     >
@@ -196,17 +196,17 @@
               <section class="surface-panel transcode-submit-section retry-option-section retry-option-section-wide">
                 <div class="transcode-submit-head">
                   <div>
-                    <p class="choice-card-mode">快速 MP4</p>
-                    <h3 class="choice-card-title">重新渲染整个片段</h3>
+                    <p class="choice-card-mode">{{ t('jobCard.quickMp4') }}</p>
+                    <h3 class="choice-card-title">{{ t('renderQueue.retry.quickMp4Title') }}</h3>
                   </div>
                 </div>
                 <p class="choice-card-desc">
-                  快速 MP4 为单文件输出，仅支持整段覆盖重新渲染。
+                  {{ t('renderQueue.retry.quickMp4Description') }}
                 </p>
                 <div class="choice-card-toggle-group">
                   <UButton
                     icon="i-lucide-refresh-ccw"
-                    label="整段覆盖"
+                    :label="t('renderQueue.retry.fullRestart')"
                     color="neutral"
                     variant="outline"
                     size="sm"
@@ -225,17 +225,17 @@
               <section class="surface-panel transcode-submit-section retry-option-section retry-option-section-wide">
                 <div class="transcode-submit-head">
                   <div>
-                    <p class="choice-card-mode">整体片段</p>
-                    <h3 class="choice-card-title">重跑整个片段</h3>
+                    <p class="choice-card-mode">{{ t('renderQueue.retry.fullSegmentMode') }}</p>
+                    <h3 class="choice-card-title">{{ t('renderQueue.retry.fullSegmentTitle') }}</h3>
                   </div>
                 </div>
                 <p class="choice-card-desc">
-                  处理完整片段 <span class="choice-card-accent">{{ retryFullRangeLabel }}</span>。
+                  {{ t('renderQueue.retry.fullSegmentDescription', { range: retryFullRangeLabel }) }}
                 </p>
                 <div class="choice-card-toggle-group">
                   <UButton
                     icon="i-lucide-chevrons-right"
-                    label="整段续跑"
+                    :label="t('renderQueue.retry.fullContinue')"
                     color="neutral"
                     variant="outline"
                     size="sm"
@@ -250,7 +250,7 @@
                   />
                   <UButton
                     icon="i-lucide-refresh-ccw"
-                    label="整段覆盖"
+                    :label="t('renderQueue.retry.fullRestart')"
                     color="neutral"
                     variant="outline"
                     size="sm"
@@ -272,25 +272,25 @@
               <section class="surface-panel transcode-submit-section retry-option-section retry-option-section-wide">
                 <div class="transcode-submit-head">
                   <div>
-                    <p class="choice-card-mode">指定区间</p>
-                    <h3 class="choice-card-title">只重跑需要修复的部分</h3>
+                    <p class="choice-card-mode">{{ t('renderQueue.retry.customRangeMode') }}</p>
+                    <h3 class="choice-card-title">{{ t('renderQueue.retry.customRangeTitle') }}</h3>
                   </div>
                 </div>
                 <p class="choice-card-desc">
-                  只处理你填写的帧范围，适合补帧或局部返修。
+                  {{ t('renderQueue.retry.customRangeDescription') }}
                 </p>
                 <div class="choice-card-fields">
-                  <UFormField label="起始帧">
+                  <UFormField :label="t('renderQueue.retry.startFrame')">
                     <UInputNumber v-model="retryCustomStart" :min="1" />
                   </UFormField>
-                  <UFormField label="结束帧">
+                  <UFormField :label="t('renderQueue.retry.endFrame')">
                     <UInputNumber v-model="retryCustomEnd" :min="1" />
                   </UFormField>
                 </div>
                 <div class="choice-card-toggle-group">
                   <UButton
                     icon="i-lucide-chevrons-right"
-                    label="按区间续跑"
+                    :label="t('renderQueue.retry.rangeContinue')"
                     color="neutral"
                     variant="outline"
                     size="sm"
@@ -305,7 +305,7 @@
                   />
                   <UButton
                     icon="i-lucide-refresh-ccw"
-                    label="按区间覆盖"
+                    :label="t('renderQueue.retry.rangeRestart')"
                     color="neutral"
                     variant="outline"
                     size="sm"
@@ -321,7 +321,7 @@
                 </div>
                 <div class="choice-card-note-stack">
                   <p class="choice-card-inline-note">{{ retryCustomActionDescription }}</p>
-                  <p v-if="retryCustomInspectLoading" class="choice-card-inline-note">正在检查所选区间…</p>
+                  <p v-if="retryCustomInspectLoading" class="choice-card-inline-note">{{ t('renderQueue.retry.checkingRange') }}</p>
                   <p v-else-if="retryCustomRangeSummary" class="choice-card-inline-note">{{ retryCustomRangeSummary }}</p>
                 </div>
                 <UAlert
@@ -335,22 +335,22 @@
 
             <section v-if="job && !retryIsQuickMp4 && transcodeSupported" class="surface-panel transcode-submit-section retry-transcode-panel">
               <div class="retry-transcode-head">
-                <p class="choice-card-mode">自动转码</p>
-                <h3 class="choice-card-title">补渲后自动创建转码任务</h3>
+                <p class="choice-card-mode">{{ t('renderQueue.retry.autoTranscodeMode') }}</p>
+                <h3 class="choice-card-title">{{ t('renderQueue.retry.autoTranscodeTitle') }}</h3>
               </div>
               <p class="choice-card-desc">
-                决定这次补渲结束后，是否自动生成 FFmpeg Job。
+                {{ t('renderQueue.retry.autoTranscodeDescription') }}
               </p>
               <USwitch
                 v-model="retryAutoTranscodeEnabled"
                 color="neutral"
-                label="补渲完成后自动转码"
+                :label="t('renderQueue.retry.autoTranscodeSwitch')"
                 class="choice-card-switch"
               />
               <div class="choice-card-toggle-group">
                 <UButton
                   icon="i-lucide-scan-line"
-                  :label="`目标片段 ${retryCurrentTargetRangeLabel}`"
+                  :label="t('renderQueue.retry.targetSegment', { range: retryCurrentTargetRangeLabel })"
                   :color="retryTranscodeRangeMode === 'current' ? 'primary' : 'neutral'"
                   :variant="retryTranscodeRangeMode === 'current' ? 'solid' : 'outline'"
                   size="sm"
@@ -375,7 +375,7 @@
             </section>
           </div>
           <div class="modal-actions">
-            <UButton icon="i-lucide-x" label="取消" color="warning" variant="outline" size="sm" :disabled="retrySubmittingMode !== null" @click="closeRetryConfirm" />
+            <UButton icon="i-lucide-x" :label="t('common.cancel')" color="warning" variant="outline" size="sm" :disabled="retrySubmittingMode !== null" @click="closeRetryConfirm" />
           </div>
         </div>
       </template>
@@ -384,15 +384,15 @@
     <section class="detail-content">
       <div class="detail-grid">
         <UCard variant="subtle" :ui="{ root: 'detail-section detail-full', body: 'detail-card-body' }">
-        <h2 class="detail-card-title">文件路径</h2>
+        <h2 class="detail-card-title">{{ t('jobDetails.filePaths') }}</h2>
         <div class="detail-info-stack">
           <section class="detail-info-item">
             <div class="detail-path-chip">
-              <span class="detail-path-label">工程文件：</span>
+              <span class="detail-path-label">{{ t('jobDetails.blendFile') }}</span>
               <button class="detail-path-text" type="button" :title="job.blendFile" @click="openPath(job.blendFile)">
                 {{ job.blendFile }}
               </button>
-              <UTooltip text="复制路径" :content="{ side: 'top', sideOffset: 6 }">
+              <UTooltip :text="t('jobDetails.copyPath')" :content="{ side: 'top', sideOffset: 6 }">
                 <UButton icon="i-lucide-copy" color="neutral" variant="ghost" size="xs" square @click="copyPath(job.blendFile)" />
               </UTooltip>
             </div>
@@ -400,11 +400,11 @@
           <section class="detail-info-item">
             <div class="detail-path-stack">
               <div class="detail-path-chip">
-                <span class="detail-path-label">输出路径：</span>
+                <span class="detail-path-label">{{ t('jobDetails.outputPath') }}</span>
                 <button class="detail-path-text" type="button" :title="job.outputPath" @click="openPath(resolveOutputDirectory(job.outputPath))">
                   {{ job.outputPath }}
                 </button>
-                <UTooltip text="复制路径" :content="{ side: 'top', sideOffset: 6 }">
+                <UTooltip :text="t('jobDetails.copyPath')" :content="{ side: 'top', sideOffset: 6 }">
                   <UButton icon="i-lucide-copy" color="neutral" variant="ghost" size="xs" square @click="copyPath(job.outputPath)" />
                 </UTooltip>
               </div>
@@ -416,44 +416,44 @@
         <UCard variant="subtle" :ui="{ root: 'detail-section detail-full', body: 'detail-card-body' }">
           <div class="stat-row">
           <div class="stat-item">
-            <p class="stat-label">格式</p>
+            <p class="stat-label">{{ t('jobDetails.stats.format') }}</p>
             <p class="stat-value">{{ displayOutputModeLabel }}</p>
           </div>
           <div class="stat-item">
-            <p class="stat-label">帧范围</p>
-            <p class="stat-value">{{ originalFrameRangeLabel }}（共 {{ originalFrameTotal }} 帧）</p>
+            <p class="stat-label">{{ t('jobDetails.stats.frameRange') }}</p>
+            <p class="stat-value">{{ originalFrameRangeLabel }} ({{ t('jobDetails.stats.totalFrames', { count: originalFrameTotal }) }})</p>
           </div>
           <div v-if="showCurrentExecutionRange" class="stat-item">
-            <p class="stat-label">当前执行</p>
-            <p class="stat-value">{{ currentExecutionRangeLabel }}（共 {{ currentExecutionTotal }} 帧）</p>
+            <p class="stat-label">{{ t('jobDetails.stats.currentExecution') }}</p>
+            <p class="stat-value">{{ currentExecutionRangeLabel }} ({{ t('jobDetails.stats.totalFrames', { count: currentExecutionTotal }) }})</p>
           </div>
           <div class="stat-item">
             <p class="stat-label">Blender</p>
             <p class="stat-value">{{ blenderVersion }}</p>
           </div>
           <div v-if="crashCount" class="stat-item">
-            <p class="stat-label">崩溃恢复</p>
-            <p class="stat-value">{{ crashCount }} 次</p>
+            <p class="stat-label">{{ t('jobDetails.stats.crashRecovery') }}</p>
+            <p class="stat-value">{{ t('jobDetails.stats.crashTimes', { count: crashCount }) }}</p>
           </div>
         </div>
         <div class="stat-row">
           <div class="stat-item">
-            <p class="stat-label">开始</p>
+            <p class="stat-label">{{ t('jobDetails.stats.started') }}</p>
             <p class="stat-value">{{ formatTime(job.startedAt ?? job.createdAt) }}</p>
           </div>
           <div class="stat-item">
-            <p class="stat-label">完成</p>
+            <p class="stat-label">{{ t('jobDetails.stats.finished') }}</p>
             <p class="stat-value">{{ job.finishedAt ? formatTime(job.finishedAt) : '—' }}</p>
           </div>
           <div class="stat-item">
-            <p class="stat-label">耗时</p>
+            <p class="stat-label">{{ t('jobDetails.stats.duration') }}</p>
             <p class="stat-value">{{ duration }}</p>
           </div>
         </div>
         <template v-if="job.status === 'running'">
           <div class="stat-row">
             <div class="stat-item detail-progress-stat">
-              <p class="stat-label">渲染进度</p>
+              <p class="stat-label">{{ t('jobDetails.stats.renderProgress') }}</p>
               <RenderProgress
                 class="detail-render-progress"
                 :frame="job.currentFrame ?? 0"
@@ -473,7 +473,7 @@
           <div v-if="hasFramePreview && hasVideoPreview" class="preview-switch">
             <UButton
               :icon="activePreviewTab === 'video' ? 'i-lucide-image' : 'i-lucide-clapperboard'"
-              :label="activePreviewTab === 'video' ? '帧预览' : '视频预览'"
+              :label="activePreviewTab === 'video' ? t('jobDetails.preview.framePreview') : t('jobDetails.preview.videoPreview')"
               color="neutral"
               variant="subtle"
               size="sm"
@@ -504,7 +504,7 @@
             </div>
             <UBadge
               v-if="previewFrame && previewUrl"
-              :label="`第 ${previewFrame} 帧`"
+              :label="t('jobDetails.preview.frameBadge', { frame: previewFrame })"
               color="neutral"
               variant="subtle"
               class="preview-frame-label"
@@ -521,10 +521,10 @@
 
         <UCard variant="subtle" :ui="{ root: 'detail-section detail-full log-section', body: 'detail-card-body' }">
           <div class="log-header">
-            <h2 class="detail-card-title log-title">输出日志</h2>
+            <h2 class="detail-card-title log-title">{{ t('jobDetails.logs.title') }}</h2>
             <div class="log-header-actions">
               <UButton
-                :label="showAllLogs ? '最新日志' : '全部日志'"
+                :label="showAllLogs ? t('jobDetails.logs.latest') : t('jobDetails.logs.all')"
                 :icon="showAllLogs ? 'i-lucide-clock' : 'i-lucide-layers'"
                 color="neutral"
                 variant="subtle"
@@ -535,7 +535,7 @@
               <UButton
                 v-if="logSummary?.directory"
                 icon="i-lucide-folder-open"
-                label="打开日志目录"
+                :label="t('jobDetails.logs.openDirectory')"
                 color="neutral"
                 variant="subtle"
                 size="sm"
@@ -546,7 +546,7 @@
           <div class="log-surface">
             <div class="log-panel" ref="logEl" @scroll="onLogScroll">
               <span v-if="logLines.length === 0" class="log-empty">
-                {{ job.status === 'pending' ? '等待开始…' : '暂无输出内容。' }}
+                {{ job.status === 'pending' ? t('jobDetails.logs.waiting') : t('jobDetails.logs.empty') }}
               </span>
               <div v-for="(entry, i) in displayJobLogs" :key="i" class="log-line">
                 <div class="log-line-inner" :class="{ 'log-line-inner-no-timestamp': !entry.timestamp }">
@@ -573,15 +573,15 @@
     </UModal>
   </div>
 
-  <div v-else class="empty">找不到该任务。</div>
+  <div v-else class="empty">{{ t('jobDetails.notFound') }}</div>
 </template>
 
 <script setup lang="ts">
 import { convertFileSrc } from '@tauri-apps/api/core'
 import type { DropdownMenuItem } from '@nuxt/ui'
 import type { AddFfmpegJobPayload, JobLogSummary, RenderJob, RenderJobTranscodeConfig } from '~/types'
-import { JOB_STATUS_COLOR, JOB_STATUS_LABEL } from '~/composables/useJobStatus'
-import { formatQueueOrderLabel, RENDER_QUEUE_ORDER_HIDDEN_STATUSES, resolveQueueOrder } from '~/composables/useQueueOrder'
+import { JOB_STATUS_COLOR, useJobStatusLabel } from '~/composables/useJobStatus'
+import { RENDER_QUEUE_ORDER_HIDDEN_STATUSES, resolveQueueOrder, useQueueOrderLabel } from '~/composables/useQueueOrder'
 import { buildTranscodeOutputPath, normalizeTranscodeDirectory, splitTranscodeOutputPath } from '~/composables/useTranscodeConfig'
 import { formatTimestamp } from '~/utils/date-format'
 import { parseLogLine } from '~/utils/log-line'
@@ -593,12 +593,14 @@ const router = useRouter()
 const toast = useToast()
 const jobsStore = useJobsStore()
 const transcodeStore = useTranscodeStore()
+const { t } = useI18n()
 
 const settingsStore = useSettingsStore()
 
 const { openPath, getLastRenderedFrame, getJobLogSummary, getJobLogs, updateJobPreviewDimensions, previewOutputPathTemplate, pathExists } = useTauri()
 const { onProgress, onJobUpdated, onLog, onFfmpegJobUpdated } = useRenderEvents()
-const STATUS_LABEL = JOB_STATUS_LABEL
+const statusLabel = useJobStatusLabel()
+const queueOrderLabel = useQueueOrderLabel()
 
 const jobId = computed(() => route.params.id as string)
 const job = computed(() => jobsStore.jobs.find((j) => j.id === jobId.value))
@@ -626,13 +628,13 @@ const detailBreadcrumbItems = computed(() => {
   const currentJob = job.value
   if (!currentJob) return []
   return [
-    { label: '渲染队列', to: '/' },
+    { label: t('renderQueue.title'), to: '/' },
     { label: `#${currentJob.jobNumber} ${currentJob.name}` },
   ]
 })
 const statusBadgeColor = computed(() => JOB_STATUS_COLOR[job.value?.status ?? 'pending'] ?? 'neutral')
 const queueOrder = computed(() => resolveQueueOrder(jobsStore.jobs, job.value, RENDER_QUEUE_ORDER_HIDDEN_STATUSES))
-const orderBadgeLabel = computed(() => formatQueueOrderLabel(queueOrder.value))
+const orderBadgeLabel = computed(() => queueOrderLabel(queueOrder.value))
 const metadataDialogOpen = ref(false)
 const metadataJob = computed(() => job.value ?? null)
 const transcodeModalOpen = ref(false)
@@ -670,7 +672,7 @@ const showCurrentExecutionRange = computed(() => {
   return currentJob.originalFrameStart !== currentJob.frameStart || currentJob.originalFrameEnd !== currentJob.frameEnd
 })
 const displayOutputModeLabel = computed(() => {
-  if (isQuickMp4Job.value) return '快速 MP4（Blender 直出）'
+  if (isQuickMp4Job.value) return t('jobDetails.preview.quickMp4Output')
   return job.value?.outputFormat ?? '—'
 })
 
@@ -774,7 +776,7 @@ const transcodePrimaryAction = computed(() => {
   const currentTranscodeJob = primaryTranscodeJob.value
   if (!currentJob) {
     return {
-      label: '提交转码',
+      label: t('jobDetails.transcode.submit'),
       icon: 'i-lucide-film',
       color: 'neutral' as const,
       loading: false,
@@ -786,7 +788,7 @@ const transcodePrimaryAction = computed(() => {
   if (!currentTranscodeJob) {
     if (!transcodeSupported.value) {
       return {
-        label: 'EXR 禁用转码',
+        label: t('jobDetails.transcode.exrDisabled'),
         icon: 'i-lucide-ban',
         color: 'neutral' as const,
         loading: false,
@@ -796,7 +798,7 @@ const transcodePrimaryAction = computed(() => {
     }
 
     return {
-      label: '提交转码',
+      label: t('jobDetails.transcode.submit'),
       icon: 'i-lucide-film',
       color: 'neutral' as const,
       loading: false,
@@ -806,11 +808,11 @@ const transcodePrimaryAction = computed(() => {
   }
 
   const statusMap = {
-    pending: { label: '排队转码', icon: 'i-lucide-loader-circle', color: 'warning' as const, spin: true },
-    running: { label: '转码中', icon: 'i-lucide-loader-circle', color: 'info' as const, spin: true },
-    done: { label: '查看转码', icon: 'i-lucide-circle-check-big', color: 'success' as const, spin: false },
-    failed: { label: '查看转码', icon: 'i-lucide-triangle-alert', color: 'error' as const, spin: false },
-    cancelled: { label: '查看转码', icon: 'i-lucide-square', color: 'warning' as const, spin: false },
+    pending: { label: t('jobDetails.transcode.pending'), icon: 'i-lucide-loader-circle', color: 'warning' as const, spin: true },
+    running: { label: t('jobDetails.transcode.running'), icon: 'i-lucide-loader-circle', color: 'info' as const, spin: true },
+    done: { label: t('jobDetails.transcode.view'), icon: 'i-lucide-circle-check-big', color: 'success' as const, spin: false },
+    failed: { label: t('jobDetails.transcode.view'), icon: 'i-lucide-triangle-alert', color: 'error' as const, spin: false },
+    cancelled: { label: t('jobDetails.transcode.view'), icon: 'i-lucide-square', color: 'warning' as const, spin: false },
   }[currentTranscodeJob.status]
 
   return {
@@ -832,10 +834,10 @@ async function copyPath(path: string) {
   if (!path) return
   try {
     await navigator.clipboard.writeText(path)
-    toast.add({ title: '路径已复制', color: 'success' })
+    toast.add({ title: t('jobDetails.copy.success'), color: 'success' })
   } catch (error) {
     toast.add({
-      title: '复制路径失败',
+      title: t('jobDetails.copy.failed'),
       description: error instanceof Error ? error.message : String(error),
       color: 'error',
     })
@@ -845,7 +847,7 @@ async function copyPath(path: string) {
 function buildJobContextMenuItems(currentJob: RenderJob) {
   return [
     {
-      label: '编辑项目信息',
+      label: t('jobDetails.actions.editMetadata'),
       icon: 'i-lucide-notebook-pen',
       onSelect: () => openMetadataDialog(),
     },
@@ -864,7 +866,7 @@ const transcodeActionItems = computed<DropdownMenuItem[][]>(() => {
   const items: DropdownMenuItem[][] = [[
     {
       slot: 'auto-transcode',
-      label: '渲染完成后自动转码',
+      label: t('jobDetails.transcode.autoAfterRender'),
       icon: 'i-lucide-clapperboard',
       loading: updatingAutoTranscode.value,
       disabled: updatingAutoTranscode.value || !transcodeSupported.value,
@@ -875,7 +877,7 @@ const transcodeActionItems = computed<DropdownMenuItem[][]>(() => {
     },
   ], [
     {
-      label: '转码设置',
+      label: t('jobDetails.transcode.settings'),
       icon: 'i-lucide-sliders',
       disabled: !job.value || !transcodeSupported.value,
       onSelect: () => {
@@ -883,7 +885,7 @@ const transcodeActionItems = computed<DropdownMenuItem[][]>(() => {
       },
     },
     {
-      label: '立即提交转码',
+      label: t('jobDetails.transcode.submitNow'),
       icon: 'i-lucide-film',
       disabled: job.value?.status === 'running' || !transcodeSupported.value,
       onSelect: () => {
@@ -892,7 +894,7 @@ const transcodeActionItems = computed<DropdownMenuItem[][]>(() => {
     },
   ], [
     {
-      label: '前往转码队列',
+      label: t('jobDetails.transcode.goToQueue'),
       icon: 'i-lucide-list-video',
       onSelect: () => router.push('/transcode'),
     },
@@ -901,7 +903,7 @@ const transcodeActionItems = computed<DropdownMenuItem[][]>(() => {
   if (primaryTranscodeJob.value) {
     items.push([
       {
-        label: '查看 FFmpeg Job',
+        label: t('jobDetails.transcode.viewJob'),
         icon: 'i-lucide-file-text',
         onSelect: () => router.push(`/transcode/${primaryTranscodeJob.value?.id}`),
       },
@@ -926,27 +928,27 @@ const hasFramePreview = computed(() =>
 )
 const hasVideoPreview = computed(() => Boolean(videoPreviewUrl.value))
 const videoPreviewTitle = computed(() =>
-  resolvePathBaseName(videoPreviewSourcePath.value) || job.value?.name || '视频预览',
+  resolvePathBaseName(videoPreviewSourcePath.value) || job.value?.name || t('jobDetails.preview.videoPreview'),
 )
 const previewCardTitle = computed(() => {
-  if (isQuickMp4Job.value || (activePreviewTab.value === 'video' && hasVideoPreview.value)) return '视频预览'
-  return '帧预览'
+  if (isQuickMp4Job.value || (activePreviewTab.value === 'video' && hasVideoPreview.value)) return t('jobDetails.preview.videoPreview')
+  return t('jobDetails.preview.framePreview')
 })
 const previewPlaceholderText = computed(() => {
-  if (isQuickMp4Job.value) return '快速 MP4 使用视频预览'
-  if (job.value?.outputFormat === 'OPEN_EXR' || job.value?.outputFormat === 'EXR') return 'EXR 不支持预览'
-  return '暂无已渲染帧'
+  if (isQuickMp4Job.value) return t('jobDetails.preview.quickMp4UsesVideo')
+  if (job.value?.outputFormat === 'OPEN_EXR' || job.value?.outputFormat === 'EXR') return t('jobDetails.preview.exrUnsupported')
+  return t('jobDetails.preview.noRenderedFrames')
 })
 const previewUnavailableText = computed(() => {
   if (isQuickMp4Job.value) {
     return job.value?.status === 'done'
-      ? '当前视频还不可播放，请确认输出文件仍存在。'
-      : '快速 MP4 渲染完成后可在这里播放视频，并显示末帧封面。'
+      ? t('jobDetails.preview.videoUnavailableDone')
+      : t('jobDetails.preview.videoUnavailablePending')
   }
   if (completedRelatedFfmpegJobs.value.length > 0) {
-    return '已找到转码记录，但视频文件当前不可用。'
+    return t('jobDetails.preview.transcodeVideoUnavailable')
   }
-  return '暂无可播放视频，请先完成转码。'
+  return t('jobDetails.preview.noPlayableVideo')
 })
 const previewStyle = computed(() =>
   previewAspect.value ? { '--preview-aspect': previewAspect.value } : undefined,
@@ -1170,7 +1172,7 @@ async function toggleLogScope() {
   } catch (error) {
     showAllLogs.value = false
     toast.add({
-      title: '读取全部日志失败',
+      title: t('jobDetails.logs.loadAllFailed'),
       description: error instanceof Error ? error.message : String(error),
       color: 'error',
     })

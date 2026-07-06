@@ -3,6 +3,8 @@ import { open } from '@tauri-apps/plugin-dialog'
 import type { AppSettings, BlenderInstall } from '~/types'
 
 const THEME_STORAGE_KEY = 'sik-render-theme'
+const LOCALE_STORAGE_KEY = 'sik-render-locale'
+export type AppLocale = AppSettings['locale']
 
 export const useSettingsStore = defineStore('settings', () => {
   const settings = ref<AppSettings>({
@@ -13,8 +15,8 @@ export const useSettingsStore = defineStore('settings', () => {
     transcodePreset: 'medium',
     ffmpegMaxConcurrent: 2,
     renderOutputPathTemplate: './{blendFileName}_{frameStart}-{frameEnd}/{blendFileName}_{frame}',
-    blenderTranscodeOutputPathTemplate: './转码/{blendFileName}_{frameStart}-{frameEnd}.mp4',
-    standaloneTranscodeOutputPathTemplate: '../转码/{folderName}_{frameStart}-{frameEnd}.mp4',
+    blenderTranscodeOutputPathTemplate: './transcode/{blendFileName}_{frameStart}-{frameEnd}.mp4',
+    standaloneTranscodeOutputPathTemplate: '../transcode/{folderName}_{frameStart}-{frameEnd}.mp4',
     pngColorMode: 'RGB',
     pngColorDepth: 8,
     pngCompression: 15,
@@ -23,6 +25,7 @@ export const useSettingsStore = defineStore('settings', () => {
     exrCodec: 'DWAA',
     exrQuality: 98,
     theme: 'dark',
+    locale: 'zh-CN',
     extraBlenderPaths: [],
     excludedBlenderPaths: [],
     maxCrashRetries: 3,
@@ -40,6 +43,19 @@ export const useSettingsStore = defineStore('settings', () => {
     } catch {
       // Ignore storage failures and fall back to settings file on next launch.
     }
+  }
+
+  function persistLocalePreference(locale: AppLocale) {
+    if (!import.meta.client) return
+    try {
+      window.localStorage.setItem(LOCALE_STORAGE_KEY, locale)
+    } catch {
+      // Ignore storage failures and fall back to settings file on next launch.
+    }
+  }
+
+  function normalizeLocale(locale: string | undefined): AppLocale {
+    return locale === 'en-US' ? 'en-US' : 'zh-CN'
   }
 
   function mergeInstalls(extra: BlenderInstall[]): BlenderInstall[] {
@@ -61,8 +77,10 @@ export const useSettingsStore = defineStore('settings', () => {
       nodePort: loaded.nodePort ?? 47878,
       nodeInterfaceAddress: loaded.nodeInterfaceAddress || '192.168.1.1',
       nodeNote: loaded.nodeNote ?? '',
+      locale: normalizeLocale(loaded.locale),
     }
     persistThemePreference(settings.value.theme)
+    persistLocalePreference(settings.value.locale)
     blenderVersions.value = mergeInstalls(await getBlenderVersions())
   }
 
@@ -148,6 +166,14 @@ export const useSettingsStore = defineStore('settings', () => {
     await saveSettings(settings.value)
   }
 
+  async function setLocale(locale: AppLocale) {
+    const normalized = normalizeLocale(locale)
+    if (settings.value.locale === normalized) return
+    settings.value.locale = normalized
+    persistLocalePreference(normalized)
+    await saveSettings(settings.value)
+  }
+
   async function toggleTheme() {
     const nextTheme: AppSettings['theme'] = settings.value.theme === 'dark' ? 'light' : 'dark'
     settings.value.theme = nextTheme
@@ -171,6 +197,7 @@ export const useSettingsStore = defineStore('settings', () => {
     removeBlenderVersion,
     setDefaultBlender,
     setTheme,
+    setLocale,
     toggleTheme,
     save,
   }

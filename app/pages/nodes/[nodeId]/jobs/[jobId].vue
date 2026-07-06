@@ -1,5 +1,5 @@
 <template>
-  <div v-if="loading" class="empty">正在读取节点任务…</div>
+  <div v-if="loading" class="empty">{{ t('nodeJobDetails.loading') }}</div>
 
   <div v-else-if="peer && job" class="detail-page node-job-detail-page">
     <section class="page-hero detail-hero">
@@ -30,10 +30,10 @@
                 </template>
               </UBreadcrumb>
               <div class="detail-title-badges">
-                <UBadge :label="STATUS_LABEL[job.status] ?? job.status" :color="statusBadgeColor" variant="subtle" />
-                <UBadge :label="peer.connected ? '节点在线' : '节点断开'" :color="peer.connected ? 'success' : 'neutral'" variant="subtle" />
-                <UBadge v-if="job.renderMode === 'quick_mp4'" label="快速 MP4" color="neutral" variant="subtle" />
-                <UBadge v-if="job.crashCount > 0" :label="`崩溃 ${job.crashCount} 次`" color="warning" variant="subtle" />
+                <UBadge :label="statusLabel(job.status)" :color="statusBadgeColor" variant="subtle" />
+                <UBadge :label="peer.connected ? t('nodeJobDetails.nodeOnline') : t('nodeJobDetails.nodeDisconnected')" :color="peer.connected ? 'success' : 'neutral'" variant="subtle" />
+                <UBadge v-if="job.renderMode === 'quick_mp4'" :label="t('jobCard.quickMp4')" color="neutral" variant="subtle" />
+                <UBadge v-if="job.crashCount > 0" :label="t('jobCard.crashCount', { count: job.crashCount })" color="warning" variant="subtle" />
                 <UBadge v-if="shadowScaleLabel" :label="shadowScaleLabel" color="warning" variant="subtle" />
               </div>
             </div>
@@ -48,22 +48,22 @@
     <section class="detail-content">
       <div class="detail-grid">
         <UCard variant="subtle" :ui="{ root: 'detail-section detail-full', body: 'detail-card-body' }">
-          <h2 class="detail-card-title">文件路径</h2>
+          <h2 class="detail-card-title">{{ t('jobDetails.filePaths') }}</h2>
           <div class="detail-info-stack">
             <section class="detail-info-item">
               <div class="detail-path-chip">
-                <span class="detail-path-label">工程文件：</span>
+                <span class="detail-path-label">{{ t('jobDetails.blendFile') }}</span>
                 <span class="detail-path-text" :title="job.blendFile">{{ job.blendFile }}</span>
-                <UTooltip text="复制路径" :content="{ side: 'top', sideOffset: 6 }">
+                <UTooltip :text="t('jobDetails.copyPath')" :content="{ side: 'top', sideOffset: 6 }">
                   <UButton icon="i-lucide-copy" color="neutral" variant="ghost" size="xs" square @click="copyPath(job.blendFile)" />
                 </UTooltip>
               </div>
             </section>
             <section class="detail-info-item">
               <div class="detail-path-chip">
-                <span class="detail-path-label">输出路径：</span>
+                <span class="detail-path-label">{{ t('jobDetails.outputPath') }}</span>
                 <span class="detail-path-text" :title="job.outputPath">{{ job.outputPath }}</span>
-                <UTooltip text="复制路径" :content="{ side: 'top', sideOffset: 6 }">
+                <UTooltip :text="t('jobDetails.copyPath')" :content="{ side: 'top', sideOffset: 6 }">
                   <UButton icon="i-lucide-copy" color="neutral" variant="ghost" size="xs" square @click="copyPath(job.outputPath)" />
                 </UTooltip>
               </div>
@@ -74,48 +74,48 @@
         <UCard variant="subtle" :ui="{ root: 'detail-section detail-full', body: 'detail-card-body' }">
           <div class="stat-row">
             <div class="stat-item">
-              <p class="stat-label">格式</p>
+              <p class="stat-label">{{ t('jobDetails.stats.format') }}</p>
               <p class="stat-value">{{ outputModeLabel }}</p>
             </div>
             <div class="stat-item">
-              <p class="stat-label">帧范围</p>
-              <p class="stat-value">{{ originalFrameRangeLabel }}（共 {{ originalFrameTotal }} 帧）</p>
+              <p class="stat-label">{{ t('jobDetails.stats.frameRange') }}</p>
+              <p class="stat-value">{{ originalFrameRangeLabel }} ({{ t('jobDetails.stats.totalFrames', { count: originalFrameTotal }) }})</p>
             </div>
             <div v-if="showCurrentExecutionRange" class="stat-item">
-              <p class="stat-label">当前执行</p>
-              <p class="stat-value">{{ currentExecutionRangeLabel }}（共 {{ currentExecutionTotal }} 帧）</p>
+              <p class="stat-label">{{ t('jobDetails.stats.currentExecution') }}</p>
+              <p class="stat-value">{{ currentExecutionRangeLabel }} ({{ t('jobDetails.stats.totalFrames', { count: currentExecutionTotal }) }})</p>
             </div>
             <div class="stat-item">
-              <p class="stat-label">当前任务</p>
+              <p class="stat-label">{{ t('nodeJobDetails.currentJob') }}</p>
               <p class="stat-value">{{ currentJobLabel }}</p>
             </div>
             <div v-if="job.crashCount > 0" class="stat-item">
-              <p class="stat-label">崩溃恢复</p>
-              <p class="stat-value">{{ job.crashCount }} 次</p>
+              <p class="stat-label">{{ t('jobDetails.stats.crashRecovery') }}</p>
+              <p class="stat-value">{{ t('jobDetails.stats.crashTimes', { count: job.crashCount }) }}</p>
             </div>
             <div v-if="shadowScaleLabel" class="stat-item">
-              <p class="stat-label">阴影倍率</p>
-              <p class="stat-value">{{ shadowScaleLabel.replace('阴影 ', '') }}</p>
+              <p class="stat-label">{{ t('nodeJobDetails.shadowScaleLabel') }}</p>
+              <p class="stat-value">{{ shadowScaleValue }}</p>
             </div>
           </div>
           <div class="stat-row">
             <div class="stat-item">
-              <p class="stat-label">开始</p>
+              <p class="stat-label">{{ t('jobDetails.stats.started') }}</p>
               <p class="stat-value">{{ formatTime(job.startedAt ?? job.createdAt) }}</p>
             </div>
             <div class="stat-item">
-              <p class="stat-label">完成</p>
+              <p class="stat-label">{{ t('jobDetails.stats.finished') }}</p>
               <p class="stat-value">{{ job.finishedAt ? formatTime(job.finishedAt) : '-' }}</p>
             </div>
             <div class="stat-item">
-              <p class="stat-label">耗时</p>
+              <p class="stat-label">{{ t('jobDetails.stats.duration') }}</p>
               <p class="stat-value">{{ duration }}</p>
             </div>
           </div>
           <template v-if="job.status === 'running'">
             <div class="stat-row">
               <div class="stat-item detail-progress-stat">
-                <p class="stat-label">渲染进度</p>
+                <p class="stat-label">{{ t('jobDetails.stats.renderProgress') }}</p>
                 <RenderProgress
                   class="detail-render-progress"
                   :frame="job.currentFrame ?? 0"
@@ -131,7 +131,7 @@
 
         <UCard variant="subtle" :ui="{ root: 'detail-section detail-full preview-card', body: 'detail-card-body' }">
           <div class="preview-card-head">
-            <h2 class="detail-card-title preview-card-title">节点预览</h2>
+            <h2 class="detail-card-title preview-card-title">{{ t('nodeJobDetails.nodePreview') }}</h2>
           </div>
           <div
             class="surface-panel preview-thumb-wrap"
@@ -155,13 +155,13 @@
 
         <UCard variant="subtle" :ui="{ root: 'detail-section detail-full log-section node-event-section', body: 'detail-card-body' }">
           <div class="log-header">
-            <h2 class="detail-card-title log-title">节点事件</h2>
+            <h2 class="detail-card-title log-title">{{ t('nodeJobDetails.eventsTitle') }}</h2>
             <div class="log-header-actions" />
           </div>
           <div class="node-event-surface">
             <div ref="eventPanelEl" class="node-event-panel">
               <span v-if="displayEvents.length === 0" class="log-empty">
-                暂无节点事件。任务状态变化、崩溃重试和阴影恢复会显示在这里。
+                {{ t('nodeJobDetails.eventsEmpty') }}
               </span>
               <div v-for="event in displayEvents" :key="event.id" class="node-event-row">
                 <span class="node-event-marker" :class="`node-event-marker-${event.level}`" aria-hidden="true" />
@@ -179,33 +179,34 @@
 
         <UCard variant="subtle" :ui="{ root: 'detail-section detail-full log-section node-event-section', body: 'detail-card-body' }">
           <div class="log-header">
-            <h2 class="detail-card-title log-title">实时渲染日志</h2>
+            <h2 class="detail-card-title log-title">{{ t('nodeJobDetails.remoteLogsTitle') }}</h2>
             <div class="log-header-actions" />
           </div>
           <div class="node-event-surface">
-            <pre ref="remoteLogPanelEl" class="node-event-panel remote-log-panel"><span v-if="remoteLogs.length === 0" class="log-empty">暂无远端日志。节点渲染时会实时显示 Blender 输出。</span><template v-else>{{ remoteLogs.join('\n') }}</template></pre>
+            <pre ref="remoteLogPanelEl" class="node-event-panel remote-log-panel"><span v-if="remoteLogs.length === 0" class="log-empty">{{ t('nodeJobDetails.remoteLogsEmpty') }}</span><template v-else>{{ remoteLogs.join('\n') }}</template></pre>
           </div>
         </UCard>
       </div>
     </section>
   </div>
 
-  <div v-else class="empty">找不到该节点任务。</div>
+  <div v-else class="empty">{{ t('nodeJobDetails.notFound') }}</div>
 </template>
 
 <script setup lang="ts">
-import { JOB_STATUS_COLOR, JOB_STATUS_LABEL } from '~/composables/useJobStatus'
+import { JOB_STATUS_COLOR, useJobStatusLabel } from '~/composables/useJobStatus'
 import { formatShortTimestamp, formatTimestamp } from '~/utils/date-format'
 
 const route = useRoute()
 const nodesStore = useNodesStore()
 const toast = useToast()
+const { t } = useI18n()
 const loading = ref(true)
 const durationNow = ref(Date.now())
 const eventPanelEl = ref<HTMLElement | null>(null)
 const remoteLogPanelEl = ref<HTMLElement | null>(null)
 
-const STATUS_LABEL = JOB_STATUS_LABEL
+const statusLabel = useJobStatusLabel()
 const nodeId = computed(() => route.params.nodeId as string)
 const jobId = computed(() => route.params.jobId as string)
 const peer = computed(() => nodesStore.peers[nodeId.value] ?? null)
@@ -234,16 +235,20 @@ const detailBreadcrumbItems = computed(() => {
   const currentPeer = peer.value
   if (!currentPeer) return []
   return [
-    { label: '节点', to: '/nodes' },
+    { label: t('nav.nodes'), to: '/nodes' },
     { label: currentPeer.node.hostname },
   ]
 })
 const shadowScaleLabel = computed(() => {
   const scale = job.value?.shadowResolutionScaleOverride
-  return scale == null ? null : `阴影 ${Math.round(scale * 100)}%`
+  return scale == null ? null : t('nodeCard.shadowScale', { percent: Math.round(scale * 100) })
+})
+const shadowScaleValue = computed(() => {
+  const scale = job.value?.shadowResolutionScaleOverride
+  return scale == null ? null : t('nodeJobDetails.shadowScale', { percent: Math.round(scale * 100) })
 })
 const outputModeLabel = computed(() => {
-  if (job.value?.renderMode === 'quick_mp4') return '快速 MP4（Blender 直出）'
+  if (job.value?.renderMode === 'quick_mp4') return t('jobDetails.preview.quickMp4Output')
   return job.value?.outputFormat ?? '-'
 })
 const originalFrameRangeLabel = computed(() => {
@@ -327,16 +332,16 @@ const previewFrameLabel = computed(() => {
   const current = currentJob.currentFrame ?? 0
   if (current <= 0) return null
   const frame = Math.min(currentJob.frameEnd, Math.max(currentJob.frameStart, currentJob.frameStart + current - 1))
-  return `第 ${frame} 帧`
+  return t('nodeJobDetails.preview.frameBadge', { frame })
 })
 const previewText = computed(() => {
   const currentJob = job.value
-  if (!currentJob) return '暂无节点预览'
-  if (currentJob.renderMode === 'quick_mp4' && currentJob.status !== 'done') return '等待任务完成后可预览最终帧'
-  if (currentJob.outputFormat === 'OPEN_EXR' || currentJob.outputFormat === 'EXR') return 'EXR 不支持预览'
-  if (!peer.value?.connected) return '节点断开，暂不可加载预览'
-  if (previewError.value) return '节点预览加载失败，检查网络连接'
-  return previewLoading.value ? '加载节点预览' : '暂无节点预览'
+  if (!currentJob) return t('nodeJobDetails.preview.empty')
+  if (currentJob.renderMode === 'quick_mp4' && currentJob.status !== 'done') return t('nodeJobDetails.preview.waitingFinalFrame')
+  if (currentJob.outputFormat === 'OPEN_EXR' || currentJob.outputFormat === 'EXR') return t('nodeJobDetails.preview.exrUnsupported')
+  if (!peer.value?.connected) return t('nodeJobDetails.preview.disconnected')
+  if (previewError.value) return t('nodeJobDetails.preview.failed')
+  return previewLoading.value ? t('nodeJobDetails.preview.loading') : t('nodeJobDetails.preview.empty')
 })
 
 function formatTime(timestamp: number) {
@@ -347,10 +352,10 @@ async function copyPath(path: string) {
   if (!path) return
   try {
     await navigator.clipboard.writeText(path)
-    toast.add({ title: '路径已复制', color: 'success' })
+    toast.add({ title: t('jobDetails.copy.success'), color: 'success' })
   } catch (error) {
     toast.add({
-      title: '复制路径失败',
+      title: t('jobDetails.copy.failed'),
       description: error instanceof Error ? error.message : String(error),
       color: 'error',
     })

@@ -2,7 +2,7 @@
   <UModal
     :open="open"
     :close="false"
-    title="Blender 渲染参数"
+    :title="t('settingsModals.blenderRender.title')"
     :ui="{ content: 'job-modal-content settings-modal-content' }"
     @update:open="handleOpenChange"
   >
@@ -11,8 +11,8 @@
         <div class="settings-form-stack">
           <section class="surface-panel settings-field-panel">
             <div class="settings-field-copy">
-              <p class="settings-field-title">读取工程超时</p>
-              <p class="hint-text">用于读取 `.blend` 工程参数和 FPS，默认 300 秒，范围 30 到 800 秒。</p>
+              <p class="settings-field-title">{{ t('settingsModals.blenderRender.inspectTimeoutTitle') }}</p>
+              <p class="hint-text">{{ t('settingsModals.blenderRender.inspectTimeoutNote') }}</p>
             </div>
             <UFormField>
               <UInputNumber
@@ -31,8 +31,8 @@
 
           <section class="surface-panel settings-field-panel">
             <div class="settings-field-copy">
-              <p class="settings-field-title">崩溃自动重试次数</p>
-              <p class="hint-text">Blender 崩溃后自动续帧重试的最多次数，0 表示不重试，最多 10 次，默认 3 次。</p>
+              <p class="settings-field-title">{{ t('settingsModals.blenderRender.crashRetriesTitle') }}</p>
+              <p class="hint-text">{{ t('settingsModals.blenderRender.crashRetriesNote') }}</p>
             </div>
             <UFormField>
               <UInputNumber
@@ -57,7 +57,7 @@
           <div class="settings-modal-actions-start">
             <UButton
               icon="i-lucide-rotate-ccw"
-              label="恢复默认"
+              :label="t('common.resetDefaults')"
               color="neutral"
               variant="ghost"
               :disabled="saving"
@@ -67,7 +67,7 @@
           <div class="settings-modal-actions-end">
             <UButton
               icon="i-lucide-x"
-              label="取消"
+              :label="t('common.cancel')"
               color="neutral"
               variant="outline"
               :disabled="saving"
@@ -75,7 +75,7 @@
             />
             <UButton
               icon="i-lucide-save"
-              label="保存"
+              :label="t('common.save')"
               color="primary"
               variant="solid"
               :loading="saving"
@@ -98,6 +98,7 @@ const emit = defineEmits<{
 }>()
 
 const settingsStore = useSettingsStore()
+const { t } = useI18n()
 const defaultBlenderSettings = {
   blendInspectTimeoutSeconds: 300,
   maxCrashRetries: 3,

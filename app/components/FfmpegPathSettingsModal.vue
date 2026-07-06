@@ -2,7 +2,7 @@
   <UModal
     :open="open"
     :close="false"
-    title="FFmpeg 路径管理"
+    :title="t('settingsModals.ffmpegPath.title')"
     :ui="{ content: 'job-modal-content settings-modal-content' }"
     @update:open="handleOpenChange"
   >
@@ -10,13 +10,13 @@
       <div class="modal-stack">
         <div class="settings-card-header settings-compact-header">
           <div class="settings-field-copy">
-            <p class="settings-field-title">当前可执行文件</p>
-            <p class="hint-text">用于提交和执行转码任务，支持随时替换或清空。</p>
+            <p class="settings-field-title">{{ t('settingsModals.ffmpegPath.currentTitle') }}</p>
+            <p class="hint-text">{{ t('settingsModals.ffmpegPath.currentNote') }}</p>
           </div>
           <div class="settings-card-actions">
             <UButton
               icon="i-lucide-folder-open"
-              label="选择…"
+              :label="t('settingsModals.ffmpegPath.choose')"
               color="neutral"
               variant="outline"
               size="sm"
@@ -36,7 +36,7 @@
             </div>
           </div>
           <div class="blender-version-actions">
-            <UTooltip text="移除 FFmpeg" :content="{ side: 'left', sideOffset: 6 }">
+            <UTooltip :text="t('settingsModals.ffmpegPath.removeTooltip')" :content="{ side: 'left', sideOffset: 6 }">
               <UButton
                 icon="i-lucide-x"
                 color="error"
@@ -49,14 +49,14 @@
             </UTooltip>
           </div>
         </div>
-        <p v-else class="hint-text">未指定 FFmpeg，点击右上角“选择”手动指定可执行文件。</p>
+        <p v-else class="hint-text">{{ t('settingsModals.ffmpegPath.empty') }}</p>
 
         <div class="modal-actions settings-modal-actions">
           <div class="settings-modal-actions-start" />
           <div class="settings-modal-actions-end">
             <UButton
               icon="i-lucide-check"
-              label="完成"
+              :label="t('common.done')"
               color="primary"
               variant="solid"
               @click="emit('update:open', false)"
@@ -78,6 +78,7 @@ const emit = defineEmits<{
 }>()
 
 const settingsStore = useSettingsStore()
+const { t } = useI18n()
 const errorMessage = ref('')
 const picking = ref(false)
 const clearing = ref(false)
