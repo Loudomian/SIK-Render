@@ -732,6 +732,7 @@ async function submit() {
       output_path: config.outputPath,
       crf: config.crf,
       preset: config.preset,
+      encoder: settingsStore.settings.transcodeEncoder,
     })
   } finally {
     saving.value = false

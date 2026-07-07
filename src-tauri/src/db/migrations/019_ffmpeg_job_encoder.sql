@@ -1,0 +1,1 @@
+ALTER TABLE ffmpeg_jobs ADD COLUMN encoder TEXT NOT NULL DEFAULT 'auto';

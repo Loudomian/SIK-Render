@@ -94,6 +94,7 @@ pub fn run() {
             commands::transcode::get_ffmpeg_job_logs,
             commands::transcode::get_ffmpeg_job_latest_logs,
             commands::transcode::scan_folder_frame_groups,
+            commands::transcode::detect_video_encoders,
             commands::settings::get_settings,
             commands::settings::save_settings,
         ])

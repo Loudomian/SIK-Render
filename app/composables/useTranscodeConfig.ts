@@ -10,6 +10,22 @@ export const TRANSCODE_PRESET_OPTIONS = [
   'veryslow',
 ] as const
 
+export const TRANSCODE_ENCODER_OPTIONS = ['auto', 'cpu', 'nvenc', 'qsv', 'amf'] as const
+
+export function transcodeEncoderLabel(value: string | null | undefined, t: (key: string) => string): string {
+  if (value?.includes('->')) {
+    return value
+      .split('->')
+      .map(part => transcodeEncoderLabel(part, t))
+      .join(' -> ')
+  }
+
+  const normalized = TRANSCODE_ENCODER_OPTIONS.includes(value as typeof TRANSCODE_ENCODER_OPTIONS[number])
+    ? value
+    : 'auto'
+  return t(`settingsModals.ffmpegTranscode.encoderOptions.${normalized}`)
+}
+
 export function sanitizeTranscodeStemPart(value: string | null | undefined) {
   const normalized = (value ?? '').trim().replace(/[<>:"/\\|?*]+/g, '_')
   return normalized || 'render'

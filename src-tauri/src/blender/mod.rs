@@ -1,5 +1,6 @@
 pub mod command;
 pub mod discovery;
+pub mod encoder;
 pub mod ffmpeg;
 pub mod frame_path;
 pub mod metadata;

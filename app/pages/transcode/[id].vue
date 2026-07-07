@@ -88,6 +88,10 @@
                 <strong>{{ job.crf }} / {{ job.preset }}</strong>
               </span>
               <span class="job-meta-item detail-job-meta-item">
+                <span class="job-meta-label">{{ t('transcodeDetails.stats.videoEncoder') }}</span>
+                <strong>{{ encoderLabel }}</strong>
+              </span>
+              <span class="job-meta-item detail-job-meta-item">
                 <span class="job-meta-label">{{ t('transcodeDetails.stats.fileSize') }}</span>
                 <strong>{{ formatBytes(job.outputSizeBytes) }}</strong>
               </span>
@@ -233,6 +237,7 @@
 <script setup lang="ts">
 import type { TranscodeLogEvent } from '~/types'
 import { FFMPEG_STATUS_COLOR, useFfmpegStatusLabel } from '~/composables/useFfmpegStatus'
+import { transcodeEncoderLabel } from '~/composables/useTranscodeConfig'
 import { useDateFormatters } from '~/utils/date-format'
 import { parseLogLine } from '~/utils/log-line'
 import { resolveOutputDirectory } from '~/utils/output-path'
@@ -299,6 +304,9 @@ const specsLabel = computed(() => {
   const fps = formatFps(job.value?.fps)
   return fps === '—' ? fps : `${fps} FPS`
 })
+const encoderLabel = computed(() =>
+  transcodeEncoderLabel(job.value?.actualEncoder ?? job.value?.encoder, t),
+)
 
 async function handleCancel() {
   if (!job.value) return

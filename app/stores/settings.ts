@@ -13,6 +13,7 @@ export const useSettingsStore = defineStore('settings', () => {
     blendInspectTimeoutSeconds: 300,
     transcodeCrf: 18,
     transcodePreset: 'medium',
+    transcodeEncoder: 'auto',
     ffmpegMaxConcurrent: 2,
     renderOutputPathTemplate: './{blendFileName}_{frameStart}-{frameEnd}/{blendFileName}_{frame}',
     blenderTranscodeOutputPathTemplate: './transcode/{blendFileName}_{frameStart}-{frameEnd}.mp4',
@@ -91,6 +92,7 @@ export const useSettingsStore = defineStore('settings', () => {
       nodePort: loaded.nodePort ?? 47878,
       nodeInterfaceAddress: loaded.nodeInterfaceAddress || '192.168.1.1',
       nodeNote: loaded.nodeNote ?? '',
+      transcodeEncoder: loaded.transcodeEncoder ?? 'auto',
       locale: normalizeLocale(loaded.locale),
     }
     persistThemePreference(settings.value.theme)

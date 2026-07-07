@@ -138,6 +138,7 @@ export interface RenderLogEvent {
 
 export type FfmpegJobStatus = 'pending' | 'running' | 'done' | 'failed' | 'cancelled'
 export type FfmpegJobSourceType = 'blender_job' | 'folder'
+export type TranscodeEncoder = 'auto' | 'cpu' | 'nvenc' | 'qsv' | 'amf'
 
 export interface FfmpegJob {
   id: string
@@ -152,6 +153,8 @@ export interface FfmpegJob {
   outputPath: string
   crf: number
   preset: string
+  encoder: TranscodeEncoder
+  actualEncoder: TranscodeEncoder | `${TranscodeEncoder}->${TranscodeEncoder}` | null
   status: FfmpegJobStatus
   priority: number
   createdAt: number
@@ -174,6 +177,7 @@ export interface AddFfmpegJobPayload {
   output_path: string
   crf: number
   preset: string
+  encoder?: TranscodeEncoder
 }
 
 export interface RenderJobTranscodeConfig {
@@ -287,6 +291,7 @@ export interface AppSettings {
   blendInspectTimeoutSeconds: number
   transcodeCrf: number
   transcodePreset: string
+  transcodeEncoder: TranscodeEncoder
   ffmpegMaxConcurrent: number
   renderOutputPathTemplate: string
   blenderTranscodeOutputPathTemplate: string
@@ -306,6 +311,13 @@ export interface AppSettings {
   nodePort: number
   nodeInterfaceAddress: string
   nodeNote: string
+}
+
+export interface VideoEncoderDetection {
+  kind: Exclude<TranscodeEncoder, 'auto' | 'cpu'>
+  codec: string
+  label: string
+  available: boolean
 }
 
 export interface NodeInfo {

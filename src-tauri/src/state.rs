@@ -1,8 +1,10 @@
+use crate::blender::encoder::VideoEncoder;
 use crate::commands::settings::AppSettings;
 use crate::network::types::{PeerInfo, WsMessage};
 use chrono::Utc;
 use sqlx::SqlitePool;
 use std::collections::{HashMap, HashSet};
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::RwLock;
 use tokio::sync::{Mutex, Notify};
@@ -20,6 +22,7 @@ pub struct AppState {
     pub ffmpeg_notify: Arc<Notify>,
     pub active_jobs: Arc<Mutex<HashMap<String, u32>>>,
     pub active_ffmpeg_jobs: Arc<Mutex<HashMap<String, u32>>>,
+    pub encoder_probe_cache: Arc<Mutex<HashMap<PathBuf, Vec<VideoEncoder>>>>,
     pub cancelled_jobs: Arc<Mutex<HashSet<String>>>,
     pub interrupted_jobs: Arc<Mutex<HashSet<String>>>,
     pub shadow_recovery_requests: Arc<Mutex<HashMap<String, ShadowRecoveryRequest>>>,
@@ -46,6 +49,7 @@ impl AppState {
             ffmpeg_notify: Arc::new(Notify::new()),
             active_jobs: Arc::new(Mutex::new(HashMap::new())),
             active_ffmpeg_jobs: Arc::new(Mutex::new(HashMap::new())),
+            encoder_probe_cache: Arc::new(Mutex::new(HashMap::new())),
             cancelled_jobs: Arc::new(Mutex::new(HashSet::new())),
             interrupted_jobs: Arc::new(Mutex::new(HashSet::new())),
             shadow_recovery_requests: Arc::new(Mutex::new(HashMap::new())),

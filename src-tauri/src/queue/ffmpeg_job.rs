@@ -36,6 +36,8 @@ pub struct FfmpegJob {
     pub output_path: PathBuf,
     pub crf: u32,
     pub preset: String,
+    pub encoder: String,
+    pub actual_encoder: Option<String>,
     pub status: FfmpegJobStatus,
     pub priority: i32,
     pub created_at: i64,
@@ -61,6 +63,8 @@ pub struct DbFfmpegJob {
     pub output_path: String,
     pub crf: i32,
     pub preset: String,
+    pub encoder: String,
+    pub actual_encoder: Option<String>,
     pub status: FfmpegJobStatus,
     pub priority: i32,
     pub created_at: i64,
@@ -87,6 +91,11 @@ impl From<DbFfmpegJob> for FfmpegJob {
             output_path: PathBuf::from(value.output_path),
             crf: value.crf.max(0) as u32,
             preset: value.preset,
+            encoder: crate::blender::encoder::normalize_encoder(&value.encoder),
+            actual_encoder: value
+                .actual_encoder
+                .as_deref()
+                .map(crate::blender::encoder::normalize_actual_encoder),
             status: value.status,
             priority: value.priority,
             created_at: value.created_at,
@@ -112,6 +121,7 @@ impl FfmpegJob {
         output_path: PathBuf,
         crf: u32,
         preset: String,
+        encoder: String,
         priority: i32,
     ) -> Self {
         Self {
@@ -127,6 +137,8 @@ impl FfmpegJob {
             output_path,
             crf,
             preset,
+            encoder: crate::blender::encoder::normalize_encoder(&encoder),
+            actual_encoder: None,
             status: FfmpegJobStatus::Pending,
             priority,
             created_at: Utc::now().timestamp_millis(),

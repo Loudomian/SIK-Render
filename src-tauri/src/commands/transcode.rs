@@ -1,3 +1,7 @@
+use crate::blender::encoder::{
+    default_encoder, normalize_encoder, parse_encoder, probe_hardware_encoders,
+    resolve_auto_encoder, VideoEncoder,
+};
 use crate::commands::settings::AppSettings;
 use crate::path_template::{
     blend_file_name_from_path, default_context, folder_name_from_source_path, resolve_output_path,
@@ -32,6 +36,8 @@ pub struct AddFfmpegJobPayload {
     pub output_path: String,
     pub crf: u32,
     pub preset: String,
+    #[serde(default = "default_encoder")]
+    pub encoder: String,
 }
 
 #[derive(Clone, Serialize)]
@@ -54,6 +60,15 @@ pub struct TranscodeLogEvent {
 #[serde(rename_all = "camelCase")]
 pub struct FfmpegJobUpdatedEvent {
     pub job: FfmpegJob,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct VideoEncoderDetection {
+    pub kind: String,
+    pub codec: String,
+    pub label: String,
+    pub available: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -92,6 +107,12 @@ struct FrameFile {
 struct FfmpegProgress {
     frame: Option<u32>,
     speed: Option<f32>,
+}
+
+#[derive(Debug)]
+struct FfmpegProcessResult {
+    status: FfmpegJobStatus,
+    output_lines: Vec<String>,
 }
 
 #[derive(Serialize)]
@@ -183,6 +204,8 @@ struct FfmpegTomlOutputSection {
 struct FfmpegTomlEncodingSection {
     crf: u32,
     preset: String,
+    encoder: String,
+    actual_encoder: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -296,6 +319,7 @@ pub fn build_ffmpeg_payload_for_render_job(
                 .as_deref()
                 .unwrap_or(&settings.transcode_preset),
         ),
+        encoder: normalize_encoder(&settings.transcode_encoder),
     }
 }
 
@@ -730,6 +754,8 @@ pub fn write_ffmpeg_job_toml(job: &FfmpegJob) -> anyhow::Result<()> {
         encoding: FfmpegTomlEncodingSection {
             crf: job.crf,
             preset: job.preset.clone(),
+            encoder: job.encoder.clone(),
+            actual_encoder: job.actual_encoder.clone(),
         },
         result: FfmpegTomlResultSection {
             status: job.status.clone(),
@@ -783,6 +809,8 @@ pub async fn load_ffmpeg_job(pool: &sqlx::SqlitePool, id: &str) -> anyhow::Resul
             output_path,
             crf,
             preset,
+            encoder,
+            actual_encoder,
             status,
             priority,
             created_at,
@@ -819,6 +847,8 @@ async fn fetch_ffmpeg_jobs(pool: &sqlx::SqlitePool) -> Result<Vec<FfmpegJob>, sq
             output_path,
             crf,
             preset,
+            encoder,
+            actual_encoder,
             status,
             priority,
             created_at,
@@ -900,6 +930,245 @@ async fn persist_ffmpeg_progress(
     .await;
 }
 
+async fn persist_ffmpeg_actual_encoder(state: &AppState, job_id: &str, encoder: VideoEncoder) {
+    let _ = sqlx::query("UPDATE ffmpeg_jobs SET actual_encoder = ? WHERE id = ?")
+        .bind(encoder.to_string())
+        .bind(job_id)
+        .execute(&state.pool)
+        .await;
+}
+
+async fn persist_ffmpeg_encoder_fallback(
+    state: &AppState,
+    job_id: &str,
+    from: VideoEncoder,
+    to: VideoEncoder,
+) {
+    let _ = sqlx::query("UPDATE ffmpeg_jobs SET actual_encoder = ? WHERE id = ?")
+        .bind(format!("{from}->{to}"))
+        .bind(job_id)
+        .execute(&state.pool)
+        .await;
+}
+
+fn tail_lines(lines: &[String], count: usize) -> Vec<String> {
+    lines
+        .iter()
+        .rev()
+        .take(count)
+        .cloned()
+        .collect::<Vec<_>>()
+        .into_iter()
+        .rev()
+        .collect()
+}
+
+struct FfmpegProcessContext<'a> {
+    app: &'a AppHandle,
+    state: &'a AppState,
+    job: &'a FfmpegJob,
+    ffmpeg_executable: &'a Path,
+    concat_index_path: &'a Path,
+    log_file_path: &'a Path,
+    log_write_lock: &'a Arc<Mutex<()>>,
+    total_frames: u32,
+}
+
+async fn run_ffmpeg_process(
+    context: FfmpegProcessContext<'_>,
+    encoder: VideoEncoder,
+) -> Result<FfmpegProcessResult, String> {
+    let job = context.job;
+    if context
+        .state
+        .cancelled_ffmpeg_jobs
+        .lock()
+        .await
+        .remove(&job.id)
+    {
+        append_ffmpeg_log_line(
+            context.app,
+            &job.id,
+            context.log_file_path,
+            context.log_write_lock,
+            "[ffmpeg] FFmpeg Job cancelled",
+        )
+        .await;
+        return Ok(FfmpegProcessResult {
+            status: FfmpegJobStatus::Cancelled,
+            output_lines: Vec::new(),
+        });
+    }
+
+    let mut child = crate::blender::ffmpeg::concat_to_mp4_command(
+        context.ffmpeg_executable,
+        context.concat_index_path,
+        job.fps,
+        &job.output_path,
+        job.crf,
+        &job.preset,
+        encoder,
+    )
+    .into_tokio_command();
+    child.stdout(std::process::Stdio::piped());
+    child.stderr(std::process::Stdio::piped());
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    child.process_group(0);
+
+    let mut child = child
+        .spawn()
+        .map_err(|error| format!("Failed to launch ffmpeg: {error}"))?;
+
+    let stdout = child
+        .stdout
+        .take()
+        .ok_or_else(|| String::from("Failed to capture ffmpeg stdout"))?;
+    let stderr = child
+        .stderr
+        .take()
+        .ok_or_else(|| String::from("Failed to capture ffmpeg stderr"))?;
+
+    if let Some(pid) = child.id() {
+        context
+            .state
+            .active_ffmpeg_jobs
+            .lock()
+            .await
+            .insert(job.id.clone(), pid);
+    }
+
+    persist_ffmpeg_progress(context.state, &job.id, Some(0), context.total_frames).await;
+
+    let progress_job_id = job.id.clone();
+    let progress_state = context.state.clone();
+    let progress_app = context.app.clone();
+    let progress_log_file_path = context.log_file_path.to_path_buf();
+    let progress_log_write_lock = context.log_write_lock.clone();
+    let total_frames = context.total_frames;
+    let stdout_task = tokio::spawn(async move {
+        let mut collected = Vec::new();
+        let mut lines = BufReader::new(stdout).lines();
+        while let Ok(Some(line)) = lines.next_line().await {
+            append_ffmpeg_log_line(
+                &progress_app,
+                &progress_job_id,
+                &progress_log_file_path,
+                &progress_log_write_lock,
+                line.clone(),
+            )
+            .await;
+            if let Some(progress) = parse_ffmpeg_progress(&line) {
+                if let Some(frame) = progress.frame {
+                    persist_ffmpeg_progress(
+                        &progress_state,
+                        &progress_job_id,
+                        Some(frame.min(total_frames)),
+                        total_frames,
+                    )
+                    .await;
+                    let _ = progress_app.emit(
+                        "transcode-progress",
+                        TranscodeProgressEvent {
+                            job_id: progress_job_id.clone(),
+                            frame: frame.min(total_frames),
+                            total_frames,
+                            encode_speed: progress.speed,
+                        },
+                    );
+                }
+            }
+            collected.push(line);
+        }
+        collected
+    });
+
+    let stderr_job_id = job.id.clone();
+    let stderr_state = context.state.clone();
+    let stderr_app = context.app.clone();
+    let stderr_log_file_path = context.log_file_path.to_path_buf();
+    let stderr_log_write_lock = context.log_write_lock.clone();
+    let stderr_task = tokio::spawn(async move {
+        let mut collected = Vec::new();
+        let mut lines = BufReader::new(stderr).lines();
+        while let Ok(Some(line)) = lines.next_line().await {
+            append_ffmpeg_log_line(
+                &stderr_app,
+                &stderr_job_id,
+                &stderr_log_file_path,
+                &stderr_log_write_lock,
+                line.clone(),
+            )
+            .await;
+            if let Some(progress) = parse_ffmpeg_progress(&line) {
+                if let Some(frame) = progress.frame {
+                    persist_ffmpeg_progress(
+                        &stderr_state,
+                        &stderr_job_id,
+                        Some(frame.min(total_frames)),
+                        total_frames,
+                    )
+                    .await;
+                    let _ = stderr_app.emit(
+                        "transcode-progress",
+                        TranscodeProgressEvent {
+                            job_id: stderr_job_id.clone(),
+                            frame: frame.min(total_frames),
+                            total_frames,
+                            encode_speed: progress.speed,
+                        },
+                    );
+                }
+            }
+            collected.push(line);
+        }
+        collected
+    });
+
+    let status = child
+        .wait()
+        .await
+        .map_err(|error| format!("Failed to wait for ffmpeg: {error}"))?;
+    context
+        .state
+        .active_ffmpeg_jobs
+        .lock()
+        .await
+        .remove(&job.id);
+    let was_cancelled = context
+        .state
+        .cancelled_ffmpeg_jobs
+        .lock()
+        .await
+        .remove(&job.id);
+
+    let mut output_lines = stdout_task.await.unwrap_or_default();
+    output_lines.extend(stderr_task.await.unwrap_or_default());
+
+    if was_cancelled {
+        append_ffmpeg_log_line(
+            context.app,
+            &job.id,
+            context.log_file_path,
+            context.log_write_lock,
+            "[ffmpeg] FFmpeg Job cancelled",
+        )
+        .await;
+        return Ok(FfmpegProcessResult {
+            status: FfmpegJobStatus::Cancelled,
+            output_lines,
+        });
+    }
+
+    Ok(FfmpegProcessResult {
+        status: if status.success() {
+            FfmpegJobStatus::Done
+        } else {
+            FfmpegJobStatus::Failed
+        },
+        output_lines,
+    })
+}
+
 async fn resolve_blender_probe(state: &AppState, job: &FfmpegJob) -> PathBuf {
     if let Some(blender_job_id) = &job.source_blender_job_id {
         if let Ok(Some(path)) =
@@ -929,17 +1198,25 @@ async fn resolve_ffmpeg_executable(
     state: &AppState,
     job: &FfmpegJob,
 ) -> Result<(PathBuf, Option<&'static str>, Option<PathBuf>), String> {
+    let blender_probe = resolve_blender_probe(state, job).await;
+    resolve_ffmpeg_executable_with_blender_probe(app, state, &blender_probe).await
+}
+
+async fn resolve_ffmpeg_executable_with_blender_probe(
+    app: &AppHandle,
+    state: &AppState,
+    blender_probe: &Path,
+) -> Result<(PathBuf, Option<&'static str>, Option<PathBuf>), String> {
     let settings = state.cached_settings().unwrap_or_default();
     let configured_ffmpeg = if settings.ffmpeg_executable.trim().is_empty() {
         None
     } else {
         Some(PathBuf::from(settings.ffmpeg_executable.trim()))
     };
-    let blender_probe = resolve_blender_probe(state, job).await;
     let lookup = crate::blender::ffmpeg::find_ffmpeg_executable(
         Some(app),
         configured_ffmpeg.as_deref(),
-        &blender_probe,
+        blender_probe,
     );
 
     match lookup.executable {
@@ -966,6 +1243,45 @@ fn ffmpeg_missing_message(locale: &str, configured_ffmpeg: Option<&Path>) -> Str
         ),
         (_, None) => String::from("未找到可用的 FFmpeg。请前往设置页指定 FFmpeg 可执行文件。"),
     }
+}
+
+async fn cached_hardware_encoders(
+    state: &AppState,
+    ffmpeg_executable: &Path,
+    force: bool,
+) -> Vec<VideoEncoder> {
+    if !force {
+        if let Some(cached) = state
+            .encoder_probe_cache
+            .lock()
+            .await
+            .get(ffmpeg_executable)
+            .cloned()
+        {
+            return cached;
+        }
+    }
+
+    let available = probe_hardware_encoders(ffmpeg_executable).await;
+    state
+        .encoder_probe_cache
+        .lock()
+        .await
+        .insert(ffmpeg_executable.to_path_buf(), available.clone());
+    available
+}
+
+fn encoder_detection_rows(available: &[VideoEncoder]) -> Vec<VideoEncoderDetection> {
+    VideoEncoder::hardware_candidates()
+        .iter()
+        .copied()
+        .map(|kind| VideoEncoderDetection {
+            kind: kind.to_string(),
+            codec: kind.codec().to_string(),
+            label: kind.label().to_string(),
+            available: available.contains(&kind),
+        })
+        .collect()
 }
 
 pub async fn insert_ffmpeg_job(
@@ -1061,6 +1377,7 @@ pub async fn insert_ffmpeg_job(
         resolved_output_path,
         payload.crf.min(51),
         normalize_preset(&payload.preset),
+        normalize_encoder(&payload.encoder),
         0,
     );
 
@@ -1098,6 +1415,8 @@ pub async fn insert_ffmpeg_job(
             output_path,
             crf,
             preset,
+            encoder,
+            actual_encoder,
             status,
             priority,
             created_at,
@@ -1107,7 +1426,7 @@ pub async fn insert_ffmpeg_job(
             total_frames,
             output_size_bytes,
             output_duration_secs
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         "#,
     )
     .bind(&job.id)
@@ -1122,6 +1441,8 @@ pub async fn insert_ffmpeg_job(
     .bind(job.output_path.to_string_lossy().to_string())
     .bind(job.crf as i32)
     .bind(&job.preset)
+    .bind(&job.encoder)
+    .bind(&job.actual_encoder)
     .bind(FfmpegJobStatus::Pending)
     .bind(job.priority)
     .bind(job.created_at)
@@ -1364,152 +1685,100 @@ pub async fn run_ffmpeg_job(
     )
     .await;
 
-    let mut child = crate::blender::ffmpeg::concat_to_mp4_command(
-        &ffmpeg_executable,
-        &concat_index_path,
-        job.fps,
-        &job.output_path,
-        job.crf,
-        &job.preset,
-    )
-    .into_tokio_command();
-    child.stdout(std::process::Stdio::piped());
-    child.stderr(std::process::Stdio::piped());
-    #[cfg(any(target_os = "linux", target_os = "macos"))]
-    child.process_group(0);
+    let requested_encoder = parse_encoder(&job.encoder);
+    let available_encoders = cached_hardware_encoders(&state, &ffmpeg_executable, false).await;
+    let resolved_encoder = match requested_encoder {
+        VideoEncoder::Auto => resolve_auto_encoder(&available_encoders),
+        explicit => explicit,
+    };
 
-    let mut child = child
-        .spawn()
-        .map_err(|error| format!("Failed to launch ffmpeg: {error}"))?;
-
-    let stdout = child
-        .stdout
-        .take()
-        .ok_or_else(|| String::from("Failed to capture ffmpeg stdout"))?;
-    let stderr = child
-        .stderr
-        .take()
-        .ok_or_else(|| String::from("Failed to capture ffmpeg stderr"))?;
-
-    state.cancelled_ffmpeg_jobs.lock().await.remove(&job.id);
-    if let Some(pid) = child.id() {
-        state
-            .active_ffmpeg_jobs
-            .lock()
-            .await
-            .insert(job.id.clone(), pid);
-    }
-
-    persist_ffmpeg_progress(&state, &job.id, Some(0), total_frames).await;
-
-    let progress_job_id = job.id.clone();
-    let progress_state = state.clone();
-    let progress_app = app.clone();
-    let progress_log_file_path = log_file_path.clone();
-    let progress_log_write_lock = log_write_lock.clone();
-    let stdout_task = tokio::spawn(async move {
-        let mut collected = Vec::new();
-        let mut lines = BufReader::new(stdout).lines();
-        while let Ok(Some(line)) = lines.next_line().await {
-            append_ffmpeg_log_line(
-                &progress_app,
-                &progress_job_id,
-                &progress_log_file_path,
-                &progress_log_write_lock,
-                line.clone(),
-            )
-            .await;
-            if let Some(progress) = parse_ffmpeg_progress(&line) {
-                if let Some(frame) = progress.frame {
-                    persist_ffmpeg_progress(
-                        &progress_state,
-                        &progress_job_id,
-                        Some(frame.min(total_frames)),
-                        total_frames,
-                    )
-                    .await;
-                    let _ = progress_app.emit(
-                        "transcode-progress",
-                        TranscodeProgressEvent {
-                            job_id: progress_job_id.clone(),
-                            frame: frame.min(total_frames),
-                            total_frames,
-                            encode_speed: progress.speed,
-                        },
-                    );
-                }
-            }
-            collected.push(line);
-        }
-        collected
-    });
-
-    let stderr_job_id = job.id.clone();
-    let stderr_state = state.clone();
-    let stderr_app = app.clone();
-    let stderr_log_file_path = log_file_path.clone();
-    let stderr_log_write_lock = log_write_lock.clone();
-    let stderr_task = tokio::spawn(async move {
-        let mut collected = Vec::new();
-        let mut lines = BufReader::new(stderr).lines();
-        while let Ok(Some(line)) = lines.next_line().await {
-            append_ffmpeg_log_line(
-                &stderr_app,
-                &stderr_job_id,
-                &stderr_log_file_path,
-                &stderr_log_write_lock,
-                line.clone(),
-            )
-            .await;
-            if let Some(progress) = parse_ffmpeg_progress(&line) {
-                if let Some(frame) = progress.frame {
-                    persist_ffmpeg_progress(
-                        &stderr_state,
-                        &stderr_job_id,
-                        Some(frame.min(total_frames)),
-                        total_frames,
-                    )
-                    .await;
-                    let _ = stderr_app.emit(
-                        "transcode-progress",
-                        TranscodeProgressEvent {
-                            job_id: stderr_job_id.clone(),
-                            frame: frame.min(total_frames),
-                            total_frames,
-                            encode_speed: progress.speed,
-                        },
-                    );
-                }
-            }
-            collected.push(line);
-        }
-        collected
-    });
-
-    let status = child
-        .wait()
-        .await
-        .map_err(|error| format!("Failed to wait for ffmpeg: {error}"))?;
-    state.active_ffmpeg_jobs.lock().await.remove(&job.id);
-    let was_cancelled = state.cancelled_ffmpeg_jobs.lock().await.remove(&job.id);
-
-    let mut output_lines = stdout_task.await.unwrap_or_default();
-    output_lines.extend(stderr_task.await.unwrap_or_default());
-
-    if was_cancelled {
+    if requested_encoder == VideoEncoder::Auto {
         append_ffmpeg_log_line(
             &app,
             &job.id,
             &log_file_path,
             &log_write_lock,
-            "[ffmpeg] FFmpeg Job cancelled",
+            format!(
+                "[ffmpeg] encoder: {} ({}, auto)",
+                resolved_encoder.codec(),
+                resolved_encoder.label()
+            ),
         )
         .await;
+    } else {
+        append_ffmpeg_log_line(
+            &app,
+            &job.id,
+            &log_file_path,
+            &log_write_lock,
+            format!(
+                "[ffmpeg] encoder: {} ({}, requested)",
+                resolved_encoder.codec(),
+                resolved_encoder.label()
+            ),
+        )
+        .await;
+    }
+
+    persist_ffmpeg_actual_encoder(&state, &job.id, resolved_encoder).await;
+    let mut result = run_ffmpeg_process(
+        FfmpegProcessContext {
+            app: &app,
+            state: &state,
+            job: &job,
+            ffmpeg_executable: &ffmpeg_executable,
+            concat_index_path: &concat_index_path,
+            log_file_path: &log_file_path,
+            log_write_lock: &log_write_lock,
+            total_frames,
+        },
+        resolved_encoder,
+    )
+    .await?;
+
+    if result.status == FfmpegJobStatus::Failed && resolved_encoder.is_hardware() {
+        append_ffmpeg_log_line(
+            &app,
+            &job.id,
+            &log_file_path,
+            &log_write_lock,
+            "[ffmpeg] hardware encoder failed, retrying with CPU (libx264)",
+        )
+        .await;
+        let hardware_output_lines = result.output_lines.clone();
+        persist_ffmpeg_encoder_fallback(&state, &job.id, resolved_encoder, VideoEncoder::Cpu)
+            .await;
+        result = run_ffmpeg_process(
+            FfmpegProcessContext {
+                app: &app,
+                state: &state,
+                job: &job,
+                ffmpeg_executable: &ffmpeg_executable,
+                concat_index_path: &concat_index_path,
+                log_file_path: &log_file_path,
+                log_write_lock: &log_write_lock,
+                total_frames,
+            },
+            VideoEncoder::Cpu,
+        )
+        .await?;
+        if result.status == FfmpegJobStatus::Failed {
+            let mut output_lines = tail_lines(&hardware_output_lines, 10);
+            output_lines.push(String::from(
+                "[ffmpeg] hardware encoder failed, CPU fallback also failed",
+            ));
+            output_lines.extend(tail_lines(&result.output_lines, 13));
+            result.output_lines = output_lines;
+        }
+    }
+
+    if result.status == FfmpegJobStatus::Cancelled {
         return Ok(FfmpegJobStatus::Cancelled);
     }
 
-    if !status.success() {
-        let details = output_lines
+    if result.status == FfmpegJobStatus::Failed {
+        let details = result
+            .output_lines
             .iter()
             .rev()
             .take(24)
@@ -1545,6 +1814,25 @@ pub async fn run_ffmpeg_job(
     .await;
 
     Ok(FfmpegJobStatus::Done)
+}
+
+#[tauri::command]
+pub async fn detect_video_encoders(
+    force: Option<bool>,
+    state: State<'_, AppState>,
+    app: tauri::AppHandle,
+) -> Result<Vec<VideoEncoderDetection>, String> {
+    let settings = state.cached_settings().unwrap_or_default();
+    let blender_probe = if settings.default_blender.trim().is_empty() {
+        std::env::current_exe().unwrap_or_else(|_| PathBuf::from("ffmpeg"))
+    } else {
+        PathBuf::from(settings.default_blender.trim())
+    };
+    let (ffmpeg_executable, _, _) =
+        resolve_ffmpeg_executable_with_blender_probe(&app, state.inner(), &blender_probe).await?;
+    let available =
+        cached_hardware_encoders(state.inner(), &ffmpeg_executable, force.unwrap_or(false)).await;
+    Ok(encoder_detection_rows(&available))
 }
 
 #[tauri::command]

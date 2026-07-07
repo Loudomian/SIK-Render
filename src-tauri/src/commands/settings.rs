@@ -2,6 +2,8 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use tauri::{AppHandle, Manager};
 
+use crate::blender::encoder::{default_encoder, normalize_encoder};
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AppSettings {
@@ -13,6 +15,8 @@ pub struct AppSettings {
     pub transcode_crf: u32,
     #[serde(default = "default_transcode_preset")]
     pub transcode_preset: String,
+    #[serde(default = "default_encoder")]
+    pub transcode_encoder: String,
     #[serde(default = "default_ffmpeg_max_concurrent")]
     pub ffmpeg_max_concurrent: u32,
     #[serde(default = "default_render_output_path_template")]
@@ -60,6 +64,7 @@ impl Default for AppSettings {
             blend_inspect_timeout_seconds: default_blend_inspect_timeout_seconds(),
             transcode_crf: default_transcode_crf(),
             transcode_preset: default_transcode_preset(),
+            transcode_encoder: default_encoder(),
             ffmpeg_max_concurrent: default_ffmpeg_max_concurrent(),
             render_output_path_template: default_render_output_path_template(),
             blender_transcode_output_path_template: default_blender_transcode_output_path_template(
@@ -113,6 +118,8 @@ struct ToolsSettings {
     transcode_crf: u32,
     #[serde(default = "default_transcode_preset")]
     transcode_preset: String,
+    #[serde(default = "default_encoder")]
+    transcode_encoder: String,
     #[serde(default = "default_ffmpeg_max_concurrent")]
     ffmpeg_max_concurrent: u32,
     #[serde(default = "default_max_crash_retries")]
@@ -385,6 +392,7 @@ impl From<SettingsFile> for AppSettings {
             ),
             transcode_crf: value.tools.transcode_crf.min(51),
             transcode_preset: normalize_preset(&value.tools.transcode_preset),
+            transcode_encoder: normalize_encoder(&value.tools.transcode_encoder),
             ffmpeg_max_concurrent: normalize_ffmpeg_max_concurrent(
                 value.tools.ffmpeg_max_concurrent,
             ),
@@ -432,6 +440,7 @@ impl From<AppSettings> for SettingsFile {
                 ),
                 transcode_crf: value.transcode_crf.min(51),
                 transcode_preset: value.transcode_preset.clone(),
+                transcode_encoder: normalize_encoder(&value.transcode_encoder),
                 ffmpeg_max_concurrent: normalize_ffmpeg_max_concurrent(value.ffmpeg_max_concurrent),
                 max_crash_retries: normalize_max_crash_retries(value.max_crash_retries),
             },
@@ -589,6 +598,7 @@ pub fn save_settings(app: AppHandle, settings: AppSettings) -> Result<(), String
         normalize_blend_inspect_timeout_seconds(settings.blend_inspect_timeout_seconds);
     settings.transcode_crf = settings.transcode_crf.min(51);
     settings.transcode_preset = normalize_preset(&settings.transcode_preset);
+    settings.transcode_encoder = normalize_encoder(&settings.transcode_encoder);
     settings.ffmpeg_max_concurrent =
         normalize_ffmpeg_max_concurrent(settings.ffmpeg_max_concurrent);
     settings.render_output_path_template = normalize_output_path_template(

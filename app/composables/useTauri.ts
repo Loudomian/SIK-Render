@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core'
-import type { AddFfmpegJobPayload, AddJobPayload, AppSettings, BlenderInstall, BlendProjectSettings, FfmpegJob, FolderFrameGroup, FolderFramesInspection, JobLogSummary, JobPreviewDimensionsUpdate, NodeInfo, NodeInterfaceInfo, NodeJobEvent, OutputPathTemplatePreview, PathTemplateKind, PeerInfo, QueueState, RenderJob, RenderedFramesStatus, RuntimeResetResult, ShadowRecoveryResponse, ToolchainStatus } from '~/types'
+import type { AddFfmpegJobPayload, AddJobPayload, AppSettings, BlenderInstall, BlendProjectSettings, FfmpegJob, FolderFrameGroup, FolderFramesInspection, JobLogSummary, JobPreviewDimensionsUpdate, NodeInfo, NodeInterfaceInfo, NodeJobEvent, OutputPathTemplatePreview, PathTemplateKind, PeerInfo, QueueState, RenderJob, RenderedFramesStatus, RuntimeResetResult, ShadowRecoveryResponse, ToolchainStatus, VideoEncoderDetection } from '~/types'
 
 // Typed wrappers around Tauri IPC commands
 
@@ -160,6 +160,9 @@ const tauriApi = {
 
   getFfmpegJobLatestLogs: (jobId: string) =>
     invoke<string[]>('get_ffmpeg_job_latest_logs', { jobId }),
+
+  detectVideoEncoders: (force = false) =>
+    invoke<VideoEncoderDetection[]>('detect_video_encoders', { force }),
 
   getSettings: () =>
     invoke<AppSettings>('get_settings'),

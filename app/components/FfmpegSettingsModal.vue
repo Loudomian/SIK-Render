@@ -47,6 +47,40 @@
 
           <section class="surface-panel settings-field-panel">
             <div class="settings-field-copy">
+              <p class="settings-field-title">{{ t('settingsModals.ffmpegTranscode.encoderTitle') }}</p>
+              <p
+                v-for="line in encoderDetectionLines"
+                :key="line"
+                class="hint-text"
+              >
+                {{ line }}
+              </p>
+            </div>
+            <div class="settings-card-actions">
+              <UFormField>
+                <USelect
+                  v-model="draft.transcodeEncoder"
+                  :items="transcodeEncoderOptions"
+                  :disabled="saving"
+                  trailing-icon="i-lucide-chevron-down"
+                  :ui="{ base: 'w-48' }"
+                />
+              </UFormField>
+              <UButton
+                icon="i-lucide-refresh-cw"
+                :label="t('settingsModals.ffmpegTranscode.detectEncoders')"
+                color="neutral"
+                variant="ghost"
+                size="sm"
+                :loading="detectingEncoders"
+                :disabled="saving"
+                @click="detectEncoders(true)"
+              />
+            </div>
+          </section>
+
+          <section class="surface-panel settings-field-panel">
+            <div class="settings-field-copy">
               <p class="settings-field-title">{{ t('settingsModals.ffmpegTranscode.concurrentTitle') }}</p>
               <p class="hint-text">{{ t('settingsModals.ffmpegTranscode.concurrentNote') }}</p>
             </div>
@@ -104,6 +138,9 @@
 </template>
 
 <script setup lang="ts">
+import type { SelectItem } from '@nuxt/ui'
+import type { TranscodeEncoder, VideoEncoderDetection } from '~/types'
+
 const props = defineProps<{
   open: boolean
 }>()
@@ -113,10 +150,12 @@ const emit = defineEmits<{
 }>()
 
 const settingsStore = useSettingsStore()
-const { t } = useI18n()
+const { t, locale } = useI18n()
+const { detectVideoEncoders } = useTauri()
 const defaultFfmpegSettings = {
   transcodeCrf: 18,
   transcodePreset: 'medium',
+  transcodeEncoder: 'auto' as TranscodeEncoder,
   ffmpegMaxConcurrent: 2,
 }
 
@@ -131,20 +170,60 @@ const transcodePresetOptions = [
   'slower',
   'veryslow',
 ]
+const transcodeEncoderOptions = computed<SelectItem[]>(() =>
+  TRANSCODE_ENCODER_OPTIONS.map(value => ({
+    label: t(`settingsModals.ffmpegTranscode.encoderOptions.${value}`),
+    value,
+  })),
+)
 
 const draft = reactive({
   transcodeCrf: defaultFfmpegSettings.transcodeCrf,
   transcodePreset: defaultFfmpegSettings.transcodePreset,
+  transcodeEncoder: defaultFfmpegSettings.transcodeEncoder,
   ffmpegMaxConcurrent: defaultFfmpegSettings.ffmpegMaxConcurrent,
 })
 const saving = ref(false)
+const detectingEncoders = ref(false)
+const encoderDetections = ref<VideoEncoderDetection[]>([])
 const errorMessage = ref('')
+
+const encoderDetectionLines = computed(() => {
+  if (detectingEncoders.value) return [t('settingsModals.ffmpegTranscode.detectingEncoders')]
+  if (!encoderDetections.value.length) return [t('settingsModals.ffmpegTranscode.detectUnknown')]
+
+  const separator = locale.value.startsWith('zh') ? '、' : ', '
+  const available = encoderDetections.value.filter(item => item.available).map(item => item.label)
+  const unavailable = encoderDetections.value.filter(item => !item.available).map(item => item.label)
+
+  return [
+    t('settingsModals.ffmpegTranscode.detectAvailable', {
+      available: available.length ? available.join(separator) : t('common.none'),
+    }),
+    t('settingsModals.ffmpegTranscode.detectUnavailable', {
+      unavailable: unavailable.length ? unavailable.join(separator) : t('common.none'),
+    }),
+  ]
+})
 
 function syncDraft() {
   draft.transcodeCrf = settingsStore.settings.transcodeCrf
   draft.transcodePreset = settingsStore.settings.transcodePreset
+  draft.transcodeEncoder = settingsStore.settings.transcodeEncoder
   draft.ffmpegMaxConcurrent = settingsStore.settings.ffmpegMaxConcurrent
   errorMessage.value = ''
+}
+
+async function detectEncoders(force = false) {
+  if (detectingEncoders.value) return
+  detectingEncoders.value = true
+  try {
+    encoderDetections.value = await detectVideoEncoders(force)
+  } catch (error) {
+    errorMessage.value = error instanceof Error ? error.message : String(error)
+  } finally {
+    detectingEncoders.value = false
+  }
 }
 
 watch(
@@ -152,11 +231,13 @@ watch(
     props.open,
     settingsStore.settings.transcodeCrf,
     settingsStore.settings.transcodePreset,
+    settingsStore.settings.transcodeEncoder,
     settingsStore.settings.ffmpegMaxConcurrent,
   ] as const,
   ([open]) => {
     if (!open) return
     syncDraft()
+    void detectEncoders(false)
   },
   { immediate: true },
 )
@@ -168,6 +249,7 @@ function handleOpenChange(value: boolean) {
 function resetToDefaults() {
   draft.transcodeCrf = defaultFfmpegSettings.transcodeCrf
   draft.transcodePreset = defaultFfmpegSettings.transcodePreset
+  draft.transcodeEncoder = defaultFfmpegSettings.transcodeEncoder
   draft.ffmpegMaxConcurrent = defaultFfmpegSettings.ffmpegMaxConcurrent
   errorMessage.value = ''
 }
@@ -181,6 +263,7 @@ async function saveSettingsDraft() {
   try {
     settingsStore.settings.transcodeCrf = draft.transcodeCrf
     settingsStore.settings.transcodePreset = draft.transcodePreset
+    settingsStore.settings.transcodeEncoder = draft.transcodeEncoder
     settingsStore.settings.ffmpegMaxConcurrent = draft.ffmpegMaxConcurrent
     await settingsStore.save()
     emit('update:open', false)

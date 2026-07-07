@@ -3,6 +3,8 @@ use std::path::{Path, PathBuf};
 use tauri::{AppHandle, Manager};
 use tokio::process::Command as TokioCommand;
 
+use super::encoder::{encoder_args, VideoEncoder};
+
 /// Local single-machine variant of Flamenco's FFmpeg command model:
 /// `{exe} {argsBefore} {inputArgs} {args} {outputFile}`.
 #[derive(Debug, Clone)]
@@ -142,8 +144,9 @@ pub fn concat_to_mp4_command(
     output_file: &Path,
     crf: u32,
     preset: &str,
+    encoder: VideoEncoder,
 ) -> FfmpegCliCommand {
-    FfmpegCliCommand::new(ffmpeg_executable, output_file)
+    let mut command = FfmpegCliCommand::new(ffmpeg_executable, output_file)
         .arg_before("-hide_banner")
         .arg_before("-y")
         .input_arg("-f")
@@ -154,13 +157,13 @@ pub fn concat_to_mp4_command(
         .input_arg(concat_index.as_os_str().to_os_string())
         .arg("-r")
         .arg(format!("{fps:.6}"))
-        .arg("-an")
-        .arg("-c:v")
-        .arg("libx264")
-        .arg("-preset")
-        .arg(preset)
-        .arg("-crf")
-        .arg(crf.to_string())
+        .arg("-an");
+
+    for (key, value) in encoder_args(encoder, crf, preset) {
+        command = command.arg(key).arg(value);
+    }
+
+    command
         .arg("-pix_fmt")
         .arg("yuv420p")
         .arg("-movflags")
