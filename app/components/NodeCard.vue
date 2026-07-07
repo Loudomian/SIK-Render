@@ -260,6 +260,7 @@ const previewSourceUrl = computed(() => {
   return `http://${props.node.ipAddress}:${props.node.port}/api/jobs/${encodeURIComponent(job.id)}/preview?t=${encodeURIComponent(previewFrameToken.value)}`
 })
 const displayPreviewUrl = ref<string | null>(null)
+const previewAspect = ref(aspectFromDimensions(previewJob.value?.previewWidth, previewJob.value?.previewHeight))
 const previewVisible = ref(false)
 const previewLoading = ref(false)
 let previewLoadToken = 0
@@ -284,19 +285,32 @@ const { cardInfoEl, cardInfoHeight, syncHeightAfterTick } = useCardInfoHeight()
 const forgetting = ref(false)
 const showForgetAction = computed(() => !props.isLocal && !props.connected)
 const previewStyle = computed(() =>
-  cardInfoHeight.value ? { '--node-preview-height': `${cardInfoHeight.value}px` } : {},
+  ({
+    ...(previewAspect.value ? { '--preview-aspect': previewAspect.value } : {}),
+    ...(cardInfoHeight.value ? { '--preview-height': `${cardInfoHeight.value}px` } : {}),
+  }),
 )
+
+function aspectFromDimensions(width: number | null | undefined, height: number | null | undefined) {
+  if (!width || !height || width <= 0 || height <= 0) return null
+  return `${width} / ${height}`
+}
+
+function applyStoredPreviewAspect() {
+  previewAspect.value = aspectFromDimensions(previewJob.value?.previewWidth, previewJob.value?.previewHeight)
+}
 
 function resetPreview() {
   displayPreviewUrl.value = null
+  applyStoredPreviewAspect()
   previewVisible.value = false
   previewLoading.value = false
 }
 
 function preloadPreview(url: string) {
-  return new Promise<void>((resolve, reject) => {
+  return new Promise<{ width: number, height: number }>((resolve, reject) => {
     const img = new Image()
-    img.onload = () => resolve()
+    img.onload = () => resolve({ width: img.naturalWidth, height: img.naturalHeight })
     img.onerror = () => reject(new Error('node preview load failed'))
     img.src = url
   })
@@ -313,11 +327,12 @@ async function refreshPreview() {
 
   try {
     previewLoading.value = !displayPreviewUrl.value
-    await preloadPreview(url)
+    const { width, height } = await preloadPreview(url)
     if (token !== previewLoadToken) return
 
     const hadPreview = !!displayPreviewUrl.value
     displayPreviewUrl.value = url
+    previewAspect.value = aspectFromDimensions(width, height)
     previewLoading.value = false
 
     if (hadPreview) {
@@ -339,6 +354,16 @@ async function refreshPreview() {
 }
 
 watch(previewSourceUrl, () => { void refreshPreview() }, { immediate: true })
+
+watch(
+  () => [previewJob.value?.previewWidth, previewJob.value?.previewHeight] as const,
+  () => {
+    if (!displayPreviewUrl.value || !previewVisible.value) {
+      applyStoredPreviewAspect()
+    }
+  },
+  { immediate: true },
+)
 
 watch(
   () => [

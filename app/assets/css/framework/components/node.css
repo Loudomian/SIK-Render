@@ -69,7 +69,7 @@
 
 .node-card-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(12rem, 18rem);
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: 1rem;
   align-items: start;
 }
@@ -118,10 +118,11 @@
   position: relative;
   display: grid;
   place-items: center;
-  aspect-ratio: 16 / 9;
-  width: 100%;
-  height: var(--node-preview-height, auto);
-  min-height: 9.5rem;
+  aspect-ratio: var(--preview-aspect, 16 / 9);
+  align-self: start;
+  width: auto;
+  height: var(--preview-height, auto);
+  max-width: min(32rem, 42vw);
   overflow: hidden;
   border: 1px solid var(--ui-border-muted);
   border-radius: 0.8rem;
@@ -129,17 +130,19 @@
 }
 
 .node-preview-loading::after {
+  content: '';
   position: absolute;
   inset: 0;
-  content: "";
-  background: linear-gradient(
-    110deg,
-    transparent 0%,
-    color-mix(in srgb, var(--ui-bg-elevated) 56%, transparent) 42%,
-    transparent 72%
-  );
+  background:
+    linear-gradient(
+      110deg,
+      transparent 0%,
+      color-mix(in srgb, var(--ui-bg-elevated) 52%, transparent) 45%,
+      transparent 100%
+    );
   transform: translateX(-100%);
-  animation: node-preview-sheen 1.2s ease-in-out infinite;
+  animation: job-preview-sheen 1.2s ease-in-out infinite;
+  pointer-events: none;
 }
 
 .node-preview-image {
@@ -148,11 +151,13 @@
   height: 100%;
   object-fit: contain;
   opacity: 0;
-  transition: opacity 160ms ease;
+  transform: scale(1.012);
+  transition: opacity 220ms ease, transform 260ms ease;
 }
 
 .node-preview-image-visible {
   opacity: 1;
+  transform: scale(1);
 }
 
 .node-preview-placeholder {
@@ -166,10 +171,14 @@
   padding: 1rem;
   color: var(--ui-text-muted);
   text-align: center;
+  transition: opacity 180ms ease, transform 220ms ease, visibility 180ms ease;
 }
 
 .node-preview-placeholder-hidden {
   opacity: 0;
+  transform: scale(0.988);
+  visibility: hidden;
+  pointer-events: none;
 }
 
 .node-preview-badge {
@@ -177,12 +186,6 @@
   right: 0.65rem;
   bottom: 0.65rem;
   pointer-events: none;
-}
-
-@keyframes node-preview-sheen {
-  to {
-    transform: translateX(100%);
-  }
 }
 
 .node-card .job-meta-item strong {
@@ -216,7 +219,7 @@
     transparent 72%
   );
   transform: translateX(-100%);
-  animation: node-preview-sheen 1.2s ease-in-out infinite;
+  animation: job-preview-sheen 1.2s ease-in-out infinite;
 }
 
 .node-event-section .detail-card-body {
@@ -340,7 +343,9 @@
   }
 
   .node-preview {
+    width: 100%;
     height: auto;
+    max-width: none;
     min-height: 0;
   }
 
