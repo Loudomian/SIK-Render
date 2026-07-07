@@ -4,9 +4,9 @@
   <div v-else-if="peer && job" class="detail-page node-job-detail-page">
     <section class="page-hero detail-hero">
       <div class="page-hero-copy detail-title">
-        <div class="detail-heading-stack">
-          <div class="detail-title-row">
-            <div class="detail-title-main">
+        <div class="queue-heading-row detail-heading-row">
+          <div class="queue-heading-copy detail-heading-copy">
+            <div class="queue-heading-title detail-heading-title">
               <UBreadcrumb
                 as="h1"
                 :items="detailBreadcrumbItems"
@@ -37,16 +37,71 @@
                 <UBadge v-if="shadowScaleLabel" :label="shadowScaleLabel" color="warning" variant="subtle" />
               </div>
             </div>
-            <div class="detail-header-actions" />
+            <p v-if="job.note" class="page-note detail-note">{{ job.note }}</p>
+            <p class="page-note detail-note node-detail-note">{{ peer.node.hostname }} · {{ peer.node.ipAddress }}:{{ peer.node.port }}</p>
           </div>
-          <p v-if="job.note" class="page-note detail-note">{{ job.note }}</p>
-          <p class="page-note detail-note">{{ peer.node.hostname }} · {{ peer.node.ipAddress }}:{{ peer.node.port }}</p>
+          <div class="detail-header-actions" />
         </div>
       </div>
     </section>
 
     <section class="detail-content">
       <div class="detail-grid">
+        <UCard variant="subtle" :ui="{ root: 'detail-section detail-full', body: 'detail-card-body' }">
+          <h2 class="detail-card-title">{{ t('jobDetails.projectDetails') }}</h2>
+          <div class="detail-job-meta-stack">
+            <div class="detail-job-meta">
+              <span class="job-meta-item detail-job-meta-item">
+                <span class="job-meta-label">{{ t('jobDetails.stats.format') }}</span>
+                <strong>{{ outputModeLabel }}</strong>
+              </span>
+              <span class="job-meta-item detail-job-meta-item">
+                <span class="job-meta-label">{{ t('jobDetails.stats.frameRange') }}</span>
+                <strong>{{ originalFrameRangeLabel }} ({{ t('jobDetails.stats.totalFrames', { count: originalFrameTotal }) }})</strong>
+              </span>
+              <span v-if="showCurrentExecutionRange" class="job-meta-item detail-job-meta-item">
+                <span class="job-meta-label">{{ t('jobDetails.stats.currentExecution') }}</span>
+                <strong>{{ currentExecutionRangeLabel }} ({{ t('jobDetails.stats.totalFrames', { count: currentExecutionTotal }) }})</strong>
+              </span>
+              <span class="job-meta-item detail-job-meta-item">
+                <span class="job-meta-label">{{ t('nodeJobDetails.currentJob') }}</span>
+                <strong>{{ currentJobLabel }}</strong>
+              </span>
+              <span v-if="job.crashCount > 0" class="job-meta-item detail-job-meta-item">
+                <span class="job-meta-label">{{ t('jobDetails.stats.crashRecovery') }}</span>
+                <strong>{{ t('jobDetails.stats.crashTimes', { count: job.crashCount }) }}</strong>
+              </span>
+              <span v-if="shadowScaleLabel" class="job-meta-item detail-job-meta-item">
+                <span class="job-meta-label">{{ t('nodeJobDetails.shadowScaleLabel') }}</span>
+                <strong>{{ shadowScaleValue }}</strong>
+              </span>
+              <span class="job-meta-item detail-job-meta-item">
+                <span class="job-meta-label">{{ t('jobDetails.stats.started') }}</span>
+                <strong>{{ formatTime(job.startedAt ?? job.createdAt) }}</strong>
+              </span>
+              <span class="job-meta-item detail-job-meta-item">
+                <span class="job-meta-label">{{ t('jobDetails.stats.finished') }}</span>
+                <strong>{{ job.finishedAt ? formatTime(job.finishedAt) : '—' }}</strong>
+              </span>
+              <span class="job-meta-item detail-job-meta-item">
+                <span class="job-meta-label">{{ t('common.duration') }}</span>
+                <strong>{{ duration }}</strong>
+              </span>
+            </div>
+            <div v-if="showLiveProgress" class="detail-progress-meta">
+              <span class="job-meta-label">{{ t('jobDetails.stats.renderProgress') }}</span>
+              <RenderProgress
+                class="detail-render-progress"
+                :frame="job.currentFrame ?? 0"
+                :total-frames="job.totalFrames ?? (job.frameEnd - job.frameStart + 1)"
+                :warming-up="isWarmingUp"
+                :time-elapsed="job.timeElapsed ?? undefined"
+                :remaining-secs="job.remainingSecs"
+              />
+            </div>
+          </div>
+        </UCard>
+
         <UCard variant="subtle" :ui="{ root: 'detail-section detail-full', body: 'detail-card-body' }">
           <h2 class="detail-card-title">{{ t('jobDetails.filePaths') }}</h2>
           <div class="detail-info-stack">
@@ -60,73 +115,17 @@
               </div>
             </section>
             <section class="detail-info-item">
-              <div class="detail-path-chip">
-                <span class="detail-path-label">{{ t('jobDetails.outputPath') }}</span>
-                <span class="detail-path-text" :title="job.outputPath">{{ job.outputPath }}</span>
-                <UTooltip :text="t('jobDetails.copyPath')" :content="{ side: 'top', sideOffset: 6 }">
-                  <UButton icon="i-lucide-copy" color="neutral" variant="ghost" size="xs" square @click="copyPath(job.outputPath)" />
-                </UTooltip>
+              <div class="detail-path-stack">
+                <div class="detail-path-chip">
+                  <span class="detail-path-label">{{ t('jobDetails.outputPath') }}</span>
+                  <span class="detail-path-text" :title="job.outputPath">{{ job.outputPath }}</span>
+                  <UTooltip :text="t('jobDetails.copyPath')" :content="{ side: 'top', sideOffset: 6 }">
+                    <UButton icon="i-lucide-copy" color="neutral" variant="ghost" size="xs" square @click="copyPath(job.outputPath)" />
+                  </UTooltip>
+                </div>
               </div>
             </section>
           </div>
-        </UCard>
-
-        <UCard variant="subtle" :ui="{ root: 'detail-section detail-full', body: 'detail-card-body' }">
-          <div class="stat-row">
-            <div class="stat-item">
-              <p class="stat-label">{{ t('jobDetails.stats.format') }}</p>
-              <p class="stat-value">{{ outputModeLabel }}</p>
-            </div>
-            <div class="stat-item">
-              <p class="stat-label">{{ t('jobDetails.stats.frameRange') }}</p>
-              <p class="stat-value">{{ originalFrameRangeLabel }} ({{ t('jobDetails.stats.totalFrames', { count: originalFrameTotal }) }})</p>
-            </div>
-            <div v-if="showCurrentExecutionRange" class="stat-item">
-              <p class="stat-label">{{ t('jobDetails.stats.currentExecution') }}</p>
-              <p class="stat-value">{{ currentExecutionRangeLabel }} ({{ t('jobDetails.stats.totalFrames', { count: currentExecutionTotal }) }})</p>
-            </div>
-            <div class="stat-item">
-              <p class="stat-label">{{ t('nodeJobDetails.currentJob') }}</p>
-              <p class="stat-value">{{ currentJobLabel }}</p>
-            </div>
-            <div v-if="job.crashCount > 0" class="stat-item">
-              <p class="stat-label">{{ t('jobDetails.stats.crashRecovery') }}</p>
-              <p class="stat-value">{{ t('jobDetails.stats.crashTimes', { count: job.crashCount }) }}</p>
-            </div>
-            <div v-if="shadowScaleLabel" class="stat-item">
-              <p class="stat-label">{{ t('nodeJobDetails.shadowScaleLabel') }}</p>
-              <p class="stat-value">{{ shadowScaleValue }}</p>
-            </div>
-          </div>
-          <div class="stat-row">
-            <div class="stat-item">
-              <p class="stat-label">{{ t('jobDetails.stats.started') }}</p>
-              <p class="stat-value">{{ formatTime(job.startedAt ?? job.createdAt) }}</p>
-            </div>
-            <div class="stat-item">
-              <p class="stat-label">{{ t('jobDetails.stats.finished') }}</p>
-              <p class="stat-value">{{ job.finishedAt ? formatTime(job.finishedAt) : '-' }}</p>
-            </div>
-            <div class="stat-item">
-              <p class="stat-label">{{ t('common.duration') }}</p>
-              <p class="stat-value">{{ duration }}</p>
-            </div>
-          </div>
-          <template v-if="job.status === 'running'">
-            <div class="stat-row">
-              <div class="stat-item detail-progress-stat">
-                <p class="stat-label">{{ t('jobDetails.stats.renderProgress') }}</p>
-                <RenderProgress
-                  class="detail-render-progress"
-                  :frame="job.currentFrame ?? 0"
-                  :total-frames="job.totalFrames ?? (job.frameEnd - job.frameStart + 1)"
-                  :warming-up="isWarmingUp"
-                  :time-elapsed="job.timeElapsed ?? undefined"
-                  :remaining-secs="job.remainingSecs"
-                />
-              </div>
-            </div>
-          </template>
         </UCard>
 
         <UCard variant="subtle" :ui="{ root: 'detail-section detail-full preview-card', body: 'detail-card-body' }">
@@ -137,6 +136,7 @@
             class="surface-panel preview-thumb-wrap"
             :class="{ 'preview-thumb-clickable': !!displayPreviewUrl, 'node-job-preview-loading': previewLoading && !displayPreviewUrl }"
             :style="previewStyle"
+            @click="displayPreviewUrl && (lightboxOpen = true)"
           >
             <img v-if="displayPreviewUrl" :src="displayPreviewUrl" class="preview-thumb" alt="node render preview" />
             <div v-else class="preview-thumb-empty">
@@ -188,6 +188,16 @@
         </UCard>
       </div>
     </section>
+
+    <UModal v-model:open="lightboxOpen" :close="false" :ui="{ content: 'preview-lightbox' }">
+      <template #body>
+        <div @click="lightboxOpen = false">
+          <div @click.stop>
+            <img v-if="displayPreviewUrl" :src="displayPreviewUrl" class="preview-lightbox-img" alt="node render preview" />
+          </div>
+        </div>
+      </template>
+    </UModal>
   </div>
 
   <div v-else class="empty">{{ t('nodeJobDetails.notFound') }}</div>
@@ -214,6 +224,7 @@ const peer = computed(() => nodesStore.peers[nodeId.value] ?? null)
 const job = computed(() => peer.value?.jobs.find(item => item.id === jobId.value) ?? null)
 const queueJobs = computed(() => peer.value?.jobs ?? [])
 const statusBadgeColor = computed(() => JOB_STATUS_COLOR[job.value?.status ?? 'pending'] ?? 'neutral')
+const showLiveProgress = computed(() => Boolean(peer.value?.connected && job.value?.status === 'running'))
 const remoteLogs = computed(() => nodesStore.getPeerLogs(nodeId.value, jobId.value))
 const displayEvents = computed(() => {
   const seen = new Set<string>()
@@ -284,7 +295,7 @@ const currentJobLabel = computed(() => {
 })
 const isWarmingUp = computed(() => {
   const currentJob = job.value
-  if (!currentJob) return false
+  if (!currentJob || !showLiveProgress.value) return false
   return (currentJob.currentFrame ?? 0) <= 0
     && !((currentJob.timeElapsed ?? 0) > 0)
     && !((currentJob.remainingSecs ?? 0) > 0)
@@ -304,6 +315,7 @@ const previewSourceUrl = computed(() => {
   const currentPeer = peer.value
   const currentJob = job.value
   if (!currentPeer || !currentJob) return null
+  if (!currentPeer.connected) return null
   if (currentJob.outputFormat === 'OPEN_EXR' || currentJob.outputFormat === 'EXR') return null
   if (currentJob.renderMode === 'quick_mp4' && currentJob.status !== 'done') return null
   return `http://${currentPeer.node.ipAddress}:${currentPeer.node.port}/api/jobs/${encodeURIComponent(currentJob.id)}/preview?t=${encodeURIComponent(previewToken.value)}`
@@ -311,6 +323,7 @@ const previewSourceUrl = computed(() => {
 const displayPreviewUrl = ref<string | null>(null)
 const previewLoading = ref(false)
 const previewError = ref(false)
+const lightboxOpen = ref(false)
 const loadedEventKeys = new Set<string>()
 let previewLoadToken = 0
 let queueEventsLoadTimer = 0

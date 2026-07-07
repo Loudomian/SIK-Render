@@ -5,7 +5,7 @@
     :class="{ 'node-card-openable': !!activeJobDetailPath }"
     :ui="{ body: 'node-card-body' }"
     :tabindex="activeJobDetailPath ? 0 : undefined"
-    @click="openActiveJobDetails"
+    @dblclick="openActiveJobDetails"
     @keydown.enter="openActiveJobDetails"
   >
     <div class="node-card-layout">
@@ -21,6 +21,7 @@
                 variant="subtle"
               />
               <UBadge
+                v-if="showQueueState"
                 :label="queuePaused ? t('nodeCard.queuePaused') : t('nodeCard.queueRunning')"
                 :color="queuePaused ? 'warning' : 'success'"
                 variant="subtle"
@@ -45,8 +46,8 @@
               />
             </div>
             <span class="node-name">{{ node.hostname }}</span>
-            <p v-if="node.note" class="node-device-note">{{ node.note }}</p>
-            <p class="node-note">{{ nodeAddressLabel }}</p>
+            <p v-if="node.note" class="job-note node-device-note">{{ node.note }}</p>
+            <p class="job-note node-note">{{ nodeAddressLabel }}</p>
           </div>
         </div>
 
@@ -87,7 +88,7 @@
                 color="neutral"
                 variant="outline"
                 size="sm"
-                @click="goToActiveJobDetails"
+                @click.stop="goToActiveJobDetails"
               />
             </UTooltip>
             <UTooltip v-if="showForgetAction" :text="t('nodeCard.forgetTooltip')" arrow :content="{ side: 'bottom', sideOffset: 8 }">
@@ -171,7 +172,9 @@ const nodesStore = useNodesStore()
 const { t } = useI18n()
 const { formatShortTimestamp } = useDateFormatters()
 
-const runningJobs = computed(() => props.jobs.filter(job => job.status === 'running'))
+const isLiveNode = computed(() => props.isLocal || props.connected)
+const showQueueState = computed(() => isLiveNode.value)
+const runningJobs = computed(() => isLiveNode.value ? props.jobs.filter(job => job.status === 'running') : [])
 const activeJob = computed(() => runningJobs.value[0] ?? null)
 const latestJob = computed(() => {
   let latest: RemoteJobSnapshot | null = null
@@ -251,6 +254,7 @@ const previewFrameToken = computed(() => {
 const previewSourceUrl = computed(() => {
   const job = previewJob.value
   if (!job) return null
+  if (!isLiveNode.value) return null
   if (job.outputFormat === 'OPEN_EXR' || job.outputFormat === 'EXR') return null
   if (job.renderMode === 'quick_mp4' && job.status !== 'done') return null
   return `http://${props.node.ipAddress}:${props.node.port}/api/jobs/${encodeURIComponent(job.id)}/preview?t=${encodeURIComponent(previewFrameToken.value)}`
