@@ -93,7 +93,7 @@ export default {
   ffmpegCard: {
     sourceBlenderJob: 'From Blender Job',
     sourceFolder: 'From Folder',
-    frameSegment: 'Frames',
+    frameSegment: 'Frame Range',
     specs: 'Specs',
     fileSize: 'File Size',
     frames: 'frames',
@@ -540,7 +540,7 @@ export default {
     inputPath: 'Input Path:',
     outputPath: 'Output Path:',
     stats: {
-      frameSegment: 'Frame Segment',
+      frameSegment: 'Frame Range',
       specs: 'Specs',
       outputFps: 'Output FPS',
       progress: 'Progress',

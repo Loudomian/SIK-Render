@@ -93,7 +93,7 @@ export default {
   ffmpegCard: {
     sourceBlenderJob: '来自 Blender Job',
     sourceFolder: '来自文件夹',
-    frameSegment: '帧段',
+    frameSegment: '帧范围',
     specs: '规格',
     fileSize: '文件大小',
     frames: '帧',
@@ -540,7 +540,7 @@ export default {
     inputPath: '输入路径：',
     outputPath: '输出路径：',
     stats: {
-      frameSegment: '帧段',
+      frameSegment: '帧范围',
       specs: '规格',
       outputFps: '输出 FPS',
       progress: '进度',
