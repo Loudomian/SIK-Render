@@ -39,7 +39,12 @@ async fn scheduler_loop(app: AppHandle, state: AppState) {
     loop {
         match schedule_jobs(&app, &state).await {
             Ok(true) => continue,
-            Ok(false) => state.scheduler_notify.notified().await,
+            Ok(false) => {
+                tokio::select! {
+                    _ = state.scheduler_notify.notified() => {}
+                    _ = tokio::time::sleep(Duration::from_secs(2)) => {}
+                }
+            }
             Err(error) => {
                 log::error!("Scheduler loop failed: {error}");
                 tokio::time::sleep(Duration::from_secs(1)).await;
@@ -177,6 +182,7 @@ fn spawn_job_runner(app: AppHandle, state: AppState, running_job: RenderJob) {
             .await
             .remove(&running_job.id)
         {
+            state.reconfiguring_jobs.lock().await.remove(&running_job.id);
             if let Err(error) = sqlx::query(
                 "UPDATE jobs \
                  SET status = 'pending', \

@@ -103,6 +103,12 @@ fn configure_mdns_interface(mdns: &ServiceDaemon, advertised_ip: &str) {
     }
     if let Err(error) = mdns.enable_interface(IfKind::Addr(IpAddr::V4(ip))) {
         log::warn!("mDNS failed to enable interface {ip}: {error}");
+        if let Err(fallback_error) = mdns.enable_interface(IfKind::All) {
+            log::warn!("mDNS failed to restore all interfaces after scoping failure: {fallback_error}");
+        } else {
+            let _ = mdns.disable_interface(IfKind::IPv6);
+            log::warn!("mDNS fell back to all IPv4 interfaces after scoping failure");
+        }
     } else {
         log::info!("mDNS scoped to IPv4 interface {ip}");
     }

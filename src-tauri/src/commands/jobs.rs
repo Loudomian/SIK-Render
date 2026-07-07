@@ -377,6 +377,7 @@ pub async fn apply_shadow_resolution_recovery(
             scale,
         },
     );
+    state.reconfiguring_jobs.lock().await.insert(id.clone());
 
     let line = shadow_recovery_log_line(scale, &range);
     let _ = append_manual_cancel_log(&app, &state, &id, &line).await;
@@ -721,6 +722,7 @@ pub async fn add_job(
     tx.commit().await.map_err(|error| error.to_string())?;
 
     scheduler::emit_job_update(&app, &job);
+    state.scheduler_notify.notify_one();
 
     Ok(job)
 }

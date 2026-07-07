@@ -423,6 +423,9 @@ pub async fn run_job(app: AppHandle, state: AppState, job: RenderJob) -> Result<
         if state.cancelled_jobs.lock().await.contains(&job.id) {
             break Err(anyhow::anyhow!("cancelled"));
         }
+        if state.reconfiguring_jobs.lock().await.contains(&job.id) {
+            break Err(anyhow::anyhow!("reconfiguring"));
+        }
         if state.is_queue_paused() {
             tokio::time::sleep(std::time::Duration::from_secs(1)).await;
             continue;
@@ -802,6 +805,10 @@ pub async fn run_job(app: AppHandle, state: AppState, job: RenderJob) -> Result<
         // Was the process killed by an explicit cancellation?
         if state.cancelled_jobs.lock().await.contains(&job.id) {
             break Err(anyhow::anyhow!("cancelled"));
+        }
+
+        if state.reconfiguring_jobs.lock().await.contains(&job.id) {
+            break Err(anyhow::anyhow!("reconfiguring"));
         }
 
         // ── Crash recovery ────────────────────────────────────────────────────

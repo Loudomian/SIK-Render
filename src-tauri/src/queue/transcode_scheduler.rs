@@ -62,6 +62,10 @@ fn ffmpeg_max_concurrent(state: &AppState) -> u32 {
 }
 
 async fn schedule_jobs(app: &AppHandle, state: &AppState) -> anyhow::Result<bool> {
+    if state.is_queue_paused() {
+        return Ok(false);
+    }
+
     let running_jobs = running_job_count(state).await?;
     let max_concurrent = ffmpeg_max_concurrent(state);
     if running_jobs >= max_concurrent {
