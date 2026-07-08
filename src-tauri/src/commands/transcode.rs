@@ -903,6 +903,34 @@ pub fn emit_ffmpeg_job_update(app: &AppHandle, job: &FfmpegJob) {
     );
 }
 
+pub(crate) async fn append_ffmpeg_job_log_event_for_id(
+    app: &AppHandle,
+    state: &AppState,
+    job_id: &str,
+    line: &str,
+) -> Result<(), String> {
+    let job_number =
+        sqlx::query_scalar::<_, i32>("SELECT job_number FROM ffmpeg_jobs WHERE id = ?")
+            .bind(job_id)
+            .fetch_one(&state.pool)
+            .await
+            .map_err(|error| error.to_string())?;
+
+    crate::app_paths::append_ffmpeg_job_log_event(job_number, job_id, line)
+        .map_err(|error| error.to_string())?;
+
+    let rendered_line = crate::app_paths::timestamped_log_line(line);
+    let _ = app.emit(
+        "transcode-log",
+        TranscodeLogEvent {
+            job_id: job_id.to_string(),
+            line: rendered_line,
+        },
+    );
+
+    Ok(())
+}
+
 async fn append_ffmpeg_log_line(
     app: &AppHandle,
     job_id: &str,
@@ -1494,6 +1522,30 @@ pub async fn enqueue_ffmpeg_job(
     payload: AddFfmpegJobPayload,
 ) -> Result<FfmpegJob, String> {
     let job = insert_ffmpeg_job(state, payload).await?;
+    log::info!(
+        "FFmpeg job added: #{} {} ({}) frames {}-{} output {} encoder={}",
+        job.job_number,
+        job.name,
+        job.id,
+        job.frame_start,
+        job.frame_end,
+        job.output_path.display(),
+        job.encoder
+    );
+    let _ = append_ffmpeg_job_log_event_for_id(
+        app,
+        state,
+        &job.id,
+        &format!(
+            "[job] Added to transcode queue. Input: {}. Output: {}. Frames: {}-{}. Encoder: {}.",
+            job.input_path.display(),
+            job.output_path.display(),
+            job.frame_start,
+            job.frame_end,
+            job.encoder
+        ),
+    )
+    .await;
     emit_ffmpeg_job_update(app, &job);
     state.ffmpeg_notify.notify_one();
     Ok(job)
@@ -1773,8 +1825,7 @@ pub async fn run_ffmpeg_job(
         )
         .await;
         let hardware_output_lines = result.output_lines.clone();
-        persist_ffmpeg_encoder_fallback(&state, &job.id, resolved_encoder, VideoEncoder::Cpu)
-            .await;
+        persist_ffmpeg_encoder_fallback(&state, &job.id, resolved_encoder, VideoEncoder::Cpu).await;
         result = run_ffmpeg_process(
             FfmpegProcessContext {
                 app: &app,
@@ -1901,6 +1952,7 @@ pub async fn cancel_ffmpeg_job(
     match status {
         None => Ok(()),
         Some(FfmpegJobStatus::Pending) => {
+            log::info!("FFmpeg job cancel requested before start: {id}");
             sqlx::query(
                 "UPDATE ffmpeg_jobs SET status = 'cancelled', finished_at = ? WHERE id = ?",
             )
@@ -1910,19 +1962,13 @@ pub async fn cancel_ffmpeg_job(
             .await
             .map_err(|error| error.to_string())?;
 
-            if let Ok(Some((job_number, resolved_job_id))) = sqlx::query_as::<_, (i32, String)>(
-                "SELECT job_number, id FROM ffmpeg_jobs WHERE id = ?",
+            let _ = append_ffmpeg_job_log_event_for_id(
+                &app,
+                &state,
+                &id,
+                "[cancelled] Reason: manual stop. This FFmpeg Job was cancelled before execution started.",
             )
-            .bind(&id)
-            .fetch_optional(&state.pool)
-            .await
-            {
-                let _ = crate::app_paths::append_ffmpeg_job_log_event(
-                    job_number,
-                    &resolved_job_id,
-                    "[cancelled] Reason: manual stop. This FFmpeg Job was cancelled before execution started.",
-                );
-            }
+            .await;
 
             if let Ok(job) = load_ffmpeg_job(&state.pool, &id).await {
                 let _ = write_ffmpeg_job_toml(&job);
@@ -1931,20 +1977,15 @@ pub async fn cancel_ffmpeg_job(
             Ok(())
         }
         Some(FfmpegJobStatus::Running) => {
+            log::info!("FFmpeg job cancel requested while running: {id}");
             state.cancelled_ffmpeg_jobs.lock().await.insert(id.clone());
-            if let Ok(Some((job_number, resolved_job_id))) = sqlx::query_as::<_, (i32, String)>(
-                "SELECT job_number, id FROM ffmpeg_jobs WHERE id = ?",
+            let _ = append_ffmpeg_job_log_event_for_id(
+                &app,
+                &state,
+                &id,
+                "[cancelled] Reason: manual stop. Cancellation requested.",
             )
-            .bind(&id)
-            .fetch_optional(&state.pool)
-            .await
-            {
-                let _ = crate::app_paths::append_ffmpeg_job_log_event(
-                    job_number,
-                    &resolved_job_id,
-                    "[cancelled] Reason: manual stop. Cancellation requested.",
-                );
-            }
+            .await;
 
             let pid = {
                 let active = state.active_ffmpeg_jobs.lock().await;
@@ -1977,6 +2018,11 @@ pub async fn delete_ffmpeg_job(id: String, state: State<'_, AppState>) -> Result
         return Err("cannot delete a running FFmpeg Job".into());
     }
 
+    log::info!(
+        "FFmpeg job deleted: #{} ({}) status={status:?}",
+        job_number,
+        resolved_job_id
+    );
     sqlx::query("DELETE FROM ffmpeg_jobs WHERE id = ?")
         .bind(&id)
         .execute(&state.pool)
@@ -2045,6 +2091,7 @@ pub async fn reorder_ffmpeg_jobs(
     }
     tx.commit().await.map_err(|error| error.to_string())?;
 
+    log::info!("FFmpeg jobs reordered: {} job(s)", final_order.len());
     state.ffmpeg_notify.notify_one();
     fetch_ffmpeg_jobs(&state.pool)
         .await

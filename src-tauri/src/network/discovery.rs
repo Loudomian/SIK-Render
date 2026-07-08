@@ -3,6 +3,7 @@ use crate::network::server::build_node_info;
 use crate::network::types::SERVICE_TYPE;
 use crate::state::AppState;
 use mdns_sd::{IfKind, ServiceDaemon, ServiceEvent, ServiceInfo};
+use std::collections::HashMap;
 use std::net::{IpAddr, Ipv4Addr};
 use tauri::AppHandle;
 
@@ -46,6 +47,7 @@ pub fn start(app: AppHandle, state: AppState) {
             }
         };
 
+        let mut resolved_peers: HashMap<String, (String, u16)> = HashMap::new();
         loop {
             match receiver.recv_async().await {
                 Ok(ServiceEvent::ServiceResolved(info)) => {
@@ -64,14 +66,46 @@ pub fn start(app: AppHandle, state: AppState) {
                     };
                     let peer_port = info.get_port();
 
-                    log::info!("Node discovered: {peer_id} @ {peer_ip}:{peer_port}");
-                    peer::spawn_connection(app.clone(), state.clone(), peer_id, peer_ip, peer_port);
+                    let endpoint = (peer_ip.clone(), peer_port);
+                    match resolved_peers.insert(peer_id.clone(), endpoint.clone()) {
+                        Some(previous) if previous == endpoint => {
+                            log::debug!(
+                                "Node discovery refresh ignored: {peer_id} @ {peer_ip}:{peer_port}"
+                            );
+                        }
+                        Some(previous) => {
+                            log::info!(
+                                "Node address changed: {peer_id} @ {}:{} -> {peer_ip}:{peer_port}",
+                                previous.0,
+                                previous.1
+                            );
+                            peer::remove(app.clone(), state.clone(), peer_id.clone()).await;
+                            peer::spawn_connection(
+                                app.clone(),
+                                state.clone(),
+                                peer_id,
+                                peer_ip,
+                                peer_port,
+                            );
+                        }
+                        None => {
+                            log::info!("Node discovered: {peer_id} @ {peer_ip}:{peer_port}");
+                            peer::spawn_connection(
+                                app.clone(),
+                                state.clone(),
+                                peer_id,
+                                peer_ip,
+                                peer_port,
+                            );
+                        }
+                    }
                 }
                 Ok(ServiceEvent::ServiceRemoved(_, fullname)) => {
                     let peer_id = extract_instance_name(&fullname);
                     if peer_id == node_id {
                         continue;
                     }
+                    resolved_peers.remove(&peer_id);
                     log::info!("Node lost: {peer_id}");
                     peer::remove(app.clone(), state.clone(), peer_id).await;
                 }

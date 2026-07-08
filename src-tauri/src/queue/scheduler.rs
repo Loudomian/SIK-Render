@@ -306,6 +306,8 @@ fn spawn_job_runner(app: AppHandle, state: AppState, running_job: RenderJob) {
 
         match load_job(&state.pool, &running_job.id).await {
             Ok(updated_job) => {
+                let final_line = render_final_log_line(&updated_job);
+                let _ = append_render_job_final_event(&app, &updated_job, &final_line);
                 emit_job_update(&app, &updated_job);
                 if matches!(
                     updated_job.status,
@@ -339,6 +341,59 @@ fn spawn_job_runner(app: AppHandle, state: AppState, running_job: RenderJob) {
         }
         state.scheduler_notify.notify_one();
     });
+}
+
+fn append_render_job_final_event(
+    app: &AppHandle,
+    job: &RenderJob,
+    line: &str,
+) -> anyhow::Result<()> {
+    let path = crate::app_paths::append_job_log_event(
+        job.job_number,
+        &job.id,
+        crate::app_paths::BLENDER_LOG_KIND,
+        line,
+    )?;
+    let rendered_line = crate::app_paths::timestamped_log_line(line);
+    let _ = app.emit(
+        "render-log",
+        crate::blender::process::RenderLogEvent {
+            job_id: job.id.clone(),
+            line: rendered_line,
+        },
+    );
+    log::info!(
+        "Render job final log written: #{} {} ({}) {}",
+        job.job_number,
+        job.name,
+        job.id,
+        path.display()
+    );
+    Ok(())
+}
+
+fn render_final_log_line(job: &RenderJob) -> String {
+    match job.status {
+        JobStatus::Done => format!(
+            "[done] Render job completed. Output: {}. Frames: {}-{}.",
+            job.output_path.display(),
+            job.frame_start,
+            job.frame_end
+        ),
+        JobStatus::Failed => {
+            format!(
+                "[failed] Render job failed. Output was not completed: {}.",
+                job.output_path.display()
+            )
+        }
+        JobStatus::Cancelled => String::from("[cancelled] Render job ended after cancellation."),
+        JobStatus::Interrupted => {
+            String::from("[paused] Render job interrupted and can resume from saved progress.")
+        }
+        JobStatus::Pending | JobStatus::Running => {
+            format!("[render] Render job ended with status {:?}.", job.status)
+        }
+    }
 }
 
 pub async fn load_job(pool: &sqlx::SqlitePool, id: &str) -> anyhow::Result<RenderJob> {

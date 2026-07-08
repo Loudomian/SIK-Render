@@ -106,7 +106,7 @@ fn default_render_mode_payload() -> String {
     String::from("image_sequence")
 }
 
-async fn append_manual_cancel_log(
+async fn append_render_job_log_event(
     app: &AppHandle,
     state: &AppState,
     job_id: &str,
@@ -127,11 +127,12 @@ async fn append_manual_cancel_log(
     )
     .map_err(|error| error.to_string())?;
 
+    let rendered_line = crate::app_paths::timestamped_log_line(line);
     let _ = app.emit(
         "render-log",
         crate::blender::process::RenderLogEvent {
             job_id: job_id.to_string(),
-            line: line.to_string(),
+            line: rendered_line,
         },
     );
 
@@ -407,7 +408,7 @@ pub async fn apply_shadow_resolution_recovery(
     state.reconfiguring_jobs.lock().await.insert(id.clone());
 
     let line = shadow_recovery_log_line(scale, &range);
-    let _ = append_manual_cancel_log(&app, &state, &id, &line).await;
+    let _ = append_render_job_log_event(&app, &state, &id, &line).await;
 
     let pid = {
         let active_jobs = state.active_jobs.lock().await;
@@ -436,6 +437,7 @@ pub async fn start_queue(
     state: State<'_, AppState>,
     app: tauri::AppHandle,
 ) -> Result<QueueState, String> {
+    log::info!("Render queue start requested");
     state.set_queue_paused(false);
 
     let paused_id = state.paused_job_id.lock().await.take();
@@ -466,6 +468,13 @@ pub async fn start_queue(
             .await;
 
             if let Ok(job) = crate::queue::scheduler::load_job(&state.pool, job_id).await {
+                let _ = append_render_job_log_event(
+                    &app,
+                    &state,
+                    job_id,
+                    "[queue] Queue resumed. This interrupted render is pending again and will resume from saved progress.",
+                )
+                .await;
                 crate::queue::scheduler::emit_job_update(&app, &job);
             }
         }
@@ -488,6 +497,7 @@ pub async fn pause_queue(
         Progress is preserved; the job will auto-resume from the last recorded frame when the \
         queue is started again.";
 
+    log::info!("Render queue pause requested");
     state.set_queue_paused(true);
 
     let running = {
@@ -510,7 +520,7 @@ pub async fn pause_queue(
         .execute(&state.pool)
         .await;
 
-        let _ = append_manual_cancel_log(&app, &state, &job_id, pause_line).await;
+        let _ = append_render_job_log_event(&app, &state, &job_id, pause_line).await;
 
         if let Ok(job) = crate::queue::scheduler::load_job(&state.pool, &job_id).await {
             crate::queue::scheduler::emit_job_update(&app, &job);
@@ -525,6 +535,9 @@ pub async fn pause_queue(
 
     *state.paused_job_id.lock().await = paused_id.clone();
 
+    if paused_id.is_none() {
+        log::info!("Render queue paused with no active render job");
+    }
     scheduler::emit_queue_state_full(&app, true, paused_id.clone());
     Ok(QueueState {
         paused: true,
@@ -746,6 +759,28 @@ pub async fn add_job(
 
     tx.commit().await.map_err(|error| error.to_string())?;
 
+    log::info!(
+        "Render job added: #{} {} ({}) frames {}-{} output {}",
+        job.job_number,
+        job.name,
+        job.id,
+        job.frame_start,
+        job.frame_end,
+        job.output_path.display()
+    );
+    let _ = append_render_job_log_event(
+        &app,
+        &state,
+        &job.id,
+        &format!(
+            "[job] Added to render queue. Blend: {}. Output: {}. Frames: {}-{}.",
+            job.blend_file.display(),
+            job.output_path.display(),
+            job.frame_start,
+            job.frame_end
+        ),
+    )
+    .await;
     scheduler::emit_job_update(&app, &job);
     state.scheduler_notify.notify_one();
 
@@ -779,6 +814,19 @@ pub async fn update_job_metadata(
     let job = scheduler::load_job(&state.pool, &payload.id)
         .await
         .map_err(|error| error.to_string())?;
+    log::info!(
+        "Render job metadata updated: #{} {} ({})",
+        job.job_number,
+        job.name,
+        job.id
+    );
+    let _ = append_render_job_log_event(
+        &app,
+        &state,
+        &job.id,
+        &format!("[job] Metadata updated. Name: \"{}\".", job.name),
+    )
+    .await;
     scheduler::emit_job_update(&app, &job);
     Ok(job)
 }
@@ -891,6 +939,29 @@ pub async fn update_job_transcode_settings(
     let job = scheduler::load_job(&state.pool, &payload.id)
         .await
         .map_err(|error| error.to_string())?;
+    log::info!(
+        "Render job transcode settings updated: #{} {} ({}) auto_transcode_mp4={}",
+        job.job_number,
+        job.name,
+        job.id,
+        job.auto_transcode_mp4
+    );
+    let _ = append_render_job_log_event(
+        &app,
+        &state,
+        &job.id,
+        &format!(
+            "[job] Transcode settings updated. Auto MP4: {}. Range override: {}-{}.",
+            job.auto_transcode_mp4,
+            job.transcode_frame_start_override
+                .map(|value| value.to_string())
+                .unwrap_or_else(|| "default".to_string()),
+            job.transcode_frame_end_override
+                .map(|value| value.to_string())
+                .unwrap_or_else(|| "default".to_string())
+        ),
+    )
+    .await;
     scheduler::emit_job_update(&app, &job);
     Ok(job)
 }
@@ -920,6 +991,20 @@ pub async fn update_job_fps(
     let job = scheduler::load_job(&state.pool, &payload.id)
         .await
         .map_err(|error| error.to_string())?;
+    log::info!(
+        "Render job FPS updated: #{} {} ({}) fps={}",
+        job.job_number,
+        job.name,
+        job.id,
+        payload.fps
+    );
+    let _ = append_render_job_log_event(
+        &app,
+        &state,
+        &job.id,
+        &format!("[job] FPS updated to {}.", payload.fps),
+    )
+    .await;
     scheduler::emit_job_update(&app, &job);
     Ok(job)
 }
@@ -930,23 +1015,34 @@ pub async fn update_job_preview_dimensions(
     width: i32,
     height: i32,
     state: State<'_, AppState>,
+    app: tauri::AppHandle,
 ) -> Result<JobPreviewDimensionsUpdate, String> {
     if width <= 0 || height <= 0 {
         return Err("preview dimensions must be positive".into());
     }
 
-    let rows_affected = sqlx::query("UPDATE jobs SET preview_width = ?, preview_height = ? WHERE id = ?")
-        .bind(width)
-        .bind(height)
-        .bind(&id)
-        .execute(&state.pool)
-        .await
-        .map_err(|error| error.to_string())?
-        .rows_affected();
+    let rows_affected =
+        sqlx::query("UPDATE jobs SET preview_width = ?, preview_height = ? WHERE id = ?")
+            .bind(width)
+            .bind(height)
+            .bind(&id)
+            .execute(&state.pool)
+            .await
+            .map_err(|error| error.to_string())?
+            .rows_affected();
 
     if rows_affected == 0 {
         return Err(format!("job {} was not found", id));
     }
+
+    log::info!("Render job preview dimensions updated: {id} {width}x{height}");
+    let _ = append_render_job_log_event(
+        &app,
+        &state,
+        &id,
+        &format!("[job] Preview dimensions updated to {width}x{height}."),
+    )
+    .await;
 
     Ok(JobPreviewDimensionsUpdate {
         id,
@@ -975,6 +1071,11 @@ pub async fn remove_job(id: String, state: State<'_, AppState>) -> Result<(), St
         _ => {}
     }
 
+    log::info!(
+        "Render job removed: #{} ({}) status={status:?}",
+        job_number,
+        job_id
+    );
     sqlx::query("DELETE FROM jobs WHERE id = ?")
         .bind(&id)
         .execute(&state.pool)
@@ -1007,22 +1108,24 @@ pub async fn cancel_job(
     match status {
         None => Ok(()),
         Some(JobStatus::Pending) => {
+            log::info!("Render job cancel requested before start: {id}");
             sqlx::query("UPDATE jobs SET status = 'cancelled', finished_at = ? WHERE id = ?")
                 .bind(Utc::now().timestamp_millis())
                 .bind(&id)
                 .execute(&state.pool)
                 .await
                 .map_err(|error| error.to_string())?;
-            append_manual_cancel_log(&app, &state, &id, cancel_line).await?;
+            append_render_job_log_event(&app, &state, &id, cancel_line).await?;
             Ok(())
         }
         Some(JobStatus::Running) => {
+            log::info!("Render job cancel requested while running: {id}");
             // Always register the cancellation first so the render loop stops even
             // when the process was externally killed (OOM / Task Manager) and is
             // currently between crash-recovery retries with no active child.
             let should_log = state.cancelled_jobs.lock().await.insert(id.clone());
             if should_log {
-                append_manual_cancel_log(&app, &state, &id, cancel_line).await?;
+                append_render_job_log_event(&app, &state, &id, cancel_line).await?;
             }
 
             let pid = {
@@ -1200,6 +1303,26 @@ pub async fn reset_job(
         .await
         .map_err(|e| e.to_string())?;
 
+    log::info!(
+        "Render job reset: #{} {} ({}) frames {}-{} resume_from_existing={} preserve_progress={}",
+        job.job_number,
+        job.name,
+        job.id,
+        target_frame_start,
+        target_frame_end,
+        resume_from_existing,
+        preserve_progress
+    );
+    let _ = append_render_job_log_event(
+        &app,
+        &state,
+        &job.id,
+        &format!(
+            "[job] Reset to pending. Frames: {}-{}. Resume from existing: {}.",
+            target_frame_start, target_frame_end, resume_from_existing
+        ),
+    )
+    .await;
     scheduler::emit_job_update(&app, &job);
     state.scheduler_notify.notify_one();
 
@@ -1271,6 +1394,7 @@ pub async fn reorder_job(
     }
     tx.commit().await.map_err(|error| error.to_string())?;
 
+    log::info!("Render jobs reordered: {} job(s)", final_order.len());
     state.scheduler_notify.notify_one();
     fetch_jobs(&state.pool)
         .await

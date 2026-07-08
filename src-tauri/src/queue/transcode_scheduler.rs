@@ -226,6 +226,19 @@ fn spawn_job_runner(app: AppHandle, state: AppState, running_job: FfmpegJob) {
 
         match transcode::load_ffmpeg_job(&state.pool, &running_job.id).await {
             Ok(updated_job) => {
+                let final_line = ffmpeg_final_log_line(
+                    &updated_job,
+                    &final_status,
+                    output_size_bytes,
+                    output_duration_secs,
+                );
+                let _ = transcode::append_ffmpeg_job_log_event_for_id(
+                    &app,
+                    &state,
+                    &updated_job.id,
+                    &final_line,
+                )
+                .await;
                 transcode::emit_ffmpeg_job_update(&app, &updated_job);
                 let _ = transcode::write_ffmpeg_job_toml(&updated_job);
             }
@@ -236,4 +249,40 @@ fn spawn_job_runner(app: AppHandle, state: AppState, running_job: FfmpegJob) {
 
         state.ffmpeg_notify.notify_one();
     });
+}
+
+fn ffmpeg_final_log_line(
+    job: &FfmpegJob,
+    status: &FfmpegJobStatus,
+    output_size_bytes: Option<i64>,
+    output_duration_secs: Option<f32>,
+) -> String {
+    match status {
+        FfmpegJobStatus::Done => {
+            let size = output_size_bytes
+                .map(|value| value.to_string())
+                .unwrap_or_else(|| "unknown".to_string());
+            let duration = output_duration_secs
+                .map(|value| format!("{value:.3}s"))
+                .unwrap_or_else(|| "unknown".to_string());
+            format!(
+                "[done] FFmpeg Job completed. Output: {}. Size: {} bytes. Estimated duration: {}.",
+                job.output_path.display(),
+                size,
+                duration
+            )
+        }
+        FfmpegJobStatus::Failed => {
+            format!(
+                "[failed] FFmpeg Job failed. Output was not completed: {}.",
+                job.output_path.display()
+            )
+        }
+        FfmpegJobStatus::Cancelled => {
+            String::from("[cancelled] FFmpeg Job ended after cancellation.")
+        }
+        FfmpegJobStatus::Pending | FfmpegJobStatus::Running => {
+            format!("[ffmpeg] FFmpeg Job ended with status {status:?}.")
+        }
+    }
 }

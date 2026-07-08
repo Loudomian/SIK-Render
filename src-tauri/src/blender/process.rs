@@ -612,16 +612,18 @@ pub async fn run_job(app: AppHandle, state: AppState, job: RenderJob) -> Result<
                 let rendered_line = crate::app_paths::timestamped_log_line(&line);
                 emit_render_log_line(&app_stderr, &job_id_stderr, rendered_line.clone());
                 if let Some(p) = parser::parse_time_progress(&line) {
-                    persist_job_progress(
-                        &state_stderr,
-                        &job_id_stderr,
-                        None,
-                        total_frames,
-                        None,
-                        Some(p.time_elapsed),
-                        p.remaining_secs,
-                    )
-                    .await;
+                    if quick_mp4 {
+                        persist_job_progress(
+                            &state_stderr,
+                            &job_id_stderr,
+                            None,
+                            total_frames,
+                            None,
+                            Some(p.time_elapsed),
+                            p.remaining_secs,
+                        )
+                        .await;
+                    }
                 }
                 let mut stderr_tail = stderr_buf_clone.lock().await;
                 if stderr_tail.len() >= 200 {
@@ -750,33 +752,36 @@ pub async fn run_job(app: AppHandle, state: AppState, job: RenderJob) -> Result<
                 latest_frame_time_secs = Some(p.time_elapsed);
                 if quick_mp4 {
                     quick_mp4_progress_seen = true;
-                }
-                let new_this_run = stdout_last_frame
-                    .saturating_sub(actual_start.max(1) as u32)
-                    .saturating_add(1);
-                let rel = (already_done + new_this_run).min(total_frames);
-                persist_job_progress(
-                    &state,
-                    &job.id,
-                    None,
-                    total_frames,
-                    None,
-                    Some(p.time_elapsed),
-                    p.remaining_secs,
-                )
-                .await;
-                mark_progress_timestamp(progress_started_at.as_ref(), &last_primary_progress_ms);
-                emit_render_progress(
-                    &app,
-                    RenderProgressEvent {
-                        job_id: job.id.clone(),
-                        frame: rel,
+                    let new_this_run = stdout_last_frame
+                        .saturating_sub(actual_start.max(1) as u32)
+                        .saturating_add(1);
+                    let rel = (already_done + new_this_run).min(total_frames);
+                    persist_job_progress(
+                        &state,
+                        &job.id,
+                        None,
                         total_frames,
-                        time_elapsed: p.time_elapsed,
-                        memory_mb: 0.0,
-                        remaining_secs: p.remaining_secs,
-                    },
-                );
+                        None,
+                        Some(p.time_elapsed),
+                        p.remaining_secs,
+                    )
+                    .await;
+                    mark_progress_timestamp(
+                        progress_started_at.as_ref(),
+                        &last_primary_progress_ms,
+                    );
+                    emit_render_progress(
+                        &app,
+                        RenderProgressEvent {
+                            job_id: job.id.clone(),
+                            frame: rel,
+                            total_frames,
+                            time_elapsed: p.time_elapsed,
+                            memory_mb: 0.0,
+                            remaining_secs: p.remaining_secs,
+                        },
+                    );
+                }
             }
         }
         final_frame_watchdog_cancelled.store(true, Ordering::Relaxed);
