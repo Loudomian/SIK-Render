@@ -343,6 +343,7 @@
 
 .detail-job-meta-item {
   min-width: 0;
+  padding-right: 1rem;
   padding-left: 1rem;
   border-left: 1px solid var(--ui-border);
 }
@@ -350,6 +351,10 @@
 .detail-job-meta-item:nth-child(4n + 1) {
   padding-left: 0;
   border-left: none;
+}
+
+.detail-job-meta-item:nth-child(4n) {
+  padding-right: 0;
 }
 
 .detail-job-meta-item strong {
@@ -371,6 +376,7 @@
 
   .detail-job-meta-item,
   .detail-job-meta-item:nth-child(4n + 1) {
+    padding-right: 1rem;
     padding-left: 1rem;
     border-left: 1px solid var(--ui-border);
   }
@@ -378,6 +384,10 @@
   .detail-job-meta-item:nth-child(2n + 1) {
     padding-left: 0;
     border-left: none;
+  }
+
+  .detail-job-meta-item:nth-child(2n) {
+    padding-right: 0;
   }
 }
 
@@ -388,6 +398,7 @@
 
   .detail-job-meta-item,
   .detail-job-meta-item:nth-child(4n + 1) {
+    padding-right: 0;
     padding-left: 0;
     border-left: none;
   }
