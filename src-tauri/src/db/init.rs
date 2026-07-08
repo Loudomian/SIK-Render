@@ -20,16 +20,13 @@ pub async fn init(_app: &AppHandle) -> Result<AppState> {
     let connect_options = SqliteConnectOptions::new()
         .filename(&db_path)
         .create_if_missing(true)
+        .foreign_keys(true)
         .journal_mode(SqliteJournalMode::Wal)
         .synchronous(SqliteSynchronous::Normal);
 
     let pool = SqlitePoolOptions::new()
         .max_connections(5)
         .connect_with(connect_options)
-        .await?;
-
-    sqlx::query("PRAGMA foreign_keys = ON")
-        .execute(&pool)
         .await?;
 
     sqlx::migrate!("./src/db/migrations").run(&pool).await?;

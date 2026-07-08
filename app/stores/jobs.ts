@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import type { AddJobPayload, JobPreviewDimensionsUpdate, JobUpdatedEvent, RenderJob, RenderLogEvent, RenderProgressEvent } from '~/types'
 
 const MAX_LOG_LINES = 5000
+const TERMINAL_JOB_STATUSES = new Set<RenderJob['status']>(['done', 'failed', 'cancelled', 'interrupted'])
 
 export const useJobsStore = defineStore('jobs', () => {
   const jobs = ref<RenderJob[]>([])
@@ -204,6 +205,7 @@ export const useJobsStore = defineStore('jobs', () => {
   function applyProgress(event: RenderProgressEvent) {
     const job = jobs.value.find((j) => j.id === event.jobId)
     if (!job) return
+    if (TERMINAL_JOB_STATUSES.has(job.status)) return
     job.status = 'running'
     job.currentFrame = Math.max(job.currentFrame ?? 0, event.frame)
     job.totalFrames = event.totalFrames

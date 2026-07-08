@@ -644,7 +644,16 @@ pub async fn run_job(app: AppHandle, state: AppState, job: RenderJob) -> Result<
         // Sliding window: skip first 3 warmup frames, then average last 8.
         let mut frame_window = FrameTimeWindow::new(3, 8);
         let mut lines = BufReader::new(stdout).lines();
-        while let Some(line) = lines.next_line().await? {
+        let mut stdout_read_error: Option<std::io::Error> = None;
+        loop {
+            let line = match lines.next_line().await {
+                Ok(Some(line)) => line,
+                Ok(None) => break,
+                Err(error) => {
+                    stdout_read_error = Some(error);
+                    break;
+                }
+            };
             let rendered_line = crate::app_paths::timestamped_log_line(&line);
             emit_render_log_line(&app, &job.id, rendered_line.clone());
             {
@@ -772,8 +781,38 @@ pub async fn run_job(app: AppHandle, state: AppState, job: RenderJob) -> Result<
         }
         final_frame_watchdog_cancelled.store(true, Ordering::Relaxed);
 
+        if let Some(error) = stdout_read_error {
+            let line = format!(
+                "[crash-recovery] Failed to read Blender stdout: {error}. Terminating Blender and treating this attempt as failed."
+            );
+            log::warn!("Job {}: {}", job.id, line);
+            emit_render_log_line(&app, &job.id, line.clone());
+            {
+                let _guard = log_write_lock.lock().await;
+                let _ = crate::app_paths::append_log_line(&log_file_path, &line);
+            }
+            if let Some(pid) = child.id() {
+                let _ = AppState::kill_process_tree(pid);
+            }
+        }
         let _ = stderr_task.await;
-        let exit_status = child.wait().await?;
+        let mut wait_failed = false;
+        let exit_succeeded = match child.wait().await {
+            Ok(status) => status.success(),
+            Err(error) => {
+                wait_failed = true;
+                let line = format!(
+                    "[crash-recovery] Failed to wait for Blender: {error}. Treating this attempt as failed."
+                );
+                log::warn!("Job {}: {}", job.id, line);
+                emit_render_log_line(&app, &job.id, line.clone());
+                {
+                    let _guard = log_write_lock.lock().await;
+                    let _ = crate::app_paths::append_log_line(&log_file_path, &line);
+                }
+                false
+            }
+        };
 
         render_running.store(false, Ordering::Relaxed);
         if let Some(task) = poll_task {
@@ -781,7 +820,7 @@ pub async fn run_job(app: AppHandle, state: AppState, job: RenderJob) -> Result<
         }
         state.active_jobs.lock().await.remove(&job.id);
 
-        if exit_status.success() || final_frame_watchdog_killed.load(Ordering::Relaxed) {
+        if exit_succeeded || final_frame_watchdog_killed.load(Ordering::Relaxed) {
             if quick_mp4 {
                 generate_quick_mp4_preview(&app, &state, &job, &log_file_path).await;
             }
@@ -798,16 +837,16 @@ pub async fn run_job(app: AppHandle, state: AppState, job: RenderJob) -> Result<
             break Ok(JobStatus::Done);
         }
 
-        if state.interrupted_jobs.lock().await.contains(&job.id) {
+        if !wait_failed && state.interrupted_jobs.lock().await.contains(&job.id) {
             break Err(anyhow::anyhow!("interrupted"));
         }
 
         // Was the process killed by an explicit cancellation?
-        if state.cancelled_jobs.lock().await.contains(&job.id) {
+        if !wait_failed && state.cancelled_jobs.lock().await.contains(&job.id) {
             break Err(anyhow::anyhow!("cancelled"));
         }
 
-        if state.reconfiguring_jobs.lock().await.contains(&job.id) {
+        if !wait_failed && state.reconfiguring_jobs.lock().await.contains(&job.id) {
             break Err(anyhow::anyhow!("reconfiguring"));
         }
 

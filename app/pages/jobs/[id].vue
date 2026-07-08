@@ -951,6 +951,7 @@ const lightboxOpen = ref(false)
 const videoPreviewUrl = ref<string | null>(null)
 const videoPreviewPosterUrl = ref<string | null>(null)
 const videoPreviewSourcePath = ref<string | null>(null)
+let previewLoadToken = 0
 let videoPreviewPosterToken = 0
 const hasFramePreview = computed(() =>
   Boolean(job.value) && !isQuickMp4Job.value && job.value?.outputFormat !== 'OPEN_EXR' && job.value?.outputFormat !== 'EXR',
@@ -1086,6 +1087,7 @@ async function syncStoredPreviewDimensions(width: number, height: number) {
 }
 
 async function refreshPreview() {
+  const token = ++previewLoadToken
   const j = job.value
   if (!j || j.renderMode === 'quick_mp4' || j.outputFormat === 'OPEN_EXR' || j.outputFormat === 'EXR') {
     previewUrl.value = null
@@ -1100,6 +1102,7 @@ async function refreshPreview() {
       j.frameStart,
       previewFrameEnd.value ?? j.frameEnd,
     )
+    if (token !== previewLoadToken) return
     if (!path) {
       previewUrl.value = null
       previewFrame.value = null
@@ -1108,6 +1111,7 @@ async function refreshPreview() {
     }
     const url = `${convertFileSrc(path)}?t=${Date.now()}`
     const { width, height } = await preloadPreview(url)
+    if (token !== previewLoadToken) return
     previewAspect.value = `${width} / ${height}`
     previewUrl.value = url
     void syncStoredPreviewDimensions(width, height)
@@ -1116,6 +1120,7 @@ async function refreshPreview() {
     const frameToken = match?.[1]
     previewFrame.value = frameToken ? parseInt(frameToken) : null
   } catch {
+    if (token !== previewLoadToken) return
     previewUrl.value = null
     previewFrame.value = null
     applyStoredPreviewAspect()

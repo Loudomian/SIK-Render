@@ -359,8 +359,8 @@
             {{ t('renderQueue.delete.message', { name: deleteConfirmJob?.name ?? '' }) }}
           </p>
           <div class="modal-actions">
-            <UButton icon="i-lucide-x" :label="t('common.cancel')" color="warning" variant="outline" @click="deleteConfirmJob = null" />
-            <UButton icon="i-lucide-trash-2" :label="t('common.delete')" color="error" variant="outline" @click="confirmDelete" />
+            <UButton icon="i-lucide-x" :label="t('common.cancel')" color="warning" variant="outline" :disabled="deletingJob" @click="deleteConfirmJob = null" />
+            <UButton icon="i-lucide-trash-2" :label="t('common.delete')" color="error" variant="outline" :loading="deletingJob" @click="confirmDelete" />
           </div>
         </div>
       </template>
@@ -979,19 +979,29 @@ let dragStartY = 0
 let pendingDragJobId: string | null = null
 const DRAG_START_DISTANCE = 6
 
-function confirmDelete() {
-  if (deleteConfirmJob.value) jobsStore.deleteJob(deleteConfirmJob.value.id)
-  deleteConfirmJob.value = null
+const deletingJob = ref(false)
+
+async function confirmDelete() {
+  if (!deleteConfirmJob.value || deletingJob.value) return
+  deletingJob.value = true
+  try {
+    await jobsStore.deleteJob(deleteConfirmJob.value.id)
+  } catch (error) {
+    toast.add({
+      title: t('renderQueue.queueToast.deleteFailedTitle'),
+      description: error instanceof Error ? error.message : String(error),
+      color: 'error',
+    })
+  } finally {
+    deletingJob.value = false
+    deleteConfirmJob.value = null
+  }
 }
 
 const isDragging = ref(false)
 let unlistenDrop: (() => void) | null = null
 
 onMounted(async () => {
-  await settingsStore.load()
-  if (showInitializeTools.value) {
-    await initializeTools()
-  }
   unlistenDrop = await getCurrentWindow().onDragDropEvent((event) => {
     if (route.path !== '/') return
     if (draggedJobId.value) return
@@ -1005,6 +1015,10 @@ onMounted(async () => {
       if (blendPath) openAddJobWithFile(blendPath).catch(console.error)
     }
   })
+  await settingsStore.load()
+  if (showInitializeTools.value) {
+    await initializeTools()
+  }
 })
 
 const showAddJob = ref(false)

@@ -15,7 +15,7 @@ use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 use tauri::{AppHandle, Emitter, State};
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::sync::Mutex;
@@ -23,6 +23,8 @@ use tokio::sync::Mutex;
 const IMAGE_EXTS: &[&str] = &[
     "png", "jpg", "jpeg", "exr", "tif", "tiff", "tga", "bmp", "hdr", "webp",
 ];
+static FFMPEG_FRAME_RE: OnceLock<Regex> = OnceLock::new();
+static FFMPEG_SPEED_RE: OnceLock<Regex> = OnceLock::new();
 
 #[derive(Debug, Deserialize)]
 pub struct AddFfmpegJobPayload {
@@ -895,8 +897,9 @@ async fn append_ffmpeg_log_line(
 }
 
 fn parse_ffmpeg_progress(line: &str) -> Option<FfmpegProgress> {
-    let frame_re = Regex::new(r"frame=\s*(\d+)").ok()?;
-    let speed_re = Regex::new(r"speed=\s*([0-9]*\.?[0-9]+)x").ok()?;
+    let frame_re = FFMPEG_FRAME_RE.get_or_init(|| Regex::new(r"frame=\s*(\d+)").unwrap());
+    let speed_re =
+        FFMPEG_SPEED_RE.get_or_init(|| Regex::new(r"speed=\s*([0-9]*\.?[0-9]+)x").unwrap());
 
     let frame = frame_re
         .captures(line)
@@ -1144,7 +1147,7 @@ async fn run_ffmpeg_process(
     let mut output_lines = stdout_task.await.unwrap_or_default();
     output_lines.extend(stderr_task.await.unwrap_or_default());
 
-    if was_cancelled {
+    if was_cancelled && !status.success() {
         append_ffmpeg_log_line(
             context.app,
             &job.id,

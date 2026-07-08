@@ -82,7 +82,7 @@ export default defineNuxtConfig({
     },
     // Prevent Vite from obscuring Rust errors
     clearScreen: false,
-    envPrefix: ['VITE_', 'TAURI_'],
+    envPrefix: ['VITE_'],
     server: {
       strictPort: true,
       watch: {

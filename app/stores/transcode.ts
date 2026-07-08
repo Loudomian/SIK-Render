@@ -8,6 +8,7 @@ import type {
 } from '~/types'
 
 const MAX_LOG_LINES = 5000
+const TERMINAL_FFMPEG_JOB_STATUSES = new Set<FfmpegJob['status']>(['done', 'failed', 'cancelled'])
 
 export const useTranscodeStore = defineStore('transcode', () => {
   const ffmpegJobs = ref<FfmpegJob[]>([])
@@ -98,6 +99,7 @@ export const useTranscodeStore = defineStore('transcode', () => {
   function applyProgress(event: TranscodeProgressEvent) {
     const job = ffmpegJobs.value.find(entry => entry.id === event.jobId)
     if (!job) return
+    if (TERMINAL_FFMPEG_JOB_STATUSES.has(job.status)) return
     job.status = 'running'
     job.progressFrame = Math.max(job.progressFrame ?? 0, event.frame)
     job.totalFrames = event.totalFrames

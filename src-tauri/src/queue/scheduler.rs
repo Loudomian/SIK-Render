@@ -221,12 +221,13 @@ fn spawn_job_runner(app: AppHandle, state: AppState, running_job: RenderJob) {
         }
 
         let final_status = {
+            let result_succeeded = matches!(&result, Ok(JobStatus::Done));
             let mut interrupted_jobs = state.interrupted_jobs.lock().await;
-            if interrupted_jobs.remove(&running_job.id) {
+            if interrupted_jobs.remove(&running_job.id) && !result_succeeded {
                 JobStatus::Interrupted
             } else {
                 let mut cancelled_jobs = state.cancelled_jobs.lock().await;
-                if cancelled_jobs.remove(&running_job.id) {
+                if cancelled_jobs.remove(&running_job.id) && !result_succeeded {
                     JobStatus::Cancelled
                 } else {
                     match result {

@@ -394,6 +394,7 @@ export default {
       clearSuccessDescription: '成功清理 {removed} 个已完成任务。',
       clearFailedTitle: '清理完成任务失败',
       clearFailedDescription: '共有 {failed} 个任务未能删除。',
+      deleteFailedTitle: '删除渲染任务失败',
       reorderFailedTitle: '顺序更新失败',
     },
     notices: {

@@ -610,11 +610,6 @@ async function confirmDelete() {
 }
 
 onMounted(async () => {
-  await Promise.all([
-    settingsStore.load(),
-    transcodeStore.fetchFfmpegJobs(),
-  ])
-
   const unlistenDrop = await getCurrentWindow().onDragDropEvent(async (event) => {
     if (route.path !== '/transcode') return
     if (draggedJobId.value) return
@@ -635,6 +630,11 @@ onMounted(async () => {
     }
   })
   unlisteners.push(unlistenDrop)
+
+  await Promise.all([
+    settingsStore.load(),
+    transcodeStore.fetchFfmpegJobs(),
+  ])
 })
 
 onUnmounted(() => {

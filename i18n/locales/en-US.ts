@@ -394,6 +394,7 @@ export default {
       clearSuccessDescription: 'Cleared {removed} completed jobs.',
       clearFailedTitle: 'Failed to Clear Completed Jobs',
       clearFailedDescription: '{failed} jobs could not be deleted.',
+      deleteFailedTitle: 'Failed to Delete Render Job',
       reorderFailedTitle: 'Failed to Update Order',
     },
     notices: {

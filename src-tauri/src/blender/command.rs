@@ -50,6 +50,7 @@ impl BlenderCliCommand {
         {
             command.creation_flags(0x08000000); // CREATE_NO_WINDOW
         }
+        command.kill_on_drop(true);
         command
     }
 

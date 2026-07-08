@@ -721,7 +721,9 @@ pub async fn add_job(
 
     tx.commit().await.map_err(|error| error.to_string())?;
 
+    state.set_queue_paused(false);
     scheduler::emit_job_update(&app, &job);
+    scheduler::emit_queue_state(&app, false);
     state.scheduler_notify.notify_one();
 
     Ok(job)
