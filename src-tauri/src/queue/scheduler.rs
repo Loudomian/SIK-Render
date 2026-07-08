@@ -71,27 +71,12 @@ async fn schedule_jobs(app: &AppHandle, state: &AppState) -> anyhow::Result<bool
     }
 
     let Some(job) = try_start_next_job(app, state).await? else {
-        pause_queue_if_idle(app, state).await?;
         return Ok(false);
     };
 
     spawn_job_runner(app.clone(), state.clone(), job);
 
     Ok(true)
-}
-
-async fn pause_queue_if_idle(app: &AppHandle, state: &AppState) -> anyhow::Result<()> {
-    let pending_jobs =
-        sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM jobs WHERE status = 'pending'")
-            .fetch_one(&state.pool)
-            .await?;
-
-    if pending_jobs <= 0 && !state.is_queue_paused() {
-        state.set_queue_paused(true);
-        emit_queue_state(app, true);
-    }
-
-    Ok(())
 }
 
 async fn try_start_next_job(
@@ -360,8 +345,4 @@ pub fn emit_queue_state_full(app: &AppHandle, paused: bool, paused_job: Option<S
             .ws_broadcaster
             .send(crate::network::types::WsMessage::QueueState { paused });
     }
-}
-
-pub fn emit_queue_state(app: &AppHandle, paused: bool) {
-    emit_queue_state_full(app, paused, None);
 }

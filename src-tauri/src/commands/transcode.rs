@@ -795,6 +795,33 @@ where
     Ok(next.max(1))
 }
 
+async fn next_ffmpeg_job_number(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+) -> Result<i32, sqlx::Error> {
+    sqlx::query(
+        "INSERT OR IGNORE INTO job_number_counters (kind, next_number)
+         VALUES ('ffmpeg', (SELECT COALESCE(MAX(job_number), 0) + 1 FROM ffmpeg_jobs))",
+    )
+    .execute(&mut **tx)
+    .await?;
+
+    sqlx::query(
+        "UPDATE job_number_counters
+         SET next_number = next_number + 1
+         WHERE kind = 'ffmpeg'",
+    )
+    .execute(&mut **tx)
+    .await?;
+
+    let next = sqlx::query_scalar::<_, i32>(
+        "SELECT next_number - 1 FROM job_number_counters WHERE kind = 'ffmpeg'",
+    )
+    .fetch_one(&mut **tx)
+    .await?;
+
+    Ok(next.max(1))
+}
+
 pub async fn load_ffmpeg_job(pool: &sqlx::SqlitePool, id: &str) -> anyhow::Result<FfmpegJob> {
     let job = sqlx::query_as::<_, DbFfmpegJob>(
         r#"
@@ -1393,12 +1420,9 @@ pub async fn insert_ffmpeg_job(
         .begin()
         .await
         .map_err(|error| error.to_string())?;
-    let job_number: i64 =
-        sqlx::query_scalar("SELECT COALESCE(MAX(job_number), 0) + 1 FROM ffmpeg_jobs")
-            .fetch_one(&mut *tx)
-            .await
-            .map_err(|error| error.to_string())?;
-    job.job_number = job_number as i32;
+    job.job_number = next_ffmpeg_job_number(&mut tx)
+        .await
+        .map_err(|error| error.to_string())?;
     job.priority = next_ffmpeg_job_priority(&mut *tx)
         .await
         .map_err(|error| error.to_string())?;

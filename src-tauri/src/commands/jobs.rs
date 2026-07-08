@@ -199,6 +199,33 @@ where
     Ok(next.max(1))
 }
 
+async fn next_render_job_number(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+) -> Result<i32, sqlx::Error> {
+    sqlx::query(
+        "INSERT OR IGNORE INTO job_number_counters (kind, next_number)
+         VALUES ('render', (SELECT COALESCE(MAX(job_number), 0) + 1 FROM jobs))",
+    )
+    .execute(&mut **tx)
+    .await?;
+
+    sqlx::query(
+        "UPDATE job_number_counters
+         SET next_number = next_number + 1
+         WHERE kind = 'render'",
+    )
+    .execute(&mut **tx)
+    .await?;
+
+    let next = sqlx::query_scalar::<_, i32>(
+        "SELECT next_number - 1 FROM job_number_counters WHERE kind = 'render'",
+    )
+    .fetch_one(&mut **tx)
+    .await?;
+
+    Ok(next.max(1))
+}
+
 fn normalize_optional_text(value: Option<String>) -> Option<String> {
     value.and_then(|text| {
         let trimmed = text.trim();
@@ -622,11 +649,9 @@ pub async fn add_job(
         .begin()
         .await
         .map_err(|error| error.to_string())?;
-    let job_number: i64 = sqlx::query_scalar("SELECT COALESCE(MAX(job_number), 0) + 1 FROM jobs")
-        .fetch_one(&mut *tx)
+    job.job_number = next_render_job_number(&mut tx)
         .await
         .map_err(|error| error.to_string())?;
-    job.job_number = job_number as i32;
     job.priority = next_queue_priority(&mut *tx)
         .await
         .map_err(|error| error.to_string())?;
@@ -721,9 +746,7 @@ pub async fn add_job(
 
     tx.commit().await.map_err(|error| error.to_string())?;
 
-    state.set_queue_paused(false);
     scheduler::emit_job_update(&app, &job);
-    scheduler::emit_queue_state(&app, false);
     state.scheduler_notify.notify_one();
 
     Ok(job)
