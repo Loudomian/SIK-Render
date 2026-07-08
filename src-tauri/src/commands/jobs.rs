@@ -1085,9 +1085,6 @@ pub async fn remove_job(id: String, state: State<'_, AppState>) -> Result<(), St
     if let Ok(path) = crate::app_paths::job_logs_dir(job_number, &job_id) {
         let _ = std::fs::remove_dir_all(path);
     }
-    if let Ok(path) = crate::app_paths::legacy_job_logs_dir(job_number) {
-        let _ = std::fs::remove_dir_all(path);
-    }
 
     Ok(())
 }

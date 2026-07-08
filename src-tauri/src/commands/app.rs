@@ -32,6 +32,13 @@ pub fn get_app_version_info() -> AppVersionInfo {
 }
 
 #[tauri::command]
+pub fn get_app_runtime_dir() -> Result<String, String> {
+    crate::app_paths::tool_root_dir()
+        .map(|path| path.display().to_string())
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
 pub fn app_ready(app: AppHandle) -> Result<(), String> {
     let main_window = app
         .get_webview_window("main")

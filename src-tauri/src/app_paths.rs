@@ -143,21 +143,6 @@ fn roaming_app_dir() -> Result<PathBuf> {
     Ok(dir)
 }
 
-fn executable_dir() -> Result<PathBuf> {
-    let exe = std::env::current_exe().context("failed to resolve current executable")?;
-    exe.parent()
-        .map(Path::to_path_buf)
-        .context("failed to resolve executable directory")
-}
-
-fn legacy_runtime_root_dir() -> Result<PathBuf> {
-    if cfg!(debug_assertions) {
-        tool_root_dir()
-    } else {
-        executable_dir()
-    }
-}
-
 pub fn config_path() -> Result<PathBuf> {
     Ok(tool_root_dir()?.join(CONFIG_FILE_NAME))
 }
@@ -251,90 +236,10 @@ fn ffmpeg_jobs_root_dir() -> Result<PathBuf> {
 }
 
 pub fn ensure_runtime_layout() -> Result<()> {
-    migrate_legacy_runtime_root()?;
-    normalize_logs_directory_name()?;
     let _ = app_logs_dir()?;
     let _ = node_peers_dir()?;
     let _ = blender_jobs_root_dir()?;
     let _ = ffmpeg_jobs_root_dir()?;
-    migrate_known_legacy_logs()?;
-    Ok(())
-}
-
-fn normalize_logs_directory_name() -> Result<()> {
-    let root = tool_root_dir()?;
-    let canonical = root.join(LEGACY_LOGS_DIR_NAME);
-    let legacy_upper = root.join("Logs");
-
-    if !legacy_upper.exists() || legacy_upper == canonical {
-        return Ok(());
-    }
-
-    if canonical.exists() {
-        merge_directory_into(&legacy_upper, &canonical, None)?;
-        return Ok(());
-    }
-
-    match fs::rename(&legacy_upper, &canonical) {
-        Ok(()) => Ok(()),
-        Err(_) => {
-            merge_directory_into(&legacy_upper, &canonical, None)?;
-            Ok(())
-        }
-    }
-}
-
-fn migrate_legacy_runtime_root() -> Result<()> {
-    let source_root = legacy_runtime_root_dir()?;
-    let target_root = tool_root_dir()?;
-    if source_root == target_root || !source_root.exists() {
-        return Ok(());
-    }
-
-    migrate_file_if_missing(
-        &source_root.join(CONFIG_FILE_NAME),
-        &target_root.join(CONFIG_FILE_NAME),
-    )?;
-    migrate_database_files(&source_root, &target_root)?;
-    migrate_file_if_missing(
-        &source_root.join(NODE_ID_FILE_NAME),
-        &target_root.join(NODE_ID_FILE_NAME),
-    )?;
-    migrate_file_if_missing(
-        &source_root.join(LEGACY_NODE_ID_FILE_NAME),
-        &target_root.join(LEGACY_NODE_ID_FILE_NAME),
-    )?;
-
-    merge_directory_into(
-        &source_root.join(JOBS_ROOT_DIR_NAME),
-        &target_root.join(JOBS_ROOT_DIR_NAME),
-        None,
-    )?;
-    merge_directory_into(
-        &source_root.join(LEGACY_LOGS_DIR_NAME),
-        &target_root.join(LEGACY_LOGS_DIR_NAME),
-        None,
-    )?;
-    Ok(())
-}
-
-fn migrate_file_if_missing(source: &Path, target: &Path) -> Result<()> {
-    if !source.exists() || target.exists() {
-        return Ok(());
-    }
-
-    move_file_replace(source, target)
-}
-
-fn migrate_database_files(source_root: &Path, target_root: &Path) -> Result<()> {
-    for file_name in [
-        DB_FILE_NAME.to_string(),
-        format!("{DB_FILE_NAME}-wal"),
-        format!("{DB_FILE_NAME}-shm"),
-        format!("{DB_FILE_NAME}-journal"),
-    ] {
-        migrate_file_if_missing(&source_root.join(&file_name), &target_root.join(&file_name))?;
-    }
     Ok(())
 }
 
@@ -368,41 +273,12 @@ pub fn ffmpeg_job_logs_dir_name(job_number: i32, job_id: &str) -> String {
     )
 }
 
-pub fn legacy_job_logs_dir(job_number: i32) -> Result<PathBuf> {
-    Ok(logs_dir()?.join(format!("job-{job_number:04}")))
-}
-
-fn legacy_job_logs_dir_with_id(job_number: i32, job_id: &str) -> Result<PathBuf> {
-    Ok(logs_dir()?.join(format!("job-{job_number:04}-{}", job_log_suffix(job_id))))
-}
-
-fn legacy_ffmpeg_job_logs_dir(job_number: i32, job_id: &str) -> Result<PathBuf> {
-    Ok(logs_dir()?.join(format!(
-        "ffmpeg-job-{job_number:04}-{}",
-        ffmpeg_job_log_suffix(job_id),
-    )))
-}
-
 fn blender_job_dir_path(job_number: i32, job_id: &str) -> Result<PathBuf> {
     Ok(blender_jobs_root_dir()?.join(job_logs_dir_name(job_number, job_id)))
 }
 
 fn ffmpeg_job_dir_path(job_number: i32, job_id: &str) -> Result<PathBuf> {
     Ok(ffmpeg_jobs_root_dir()?.join(ffmpeg_job_logs_dir_name(job_number, job_id)))
-}
-
-fn blender_job_dir_path_with_suffix(job_number: i32, suffix: &str) -> Result<PathBuf> {
-    Ok(blender_jobs_root_dir()?.join(format!(
-        "blender_job_{job_number:04}_{}",
-        job_log_suffix(suffix),
-    )))
-}
-
-fn ffmpeg_job_dir_path_with_suffix(job_number: i32, suffix: &str) -> Result<PathBuf> {
-    Ok(ffmpeg_jobs_root_dir()?.join(format!(
-        "ffmpeg_job_{job_number:04}_{}",
-        job_log_suffix(suffix),
-    )))
 }
 
 pub fn job_logs_dir(job_number: i32, job_id: &str) -> Result<PathBuf> {
@@ -432,276 +308,13 @@ pub fn ffmpeg_job_log_dir(job_number: i32, job_id: &str) -> Result<PathBuf> {
 fn ensure_blender_job_layout(job_number: i32, job_id: &str) -> Result<PathBuf> {
     let target = blender_job_dir_path(job_number, job_id)?;
     fs::create_dir_all(&target).context("failed to create blender job directory")?;
-    migrate_directory_into(
-        &legacy_job_logs_dir_with_id(job_number, job_id)?,
-        &target,
-        Some(BLENDER_LOG_KIND),
-    )?;
-    migrate_directory_into(
-        &legacy_job_logs_dir(job_number)?,
-        &target,
-        Some(BLENDER_LOG_KIND),
-    )?;
-    normalize_job_layout(&target, BLENDER_LOG_KIND)?;
     Ok(target)
 }
 
 fn ensure_ffmpeg_job_layout(job_number: i32, job_id: &str) -> Result<PathBuf> {
     let target = ffmpeg_job_dir_path(job_number, job_id)?;
     fs::create_dir_all(&target).context("failed to create ffmpeg job directory")?;
-    migrate_directory_into(
-        &legacy_ffmpeg_job_logs_dir(job_number, job_id)?,
-        &target,
-        Some(FFMPEG_LOG_KIND),
-    )?;
-    normalize_job_layout(&target, FFMPEG_LOG_KIND)?;
     Ok(target)
-}
-
-fn migrate_known_legacy_logs() -> Result<()> {
-    let legacy_root = logs_dir()?;
-    if !legacy_root.exists() {
-        return Ok(());
-    }
-
-    for entry in fs::read_dir(&legacy_root).with_context(|| {
-        format!(
-            "failed to read legacy logs directory {}",
-            legacy_root.display()
-        )
-    })? {
-        let entry = entry?;
-        let source = entry.path();
-        if !source.is_dir() {
-            continue;
-        }
-
-        let Some(name) = source.file_name().and_then(|value| value.to_str()) else {
-            continue;
-        };
-
-        if let Some((job_number, suffix)) = parse_legacy_blender_named_dir(name) {
-            let target = blender_job_dir_path_with_suffix(job_number, &suffix)?;
-            fs::create_dir_all(&target).context("failed to create blender migration target")?;
-            migrate_directory_into(&source, &target, Some(BLENDER_LOG_KIND))?;
-            normalize_job_layout(&target, BLENDER_LOG_KIND)?;
-            continue;
-        }
-
-        if let Some((job_number, suffix)) = parse_legacy_ffmpeg_named_dir(name) {
-            let target = ffmpeg_job_dir_path_with_suffix(job_number, &suffix)?;
-            fs::create_dir_all(&target).context("failed to create ffmpeg migration target")?;
-            migrate_directory_into(&source, &target, Some(FFMPEG_LOG_KIND))?;
-            normalize_job_layout(&target, FFMPEG_LOG_KIND)?;
-        }
-    }
-
-    Ok(())
-}
-
-fn parse_legacy_blender_named_dir(name: &str) -> Option<(i32, String)> {
-    let rest = name.strip_prefix("job-")?;
-    let (job_number, suffix) = rest.split_once('-')?;
-    Some((job_number.parse().ok()?, job_log_suffix(suffix)))
-}
-
-fn parse_legacy_ffmpeg_named_dir(name: &str) -> Option<(i32, String)> {
-    let rest = name.strip_prefix("ffmpeg-job-")?;
-    let (job_number, suffix) = rest.split_once('-')?;
-    Some((job_number.parse().ok()?, job_log_suffix(suffix)))
-}
-
-fn normalize_job_layout(job_dir: &Path, kind: &str) -> Result<()> {
-    let log_dir = job_dir.join(LOG_DIR_NAME);
-    fs::create_dir_all(&log_dir)
-        .with_context(|| format!("failed to create log directory {}", log_dir.display()))?;
-
-    for entry in fs::read_dir(job_dir)
-        .with_context(|| format!("failed to read job directory {}", job_dir.display()))?
-    {
-        let entry = entry?;
-        let path = entry.path();
-        if path == log_dir {
-            continue;
-        }
-
-        let Some(name) = path.file_name().and_then(|value| value.to_str()) else {
-            continue;
-        };
-
-        if path.is_file() {
-            if let Some(normalized) = normalize_log_file_name(kind, name) {
-                move_file_replace(&path, &log_dir.join(normalized))?;
-            }
-        }
-    }
-
-    for entry in fs::read_dir(&log_dir)
-        .with_context(|| format!("failed to read log directory {}", log_dir.display()))?
-    {
-        let entry = entry?;
-        let path = entry.path();
-        if !path.is_file() {
-            continue;
-        }
-
-        let Some(name) = path.file_name().and_then(|value| value.to_str()) else {
-            continue;
-        };
-
-        if let Some(normalized) = normalize_log_file_name(kind, name) {
-            let normalized_path = log_dir.join(&normalized);
-            if path != normalized_path {
-                move_file_replace(&path, &normalized_path)?;
-            }
-        }
-    }
-
-    Ok(())
-}
-
-fn migrate_directory_into(
-    source: &Path,
-    target: &Path,
-    preferred_kind: Option<&str>,
-) -> Result<()> {
-    if !source.exists() || source == target {
-        return Ok(());
-    }
-
-    fs::create_dir_all(target)
-        .with_context(|| format!("failed to create migration target {}", target.display()))?;
-
-    for entry in fs::read_dir(source)
-        .with_context(|| format!("failed to read source directory {}", source.display()))?
-    {
-        let entry = entry?;
-        let path = entry.path();
-        let name = entry.file_name().to_string_lossy().to_string();
-
-        if name == LOG_DIR_NAME && path.is_dir() {
-            let target_log_dir = target.join(LOG_DIR_NAME);
-            fs::create_dir_all(&target_log_dir).with_context(|| {
-                format!(
-                    "failed to create target log directory {}",
-                    target_log_dir.display()
-                )
-            })?;
-            merge_directory_into(&path, &target_log_dir, preferred_kind)?;
-            continue;
-        }
-
-        if path.is_file() {
-            if name == JOB_TOML_FILE_NAME {
-                move_file_replace(&path, &target.join(JOB_TOML_FILE_NAME))?;
-                continue;
-            }
-
-            if let Some(kind) = preferred_kind {
-                if let Some(normalized) = normalize_log_file_name(kind, &name) {
-                    move_file_replace(&path, &target.join(LOG_DIR_NAME).join(normalized))?;
-                    continue;
-                }
-            }
-
-            move_file_replace(&path, &target.join(&name))?;
-            continue;
-        }
-
-        if path.is_dir() {
-            merge_directory_into(&path, &target.join(&name), preferred_kind)?;
-        }
-    }
-
-    remove_dir_if_empty(source)?;
-    Ok(())
-}
-
-fn merge_directory_into(source: &Path, target: &Path, preferred_kind: Option<&str>) -> Result<()> {
-    if !source.exists() {
-        return Ok(());
-    }
-
-    fs::create_dir_all(target)
-        .with_context(|| format!("failed to create merge target {}", target.display()))?;
-
-    for entry in fs::read_dir(source)
-        .with_context(|| format!("failed to read merge source {}", source.display()))?
-    {
-        let entry = entry?;
-        let path = entry.path();
-        let name = entry.file_name().to_string_lossy().to_string();
-
-        if path.is_dir() {
-            merge_directory_into(&path, &target.join(&name), preferred_kind)?;
-            continue;
-        }
-
-        if let Some(kind) = preferred_kind {
-            if let Some(normalized) = normalize_log_file_name(kind, &name) {
-                move_file_replace(&path, &target.join(normalized))?;
-                continue;
-            }
-        }
-
-        move_file_replace(&path, &target.join(&name))?;
-    }
-
-    remove_dir_if_empty(source)?;
-    Ok(())
-}
-
-fn move_file_replace(source: &Path, target: &Path) -> Result<()> {
-    if !source.exists() || source == target {
-        return Ok(());
-    }
-
-    if let Some(parent) = target.parent() {
-        fs::create_dir_all(parent)
-            .with_context(|| format!("failed to create target parent {}", parent.display()))?;
-    }
-
-    if target.exists() {
-        fs::remove_file(target)
-            .with_context(|| format!("failed to replace existing file {}", target.display()))?;
-    }
-
-    match fs::rename(source, target) {
-        Ok(()) => Ok(()),
-        Err(_) => {
-            if !source.exists() {
-                return Ok(());
-            }
-            fs::copy(source, target).with_context(|| {
-                format!(
-                    "failed to copy file {} -> {}",
-                    source.display(),
-                    target.display()
-                )
-            })?;
-            fs::remove_file(source)
-                .with_context(|| format!("failed to remove source file {}", source.display()))?;
-            Ok(())
-        }
-    }
-}
-
-fn remove_dir_if_empty(path: &Path) -> Result<()> {
-    if !path.exists() || !path.is_dir() {
-        return Ok(());
-    }
-
-    let is_empty = fs::read_dir(path)
-        .with_context(|| format!("failed to inspect directory {}", path.display()))?
-        .next()
-        .is_none();
-
-    if is_empty {
-        fs::remove_dir(path)
-            .with_context(|| format!("failed to remove directory {}", path.display()))?;
-    }
-
-    Ok(())
 }
 
 fn normalize_log_file_name(kind: &str, file_name: &str) -> Option<String> {

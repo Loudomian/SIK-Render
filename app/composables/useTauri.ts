@@ -170,6 +170,9 @@ const tauriApi = {
   saveSettings: (settings: AppSettings) =>
     invoke<void>('save_settings', { settings }),
 
+  getAppRuntimeDir: () =>
+    invoke<string>('get_app_runtime_dir'),
+
   resetAppRuntimeData: () =>
     invoke<RuntimeResetResult>('reset_app_runtime_data'),
 }

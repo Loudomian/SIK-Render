@@ -226,6 +226,14 @@
               @click="checkForUpdates"
             />
             <UButton
+              icon="i-lucide-folder-open"
+              :label="t('settingsPage.openRuntimeDir')"
+              color="neutral"
+              variant="outline"
+              size="sm"
+              @click="openRuntimeDir"
+            />
+            <UButton
               icon="i-lucide-trash-2"
               :label="t('settingsPage.reset')"
               color="error"
@@ -333,7 +341,7 @@ import type { AppLocale } from '~/stores/settings'
 const settingsStore = useSettingsStore()
 const toast = useToast()
 const { t, setLocale: setI18nLocale } = useI18n()
-const { resetAppRuntimeData } = useTauri()
+const { getAppRuntimeDir, openPath, resetAppRuntimeData } = useTauri()
 const updaterState = useUpdaterState()
 const runtimeConfig = useRuntimeConfig()
 const blenderPathModalOpen = ref(false)
@@ -420,6 +428,20 @@ async function confirmRuntimeReset() {
     runtimeResetError.value = error instanceof Error ? error.message : String(error)
   } finally {
     runtimeResetting.value = false
+  }
+}
+
+async function openRuntimeDir() {
+  try {
+    const path = await getAppRuntimeDir()
+    await openPath(path)
+  } catch (error) {
+    toast.add({
+      title: t('settingsPage.openRuntimeDirFailed'),
+      description: error instanceof Error ? error.message : String(error),
+      color: 'error',
+      icon: 'i-lucide-circle-alert',
+    })
   }
 }
 

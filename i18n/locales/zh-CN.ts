@@ -649,6 +649,8 @@ export default {
     about: '关于',
     copyright: '版权信息',
     currentVersion: '当前版本',
+    openRuntimeDir: '数据目录',
+    openRuntimeDirFailed: '打开数据目录失败',
     checkUpdates: '检查更新',
     reset: '重新初始化',
     noBlender: '当前没有可用的 Blender 可执行文件。',

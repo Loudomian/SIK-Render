@@ -649,6 +649,8 @@ export default {
     about: 'About',
     copyright: 'Copyright',
     currentVersion: 'Current Version',
+    openRuntimeDir: 'Data Folder',
+    openRuntimeDirFailed: 'Failed to Open Data Folder',
     checkUpdates: 'Check Updates',
     reset: 'Reset Runtime',
     noBlender: 'No available Blender executable.',
