@@ -213,7 +213,6 @@ export const useJobsStore = defineStore('jobs', () => {
     if (event.timeElapsed > 0 || event.remainingSecs != null) {
       renderStarted.value[event.jobId] = true
     }
-    sortJobs()
   }
 
   function applyLog(event: RenderLogEvent) {
@@ -250,6 +249,7 @@ export const useJobsStore = defineStore('jobs', () => {
     }
     const current = jobs.value[index]
     if (!current) return
+    const shouldSort = current.priority !== event.job.priority || current.createdAt !== event.job.createdAt
     const isRunning = event.job.status === 'running'
     const storedFrame = current.currentFrame ?? 0
     const incomingFrame = event.job.currentFrame ?? 0
@@ -279,7 +279,7 @@ export const useJobsStore = defineStore('jobs', () => {
     } else if (!(event.job.id in renderStarted.value)) {
       renderStarted.value[event.job.id] = (((event.job.timeElapsed ?? 0) > 0) || ((event.job.remainingSecs ?? 0) > 0))
     }
-    sortJobs()
+    if (shouldSort) sortJobs()
   }
 
   function isJobWarmingUp(id: string): boolean {

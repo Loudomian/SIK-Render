@@ -595,6 +595,7 @@ import { JOB_STATUS_COLOR, useJobStatusLabel } from '~/composables/useJobStatus'
 import { RENDER_QUEUE_ORDER_HIDDEN_STATUSES, resolveQueueOrder, useQueueOrderLabel } from '~/composables/useQueueOrder'
 import { buildTranscodeOutputPath, normalizeTranscodeDirectory, splitTranscodeOutputPath } from '~/composables/useTranscodeConfig'
 import { formatDuration, useDateFormatters } from '~/utils/date-format'
+import { findAppendedLogLines } from '~/utils/log-lines'
 import { parseLogLine } from '~/utils/log-line'
 import { resolveOutputDirectory, resolvePathBaseName } from '~/utils/output-path'
 import { captureVideoPoster } from '~/utils/video-preview'
@@ -611,7 +612,6 @@ const durationNow = useDurationNow()
 const settingsStore = useSettingsStore()
 
 const { openPath, getLastRenderedFrame, getJobLogSummary, getJobLogs, updateJobPreviewDimensions, previewOutputPathTemplate, pathExists } = useTauri()
-const { onProgress, onJobUpdated, onLog, onFfmpegJobUpdated } = useRenderEvents()
 const statusLabel = useJobStatusLabel()
 const queueOrderLabel = useQueueOrderLabel()
 
@@ -886,7 +886,6 @@ function buildJobContextMenuItems(currentJob: RenderJob) {
 
 const updatingAutoTranscode = ref(false)
 const logSummary = ref<JobLogSummary | null>(null)
-const detailUnlisteners: Array<() => void> = []
 let logSummaryTimer: ReturnType<typeof setTimeout> | null = null
 const shadowRecoveryToast = useShadowRecoveryToast()
 
@@ -1194,6 +1193,16 @@ watch(
   },
 )
 
+watch(
+  () => jobsStore.logs[jobId.value] ?? [],
+  (lines, previousLines) => {
+    if (!allLogsLoaded.value) return
+    const appended = findAppendedLogLines(lines, previousLines, allLogLines.value.at(-1))
+    if (!appended.length) return
+    allLogLines.value = [...allLogLines.value, ...appended]
+  },
+)
+
 async function toggleLogScope() {
   const nextShowAll = !showAllLogs.value
   showAllLogs.value = nextShowAll
@@ -1264,20 +1273,6 @@ onMounted(async () => {
     jobsStore.fetchJobs(),
     transcodeStore.fetchFfmpegJobs(),
   ])
-  detailUnlisteners.push(await onProgress((event) => {
-    jobsStore.applyProgress(event)
-  }))
-  detailUnlisteners.push(await onJobUpdated((event) => {
-    jobsStore.applyJobUpdate(event)
-  }))
-  detailUnlisteners.push(await onLog((event) => {
-    if (event.jobId !== jobId.value || !allLogsLoaded.value) return
-    if (allLogLines.value.at(-1) === event.line) return
-    allLogLines.value = [...allLogLines.value, event.line]
-  }))
-  detailUnlisteners.push(await onFfmpegJobUpdated((event) => {
-    transcodeStore.applyFfmpegJobUpdate(event)
-  }))
   await Promise.all([
     jobsStore.loadJobLogs(jobId.value),
     refreshLogSummary(),
@@ -1289,9 +1284,6 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
-  for (const unlisten of detailUnlisteners) {
-    unlisten()
-  }
   cancelRetryCloseCleanup()
   if (logSummaryTimer) clearTimeout(logSummaryTimer)
 })

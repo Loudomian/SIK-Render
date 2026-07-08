@@ -235,10 +235,10 @@
 </template>
 
 <script setup lang="ts">
-import type { TranscodeLogEvent } from '~/types'
 import { FFMPEG_STATUS_COLOR, useFfmpegStatusLabel } from '~/composables/useFfmpegStatus'
 import { transcodeEncoderLabel } from '~/composables/useTranscodeConfig'
 import { useDateFormatters } from '~/utils/date-format'
+import { findAppendedLogLines } from '~/utils/log-lines'
 import { parseLogLine } from '~/utils/log-line'
 import { resolveOutputDirectory } from '~/utils/output-path'
 
@@ -249,7 +249,6 @@ const transcodeStore = useTranscodeStore()
 const { t } = useI18n()
 const { formatTimestamp } = useDateFormatters()
 const { openPath, getFfmpegJobLogs } = useTauri()
-const { onTranscodeProgress, onTranscodeLog, onFfmpegJobUpdated } = useRenderEvents()
 
 const jobId = computed(() => String(route.params.id ?? ''))
 const job = computed(() => transcodeStore.getFfmpegJobById(jobId.value))
@@ -266,7 +265,6 @@ const logLines = computed(() =>
   showAllLogs.value ? allLogLines.value : (transcodeStore.logs[jobId.value] ?? []),
 )
 const displayLogLines = computed(() => logLines.value.map(line => parseLogLine(line)))
-const unlisteners: Array<() => void> = []
 const logEl = ref<HTMLDivElement | null>(null)
 const pinToBottom = ref(true)
 
@@ -396,12 +394,6 @@ function onLogScroll() {
   pinToBottom.value = el.scrollTop + el.clientHeight >= el.scrollHeight - 40
 }
 
-function handleTranscodeLogEvent(event: TranscodeLogEvent) {
-  transcodeStore.applyLog(event)
-  if (event.jobId !== jobId.value || !allLogsLoaded.value) return
-  allLogLines.value = [...allLogLines.value, event.line]
-}
-
 watch(
   () => logLines.value.length,
   async () => {
@@ -410,6 +402,16 @@ watch(
     if (logEl.value) {
       logEl.value.scrollTop = logEl.value.scrollHeight
     }
+  },
+)
+
+watch(
+  () => transcodeStore.logs[jobId.value] ?? [],
+  (lines, previousLines) => {
+    if (!allLogsLoaded.value) return
+    const appended = findAppendedLogLines(lines, previousLines, allLogLines.value.at(-1))
+    if (!appended.length) return
+    allLogLines.value = [...allLogLines.value, ...appended]
   },
 )
 
@@ -426,15 +428,5 @@ onMounted(async () => {
 
   await loadLogs()
   loadError.value = null
-
-  unlisteners.push(await onTranscodeProgress(event => transcodeStore.applyProgress(event)))
-  unlisteners.push(await onTranscodeLog(handleTranscodeLogEvent))
-  unlisteners.push(await onFfmpegJobUpdated(event => transcodeStore.applyFfmpegJobUpdate(event)))
-})
-
-onUnmounted(() => {
-  for (const unlisten of unlisteners) {
-    unlisten()
-  }
 })
 </script>

@@ -202,7 +202,6 @@ const settingsStore = useSettingsStore()
 const transcodeStore = useTranscodeStore()
 const { t } = useI18n()
 const { scanFolderFrameGroups } = useTauri()
-const { onTranscodeProgress, onTranscodeLog, onFfmpegJobUpdated } = useRenderEvents()
 
 const activeTab = ref<'all' | 'queue' | 'done' | 'error'>('all')
 const isDragging = ref(false)
@@ -615,10 +614,6 @@ onMounted(async () => {
     settingsStore.load(),
     transcodeStore.fetchFfmpegJobs(),
   ])
-
-  unlisteners.push(await onTranscodeProgress(event => transcodeStore.applyProgress(event)))
-  unlisteners.push(await onTranscodeLog(event => transcodeStore.applyLog(event)))
-  unlisteners.push(await onFfmpegJobUpdated(event => transcodeStore.applyFfmpegJobUpdate(event)))
 
   const unlistenDrop = await getCurrentWindow().onDragDropEvent(async (event) => {
     if (route.path !== '/transcode') return

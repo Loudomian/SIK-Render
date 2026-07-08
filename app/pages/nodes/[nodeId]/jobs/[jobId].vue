@@ -439,7 +439,9 @@ watch(previewSourceUrl, () => { void refreshPreview() }, { immediate: true })
 
 onMounted(async () => {
   try {
-    await nodesStore.init()
+    void nodesStore.init().catch((error) => {
+      console.warn('Failed to initialize render node listeners:', error)
+    })
     await loadNodeQueueEvents()
   } finally {
     loading.value = false

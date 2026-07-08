@@ -101,7 +101,6 @@ export const useTranscodeStore = defineStore('transcode', () => {
     job.status = 'running'
     job.progressFrame = Math.max(job.progressFrame ?? 0, event.frame)
     job.totalFrames = event.totalFrames
-    sortJobs()
   }
 
   function applyLog(event: TranscodeLogEvent) {
@@ -112,9 +111,11 @@ export const useTranscodeStore = defineStore('transcode', () => {
     const index = ffmpegJobs.value.findIndex(job => job.id === event.job.id)
     if (index === -1) {
       ffmpegJobs.value.push(event.job)
+      sortJobs()
     } else {
       const current = ffmpegJobs.value[index]
       if (!current) return
+      const shouldSort = current.priority !== event.job.priority || current.createdAt !== event.job.createdAt
       ffmpegJobs.value[index] = {
         ...current,
         ...event.job,
@@ -122,8 +123,8 @@ export const useTranscodeStore = defineStore('transcode', () => {
           ? Math.max(current.progressFrame ?? 0, event.job.progressFrame ?? 0)
           : event.job.progressFrame,
       }
+      if (shouldSort) sortJobs()
     }
-    sortJobs()
   }
 
   function getFfmpegJobById(id: string) {

@@ -58,11 +58,9 @@ const jobsStore = useJobsStore()
 const { t } = useI18n()
 const localPort = computed(() => nodesStore.localNode?.port ?? 47878)
 
-onMounted(async () => {
-  await nodesStore.init()
-})
-
-onUnmounted(() => {
-  nodesStore.dispose()
+onMounted(() => {
+  void nodesStore.init().catch((error) => {
+    console.warn('Failed to initialize render node listeners:', error)
+  })
 })
 </script>

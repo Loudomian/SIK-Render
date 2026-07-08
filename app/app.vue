@@ -173,8 +173,18 @@ import appIconDarkUrl from '~/assets/app-icon-dark.png'
 import { formatDateTime } from '~/utils/date-format'
 
 const jobsStore = useJobsStore()
+const transcodeStore = useTranscodeStore()
+const nodesStore = useNodesStore()
 const settingsStore = useSettingsStore()
-const { onProgress, onJobUpdated, onLog, onQueueState } = useRenderEvents()
+const {
+  onProgress,
+  onJobUpdated,
+  onLog,
+  onQueueState,
+  onTranscodeProgress,
+  onTranscodeLog,
+  onFfmpegJobUpdated,
+} = useRenderEvents()
 const shadowRecoveryToast = useShadowRecoveryToast()
 const updaterState = useUpdaterState()
 const toast = useToast()
@@ -362,6 +372,14 @@ async function notifyAppReadyAfterPaint() {
   }
 }
 
+async function initNodesStore() {
+  try {
+    await nodesStore.init()
+  } catch (error) {
+    console.warn('Failed to initialize render node listeners:', error)
+  }
+}
+
 async function checkForAvailableUpdate() {
   try {
     if (shouldUseMockUpdate()) {
@@ -456,13 +474,6 @@ if (import.meta.client) {
 onMounted(async () => {
   systemThemeMedia?.addEventListener('change', handleSystemThemeChange)
   window.addEventListener('contextmenu', handleGlobalContextMenu, true)
-  await Promise.all([
-    jobsStore.fetchJobs(),
-    jobsStore.fetchQueueState(),
-    settingsStore.load(),
-  ])
-  await notifyAppReadyAfterPaint()
-  void checkForAvailableUpdate()
   unlisteners.push(await onProgress(jobsStore.applyProgress))
   unlisteners.push(await onJobUpdated(jobsStore.applyJobUpdate))
   unlisteners.push(await onLog((event) => {
@@ -470,6 +481,18 @@ onMounted(async () => {
     shadowRecoveryToast.handleLogEvent(event)
   }))
   unlisteners.push(await onQueueState(jobsStore.applyQueueState))
+  unlisteners.push(await onTranscodeProgress(transcodeStore.applyProgress))
+  unlisteners.push(await onTranscodeLog(transcodeStore.applyLog))
+  unlisteners.push(await onFfmpegJobUpdated(transcodeStore.applyFfmpegJobUpdate))
+  await Promise.all([
+    jobsStore.fetchJobs(),
+    jobsStore.fetchQueueState(),
+    transcodeStore.fetchFfmpegJobs(),
+    initNodesStore(),
+    settingsStore.load(),
+  ])
+  await notifyAppReadyAfterPaint()
+  void checkForAvailableUpdate()
 })
 
 onUnmounted(() => {
@@ -479,5 +502,6 @@ onUnmounted(() => {
   for (const unlisten of unlisteners) {
     unlisten()
   }
+  nodesStore.dispose()
 })
 </script>
