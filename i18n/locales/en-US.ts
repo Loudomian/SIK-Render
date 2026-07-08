@@ -396,6 +396,8 @@ export default {
       clearFailedDescription: '{failed} jobs could not be deleted.',
       deleteFailedTitle: 'Failed to Delete Render Job',
       reorderFailedTitle: 'Failed to Update Order',
+      jobFailedTitle: 'Render Job Failed',
+      jobFailedDescription: '"{name}" failed to start or render. Check the job detail log.',
     },
     notices: {
       projectVideoQuick: 'Project output is video (FFMPEG); this job will output MP4 directly.',
@@ -614,6 +616,8 @@ export default {
     unknownVersion: 'Unknown Version',
     openReleaseFailed: 'Failed to Open Release Page',
     stale: 'Update information expired. Check again later.',
+    runningJobsTitle: 'Jobs Are Running',
+    runningJobsDescription: '{count} render or transcode job(s) are currently running. Pause, cancel, or wait for them to finish before installing the update.',
     installedTitle: 'Update Installed',
     installedDescription: 'The app will restart to complete the update.',
     latestTitle: 'Already Up to Date',

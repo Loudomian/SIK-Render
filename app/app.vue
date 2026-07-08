@@ -133,6 +133,13 @@
               :title="t('updater.failed')"
               :description="updateError"
             />
+            <UAlert
+              v-if="updateBlockedByRunningJobs"
+              color="warning"
+              variant="subtle"
+              :title="t('updater.runningJobsTitle')"
+              :description="updateBlockedMessage"
+            />
 
             <div class="modal-actions settings-modal-actions">
               <div class="settings-modal-actions-start" />
@@ -151,6 +158,7 @@
                   color="primary"
                   variant="solid"
                   :loading="installingUpdate"
+                  :disabled="updateBlockedByRunningJobs"
                   @click="installAvailableUpdate"
                 />
               </div>
@@ -171,6 +179,7 @@ import { open as openUrl } from '@tauri-apps/plugin-shell'
 import appIconLightUrl from '~/assets/app-icon-light.png'
 import appIconDarkUrl from '~/assets/app-icon-dark.png'
 import { formatDateTime } from '~/utils/date-format'
+import type { JobUpdatedEvent } from '~/types'
 
 const jobsStore = useJobsStore()
 const transcodeStore = useTranscodeStore()
@@ -220,6 +229,7 @@ const unlisteners: Array<() => void> = []
 let systemThemeMedia: MediaQueryList | null = null
 const systemPrefersDark = ref(false)
 let startupReadyNotified = false
+const failedJobToastIds = new Set<string>()
 
 function resolveTheme(theme: 'dark' | 'light' | 'system') {
   if (theme === 'system') {
@@ -238,6 +248,10 @@ const updateVersion = computed(() => updaterState.version.value || t('updater.un
 const updateCurrentVersion = computed(() => updaterState.latestUpdate.value?.currentVersion || t('updater.unknownVersion'))
 const updateDate = computed(() => formatUpdateDate(updaterState.latestUpdate.value?.date))
 const updateNoteBlocks = computed(() => parseUpdateNotes(updaterState.latestUpdate.value?.body))
+const runningTranscodeJobs = computed(() => transcodeStore.ffmpegJobs.filter(job => job.status === 'running'))
+const runningTaskCount = computed(() => jobsStore.runningJobs.length + runningTranscodeJobs.value.length)
+const updateBlockedByRunningJobs = computed(() => runningTaskCount.value > 0)
+const updateBlockedMessage = computed(() => t('updater.runningJobsDescription', { count: runningTaskCount.value }))
 const updateReleaseUrl = computed(() => {
   const version = updaterState.latestUpdate.value?.version
   if (!version) return 'https://github.com/Loudomian/SIK-Render/releases'
@@ -380,6 +394,28 @@ async function initNodesStore() {
   }
 }
 
+function handleJobUpdated(event: JobUpdatedEvent) {
+  const previous = jobsStore.jobs.find(job => job.id === event.job.id)
+  jobsStore.applyJobUpdate(event)
+  if (previous?.status === 'failed' && event.job.status !== 'failed') {
+    failedJobToastIds.delete(event.job.id)
+  }
+  if (
+    previous
+    && previous.status !== 'failed'
+    && event.job.status === 'failed'
+    && !failedJobToastIds.has(event.job.id)
+  ) {
+    failedJobToastIds.add(event.job.id)
+    toast.add({
+      title: t('renderQueue.queueToast.jobFailedTitle'),
+      description: t('renderQueue.queueToast.jobFailedDescription', { name: event.job.name }),
+      color: 'error',
+      icon: 'i-lucide-triangle-alert',
+    })
+  }
+}
+
 async function checkForAvailableUpdate() {
   try {
     if (shouldUseMockUpdate()) {
@@ -426,6 +462,17 @@ async function openUpdateReleasePage() {
 
 async function installAvailableUpdate() {
   if (installingUpdate.value) return
+
+  if (updateBlockedByRunningJobs.value) {
+    updateError.value = ''
+    toast.add({
+      title: t('updater.runningJobsTitle'),
+      description: updateBlockedMessage.value,
+      color: 'warning',
+      icon: 'i-lucide-triangle-alert',
+    })
+    return
+  }
 
   if (!updaterState.latestUpdate.value) {
     updateError.value = t('updater.stale')
@@ -475,7 +522,7 @@ onMounted(async () => {
   systemThemeMedia?.addEventListener('change', handleSystemThemeChange)
   window.addEventListener('contextmenu', handleGlobalContextMenu, true)
   unlisteners.push(await onProgress(jobsStore.applyProgress))
-  unlisteners.push(await onJobUpdated(jobsStore.applyJobUpdate))
+  unlisteners.push(await onJobUpdated(handleJobUpdated))
   unlisteners.push(await onLog((event) => {
     jobsStore.applyLog(event)
     shadowRecoveryToast.handleLogEvent(event)

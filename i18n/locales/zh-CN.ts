@@ -396,6 +396,8 @@ export default {
       clearFailedDescription: '共有 {failed} 个任务未能删除。',
       deleteFailedTitle: '删除渲染任务失败',
       reorderFailedTitle: '顺序更新失败',
+      jobFailedTitle: '渲染任务失败',
+      jobFailedDescription: '“{name}” 启动或渲染失败，请检查任务详情日志。',
     },
     notices: {
       projectVideoQuick: '工程原输出为视频 (FFMPEG)，当前将直接输出 MP4。',
@@ -614,6 +616,8 @@ export default {
     unknownVersion: '未知版本',
     openReleaseFailed: '无法打开发布页',
     stale: '更新信息已失效，请稍后重新检查。',
+    runningJobsTitle: '有任务正在运行',
+    runningJobsDescription: '当前有 {count} 个渲染或转码任务正在运行。请先暂停、取消或等待任务结束后再安装更新。',
     installedTitle: '更新安装完成',
     installedDescription: '应用将重启以完成更新。',
     latestTitle: '已是最新版本',

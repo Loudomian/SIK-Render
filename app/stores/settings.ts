@@ -191,9 +191,7 @@ export const useSettingsStore = defineStore('settings', () => {
   }
 
   async function toggleTheme() {
-    const themeOrder: AppSettings['theme'][] = ['dark', 'light', 'system']
-    const currentIndex = themeOrder.indexOf(settings.value.theme)
-    const nextTheme = themeOrder[(currentIndex + 1) % themeOrder.length] ?? 'dark'
+    const nextTheme: AppSettings['theme'] = settings.value.theme === 'dark' ? 'light' : 'dark'
     settings.value.theme = nextTheme
     persistThemePreference(nextTheme)
     await saveSettings(settings.value)

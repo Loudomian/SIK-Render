@@ -137,6 +137,12 @@ async fn try_start_next_job(
     };
 
     let job: RenderJob = job_row.into();
+    if let Some(message) = validate_job_inputs(&job) {
+        fail_job_before_start(app, state, &job, &message).await?;
+        state.scheduler_notify.notify_one();
+        return Ok(None);
+    }
+
     let started_at = Utc::now().timestamp_millis();
     let rows_affected = sqlx::query(
         "UPDATE jobs SET status = 'running', started_at = ?, finished_at = NULL WHERE id = ? AND status = 'pending'",
@@ -154,6 +160,66 @@ async fn try_start_next_job(
     let running_job = load_job(&state.pool, &job.id).await?;
     emit_job_update(app, &running_job);
     Ok(Some(running_job))
+}
+
+fn validate_job_inputs(job: &RenderJob) -> Option<String> {
+    if !job.blend_file.is_file() {
+        return Some(format!(
+            "Blend file not found before render start: {}",
+            job.blend_file.display()
+        ));
+    }
+    if !job.blender_executable.is_file() {
+        return Some(format!(
+            "Blender executable not found before render start: {}",
+            job.blender_executable.display()
+        ));
+    }
+    None
+}
+
+async fn fail_job_before_start(
+    app: &AppHandle,
+    state: &AppState,
+    job: &RenderJob,
+    message: &str,
+) -> anyhow::Result<()> {
+    let finished_at = Utc::now().timestamp_millis();
+    let line = format!("[failed] {message}");
+    if let Ok(log_file_path) = crate::app_paths::create_job_log_file(
+        job.job_number,
+        &job.id,
+        crate::app_paths::BLENDER_LOG_KIND,
+    ) {
+        let _ = crate::app_paths::append_log_line(&log_file_path, &line);
+    }
+    let rendered_line = crate::app_paths::timestamped_log_line(&line);
+    let _ = app.emit(
+        "render-log",
+        crate::blender::process::RenderLogEvent {
+            job_id: job.id.clone(),
+            line: rendered_line.clone(),
+        },
+    );
+    let _ = state
+        .ws_broadcaster
+        .send(crate::network::types::WsMessage::Log {
+            job_id: job.id.clone(),
+            line: rendered_line,
+        });
+
+    sqlx::query(
+        "UPDATE jobs SET status = 'failed', finished_at = ?, started_at = NULL WHERE id = ? AND status = 'pending'",
+    )
+    .bind(finished_at)
+    .bind(&job.id)
+    .execute(&state.pool)
+    .await?;
+
+    let failed_job = load_job(&state.pool, &job.id).await?;
+    emit_job_update(app, &failed_job);
+    let _ = crate::commands::transcode::write_blender_job_toml(&failed_job);
+    Ok(())
 }
 
 fn spawn_job_runner(app: AppHandle, state: AppState, running_job: RenderJob) {
