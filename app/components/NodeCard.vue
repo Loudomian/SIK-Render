@@ -154,7 +154,7 @@
       :close="false"
       :title="t('nodeCard.forgetConfirm.title')"
       :ui="{ content: 'job-modal-content' }"
-      @update:open="v => { if (!v && !forgetting) forgetConfirmOpen = false }"
+      @update:open="v => { if (!v) forgetConfirmOpen = false }"
     >
       <template #body>
         <div class="modal-stack">
@@ -167,7 +167,6 @@
               :label="t('common.cancel')"
               color="warning"
               variant="outline"
-              :disabled="forgetting"
               @click="forgetConfirmOpen = false"
             />
             <UButton
@@ -267,6 +266,8 @@ async function forgetNode() {
     forgetting.value = true
     await nodesStore.forgetNode(props.node.id)
     forgetConfirmOpen.value = false
+  } catch {
+    // The store already shows the failure toast; keep the dialog open for retry.
   } finally {
     forgetting.value = false
   }

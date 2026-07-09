@@ -22,7 +22,7 @@ pub fn run() {
         .plugin(tauri_plugin_notification::init())
         .setup(|app| {
             crate::app_paths::ensure_runtime_layout().expect("failed to initialize runtime layout");
-            init_app_logger().expect("failed to initialize app logger");
+            let log_path = init_app_logger().expect("failed to initialize app logger");
             log::info!(
                 "\n{}",
                 r#" ____    ______   __  __      ____    ____    __  __  ____    ____    ____
@@ -34,6 +34,7 @@ pub fn run() {
     \/_____/\/_____/ \/_/\/_/    \/_/\/ /\/___/  \/_/\/_/\/___/  \/___/  \/_/\/ /"#
             );
             log::info!("SIK Render v{} starting", env!("CARGO_PKG_VERSION"));
+            log::info!("app log file initialized at {}", log_path.display());
             let app_handle = app.handle().clone();
             let state = tauri::async_runtime::block_on(db::init(&app_handle))
                 .expect("failed to initialize database");
@@ -135,7 +136,7 @@ fn app_log_file_path() -> std::path::PathBuf {
     log_dir.join(format!("{}.log", sikfilm_log_file_name()))
 }
 
-fn init_app_logger() -> anyhow::Result<()> {
+fn init_app_logger() -> anyhow::Result<std::path::PathBuf> {
     let log_path = app_log_file_path();
     if let Some(parent) = log_path.parent() {
         std::fs::create_dir_all(parent)?;
@@ -163,6 +164,5 @@ fn init_app_logger() -> anyhow::Result<()> {
 
     let (max_level, logger) = dispatch.into_log();
     tauri_plugin_log::attach_logger(max_level, logger)?;
-    log::info!("app log file initialized at {}", log_path.display());
-    Ok(())
+    Ok(log_path)
 }
