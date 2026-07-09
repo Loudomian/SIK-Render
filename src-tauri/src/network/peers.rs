@@ -22,16 +22,6 @@ fn peer_file_path_for_peer(peer: &PeerInfo) -> Result<PathBuf> {
     ))
 }
 
-fn peer_file_candidates_for_peer(peer: &PeerInfo) -> Result<Vec<PathBuf>> {
-    Ok(crate::network::file_names::node_file_candidates_for_info(
-        &crate::app_paths::node_peers_dir()?,
-        &peer.node.hostname,
-        &peer.node.ip_address,
-        &peer.node.id,
-        "toml",
-    ))
-}
-
 fn peer_file_candidates(node_id: &str) -> Result<Vec<PathBuf>> {
     Ok(crate::network::file_names::node_file_candidates(
         &crate::app_paths::node_peers_dir()?,
@@ -129,7 +119,7 @@ struct RemoteJobTimingSection {
 
 pub fn load_peer_records() -> Result<Vec<PeerInfo>> {
     let dir = crate::app_paths::node_peers_dir()?;
-    let mut peers = std::collections::HashMap::<String, PeerInfo>::new();
+    let mut peers = std::collections::HashMap::<String, (PeerInfo, PathBuf)>::new();
 
     for entry in std::fs::read_dir(&dir)
         .with_context(|| format!("failed to read node peers directory {}", dir.display()))?
@@ -153,11 +143,11 @@ pub fn load_peer_records() -> Result<Vec<PeerInfo>> {
                 peer.connected = false;
                 let id = peer.node.id.clone();
                 match peers.get(&id) {
-                    Some(existing)
+                    Some((existing, _))
                         if existing.last_seen_at.unwrap_or_default()
                             >= peer.last_seen_at.unwrap_or_default() => {}
                     _ => {
-                        peers.insert(id, peer);
+                        peers.insert(id, (peer, path));
                     }
                 }
             }
@@ -167,7 +157,16 @@ pub fn load_peer_records() -> Result<Vec<PeerInfo>> {
         }
     }
 
-    let mut peers = peers.into_values().collect::<Vec<_>>();
+    for (peer, current_path) in peers.values() {
+        if let Err(error) = remove_stale_peer_files(peer, current_path) {
+            log::warn!("Failed to remove stale peer records for {}: {error}", peer.node.id);
+        }
+    }
+
+    let mut peers = peers
+        .into_values()
+        .map(|(peer, _)| peer)
+        .collect::<Vec<_>>();
     peers.sort_by(|a, b| {
         b.last_seen_at
             .unwrap_or_default()
@@ -254,7 +253,7 @@ pub fn save_peer_record(peer: &PeerInfo) -> Result<()> {
 }
 
 fn remove_stale_peer_files(peer: &PeerInfo, current_path: &PathBuf) -> Result<()> {
-    for path in peer_file_candidates_for_peer(peer)? {
+    for path in peer_file_candidates_with_scan(&peer.node.id)? {
         if path == *current_path || !path.exists() {
             continue;
         }
@@ -269,6 +268,7 @@ fn remove_stale_peer_files(peer: &PeerInfo, current_path: &PathBuf) -> Result<()
             std::fs::remove_file(&path).with_context(|| {
                 format!("failed to remove stale node peer record {}", path.display())
             })?;
+            log::info!("Removed stale render node peer record: {}", path.display());
         }
     }
     Ok(())

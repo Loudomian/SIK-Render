@@ -215,6 +215,11 @@ export const useNodesStore = defineStore('nodes', () => {
   async function forgetNode(nodeId: string) {
     try {
       await forgetPeer(nodeId)
+      toast.add({
+        title: t('nodeToasts.forgetDone'),
+        color: 'success',
+        icon: 'i-lucide-check',
+      })
     } catch (error) {
       toast.add({
         title: t('nodeToasts.forgetFailed'),

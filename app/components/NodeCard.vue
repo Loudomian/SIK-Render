@@ -94,12 +94,12 @@
             <UTooltip v-if="showForgetAction" :text="t('nodeCard.forgetTooltip')" arrow :content="{ side: 'bottom', sideOffset: 8 }">
               <UButton
                 icon="i-lucide-trash-2"
+                :label="t('nodeCard.forgetOffline')"
                 color="error"
                 variant="outline"
                 size="sm"
-                square
                 :loading="forgetting"
-                @click.stop="forgetNode"
+                @click.stop="forgetConfirmOpen = true"
               />
             </UTooltip>
           </div>
@@ -148,6 +148,40 @@
       :time-elapsed="activeJob.timeElapsed ?? undefined"
       :remaining-secs="activeJob.remainingSecs"
     />
+
+    <UModal
+      :open="forgetConfirmOpen"
+      :close="false"
+      :title="t('nodeCard.forgetConfirm.title')"
+      :ui="{ content: 'job-modal-content' }"
+      @update:open="v => { if (!v && !forgetting) forgetConfirmOpen = false }"
+    >
+      <template #body>
+        <div class="modal-stack">
+          <p class="modal-copy">
+            {{ t('nodeCard.forgetConfirm.description') }}
+          </p>
+          <div class="modal-actions">
+            <UButton
+              icon="i-lucide-x"
+              :label="t('common.cancel')"
+              color="warning"
+              variant="outline"
+              :disabled="forgetting"
+              @click="forgetConfirmOpen = false"
+            />
+            <UButton
+              icon="i-lucide-trash-2"
+              :label="t('nodeCard.forgetOffline')"
+              color="error"
+              variant="outline"
+              :loading="forgetting"
+              @click="forgetNode"
+            />
+          </div>
+        </div>
+      </template>
+    </UModal>
   </UCard>
 </template>
 
@@ -232,6 +266,7 @@ async function forgetNode() {
   try {
     forgetting.value = true
     await nodesStore.forgetNode(props.node.id)
+    forgetConfirmOpen.value = false
   } finally {
     forgetting.value = false
   }
@@ -283,6 +318,7 @@ const previewBadge = computed(() => {
 const showPreviewBadge = computed(() => !!previewJob.value && previewJob.value.renderMode !== 'quick_mp4')
 const { cardInfoEl, cardInfoHeight, syncHeightAfterTick } = useCardInfoHeight()
 const forgetting = ref(false)
+const forgetConfirmOpen = ref(false)
 const showForgetAction = computed(() => !props.isLocal && !props.connected)
 const previewStyle = computed(() =>
   ({

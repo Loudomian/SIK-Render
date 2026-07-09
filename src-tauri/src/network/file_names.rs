@@ -24,20 +24,6 @@ pub fn node_file_path(dir: &Path, node_id: &str, extension: &str) -> PathBuf {
     node_file_path_for_info(dir, "unknown", "unknown", node_id, extension)
 }
 
-pub fn node_file_candidates_for_info(
-    dir: &Path,
-    hostname: &str,
-    ip_address: &str,
-    node_id: &str,
-    extension: &str,
-) -> Vec<PathBuf> {
-    let mut candidates = vec![node_file_path_for_info(
-        dir, hostname, ip_address, node_id, extension,
-    )];
-    candidates.extend(node_file_candidates(dir, node_id, extension));
-    dedupe_paths(candidates)
-}
-
 pub fn node_file_candidates(dir: &Path, node_id: &str, extension: &str) -> Vec<PathBuf> {
     dedupe_paths(vec![
         node_file_path(dir, node_id, extension),

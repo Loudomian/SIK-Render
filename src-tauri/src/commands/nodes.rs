@@ -65,12 +65,31 @@ pub async fn forget_peer(node_id: String, state: State<'_, AppState>) -> Result<
         }
         peers.remove(&node_id)
     };
+    let removed_label = removed.as_ref().map(|peer| {
+        format!(
+            "{} @ {}:{}",
+            peer.node.hostname, peer.node.ip_address, peer.node.port
+        )
+    });
 
     crate::network::events::delete_node_events(&state.pool, &node_id)
         .await
         .map_err(|error| error.to_string())?;
-    if removed.is_some() || crate::network::peers::load_peer_record(&node_id).map_err(|error| error.to_string())?.is_some() {
+    let had_record = crate::network::peers::load_peer_record(&node_id)
+        .map_err(|error| error.to_string())?
+        .is_some();
+    if removed.is_some() || had_record {
         crate::network::peers::delete_peer_record(&node_id).map_err(|error| error.to_string())?;
+        log::info!(
+            "Forgot offline render node: {}{}",
+            node_id,
+            removed_label
+                .as_deref()
+                .map(|label| format!(" ({label})"))
+                .unwrap_or_default()
+        );
+    } else {
+        log::info!("Forget offline render node requested, no local record found: {node_id}");
     }
     Ok(())
 }

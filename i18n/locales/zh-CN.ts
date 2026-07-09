@@ -115,7 +115,12 @@ export default {
     lastSeen: '上次在线 {time}',
     detailsTooltip: '查看渲染节点任务详情',
     currentDetails: '当前详情',
-    forgetTooltip: '忘记离线渲染节点',
+    forgetOffline: '移除离线节点',
+    forgetTooltip: '从本机记录中移除这个离线渲染节点',
+    forgetConfirm: {
+      title: '移除离线渲染节点？',
+      description: '只会删除本机保存的节点记录和事件日志，不会影响远端机器。',
+    },
     preview: {
       empty: '当前没有渲染预览',
       waitingFinalFrame: '等待任务完成后可预览最终帧',
@@ -821,6 +826,7 @@ export default {
     },
   },
   nodeToasts: {
-    forgetFailed: '忘记渲染节点失败',
+    forgetDone: '已移除离线渲染节点',
+    forgetFailed: '移除离线渲染节点失败',
   },
 }

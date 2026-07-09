@@ -115,7 +115,12 @@ export default {
     lastSeen: 'Last seen {time}',
     detailsTooltip: 'View render node job details',
     currentDetails: 'Current Details',
-    forgetTooltip: 'Forget offline render node',
+    forgetOffline: 'Remove Offline Node',
+    forgetTooltip: 'Remove this offline render node from local records',
+    forgetConfirm: {
+      title: 'Remove offline render node?',
+      description: 'This only removes the local node record and event log. It does not affect the remote machine.',
+    },
     preview: {
       empty: 'No render preview',
       waitingFinalFrame: 'Preview is available after the job completes',
@@ -821,6 +826,7 @@ export default {
     },
   },
   nodeToasts: {
-    forgetFailed: 'Failed to Forget Render Node',
+    forgetDone: 'Offline Render Node Removed',
+    forgetFailed: 'Failed to Remove Offline Render Node',
   },
 }
